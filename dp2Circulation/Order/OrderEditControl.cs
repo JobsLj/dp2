@@ -1,19 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
-using System.Data;
-using System.Text;
 using System.Windows.Forms;
-using System.Xml;
 using System.Diagnostics;
-using System.Reflection;
 using System.Globalization;
 
 using DigitalPlatform;
 using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 using DigitalPlatform.LibraryServer;
+using DigitalPlatform.CommonControl;
+using DigitalPlatform.Text;
 
 namespace dp2Circulation
 {
@@ -56,6 +53,14 @@ namespace dp2Circulation
             base._tableLayoutPanel_main = this.tableLayoutPanel_main;
 
             AddEvents(true);
+        }
+
+        public Button EditDistributeButton
+        {
+            get
+            {
+                return this.button_editDistribute;
+            }
         }
 
         #region 数据成员
@@ -185,6 +190,34 @@ namespace dp2Circulation
             }
         }
 
+        // 2018/7/31
+        // 码洋
+        public string FixedPrice
+        {
+            get
+            {
+                return this.textBox_fixedPrice.Text;
+            }
+            set
+            {
+                this.textBox_fixedPrice.Text = value;
+            }
+        }
+
+        // 2018/7/31
+        // 折扣
+        public string Discount
+        {
+            get
+            {
+                return this.textBox_discount.Text;
+            }
+            set
+            {
+                this.textBox_discount.Text = value;
+            }
+        }
+
         public string OrderTime
         {
             get
@@ -220,7 +253,7 @@ namespace dp2Circulation
             if (DateTime.TryParse(strText, out time) == true)
                 return time;
 
-            string[] formats = new string[] {"yyyy","yyyyMM", "yyyyMMdd" };
+            string[] formats = new string[] { "yyyy", "yyyyMM", "yyyyMMdd" };
 
             foreach (string format in formats)
             {
@@ -365,132 +398,6 @@ namespace dp2Circulation
             tableLayoutPanel_main.Size = this.Size;
         }
 
-#if NO
-        /// <summary>
-        /// 内容是否发生过修改
-        /// </summary>
-        public bool Changed
-        {
-            get
-            {
-                return this.m_bChanged;
-            }
-            set
-            {
-                bool bOldValue = this.m_bChanged;
-
-                this.m_bChanged = value;
-                if (this.m_bChanged == false)
-                    this.ResetColor();
-
-                // 触发事件
-                if (bOldValue != value && this.ContentChanged != null)
-                {
-                    ContentChangedEventArgs e = new ContentChangedEventArgs();
-                    e.OldChanged = bOldValue;
-                    e.CurrentChanged = value;
-                    ContentChanged(this, e);
-                }
-            }
-        }
-
-        public bool Initializing
-        {
-            get
-            {
-                return this.m_bInInitial;
-            }
-            set
-            {
-                this.m_bInInitial = value;
-            }
-        }
-
-        /// <summary>
-        /// 设置数据
-        /// </summary>
-        /// <param name="strXml">订购记录 XML</param>
-        /// <param name="strRecPath">订购记录路径</param>
-        /// <param name="timestamp">时间戳</param>
-        /// <param name="strError">返回出错信息</param>
-        /// <returns>-1: 出错; 0: 成功</returns>
-        public int SetData(string strXml,
-            string strRecPath,
-            byte[] timestamp,
-            out string strError)
-        {
-            strError = "";
-
-            this.OldRecord = strXml;
-            this.Timestamp = timestamp;
-
-            this.RecordDom = new XmlDocument();
-
-            try
-            {
-                this.RecordDom.LoadXml(strXml);
-            }
-            catch (Exception ex)
-            {
-                strError = "XML数据装载到DOM时出错" + ex.Message;
-                return -1;
-            }
-
-            this.Initializing = true;
-
-            this.Index = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "index");
-            this.State = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "state");
-            this.CatalogNo = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "catalogNo");
-            this.Seller = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "seller");
-            this.Source = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "source");
-            this.Range = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "range");
-            this.IssueCount = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "issueCount");
-            this.Copy = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "copy");
-            this.Price = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "price");
-            this.TotalPrice = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "totalPrice");
-            this.OrderTime = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "orderTime");
-            this.OrderID = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "orderID");
-            this.Distribute = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "distribute");
-            this.Class = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "class");
-            this.SellerAddress = DomUtil.GetElementInnerXml(this.RecordDom.DocumentElement,
-                "sellerAddress");
-
-            this.Comment = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "comment");
-            this.BatchNo = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "batchNo");
-
-            this.ParentId = DomUtil.GetElementText(this.RecordDom.DocumentElement,
-                "parent");
-
-            this.RefID = DomUtil.GetElementText(this.RecordDom.DocumentElement, 
-                "refID");
-            this.Operations = DomUtil.GetElementInnerXml(this.RecordDom.DocumentElement,
-                "operations");
-
-            this.RecPath = strRecPath;
-
-            this.Initializing = false;
-
-            this.Changed = false;
-
-            return 0;
-        }
-#endif
         internal override void DomToMember(string strRecPath)
         {
             this.Index = DomUtil.GetElementText(this._dataDom.DocumentElement,
@@ -513,6 +420,10 @@ namespace dp2Circulation
                 "price");
             this.TotalPrice = DomUtil.GetElementText(this._dataDom.DocumentElement,
                 "totalPrice");
+            this.FixedPrice = DomUtil.GetElementText(this._dataDom.DocumentElement,
+    "fixedPrice");
+            this.Discount = DomUtil.GetElementText(this._dataDom.DocumentElement,
+    "discount");
             this.OrderTime = DomUtil.GetElementText(this._dataDom.DocumentElement,
                 "orderTime");
             this.OrderID = DomUtil.GetElementText(this._dataDom.DocumentElement,
@@ -555,6 +466,8 @@ namespace dp2Circulation
             this.Copy = "";
             this.Price = "";
             this.TotalPrice = "";
+            this.FixedPrice = "";
+            this.Discount = "";
             this.OrderTime = "";
             this.OrderID = "";
             this.Distribute = "";
@@ -591,12 +504,12 @@ namespace dp2Circulation
 
         internal override void RefreshDom()
         {
-            DomUtil.SetElementText(this._dataDom.DocumentElement, 
+            DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "parent", this.ParentId);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "refID", this.RefID);
 
-            DomUtil.SetElementText(this._dataDom.DocumentElement, 
+            DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "index", this.Index);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "state", this.State);
@@ -606,7 +519,7 @@ namespace dp2Circulation
                 "seller", this.Seller);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "source", this.Source);
-            DomUtil.SetElementText(this._dataDom.DocumentElement, 
+            DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "range", this.Range);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "issueCount", this.IssueCount);
@@ -617,6 +530,10 @@ namespace dp2Circulation
                 "price", this.Price);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "totalPrice", this.TotalPrice);
+            DomUtil.SetElementText(this._dataDom.DocumentElement,
+    "fixedPrice", this.FixedPrice);
+            DomUtil.SetElementText(this._dataDom.DocumentElement,
+    "discount", this.Discount);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "orderTime", this.OrderTime);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
@@ -649,7 +566,7 @@ namespace dp2Circulation
                 throw new Exception(strError);
             }
 
-            DomUtil.SetElementText(this._dataDom.DocumentElement, 
+            DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "comment", this.Comment);
             DomUtil.SetElementText(this._dataDom.DocumentElement,
                 "batchNo", this.BatchNo);
@@ -860,6 +777,8 @@ namespace dp2Circulation
                 this.textBox_copy.ReadOnly = true;
                 this.textBox_price.ReadOnly = true;
                 this.textBox_totalPrice.ReadOnly = true;
+                this.textBox_fixedPrice.ReadOnly = true;
+                this.textBox_discount.ReadOnly = true;
                 this.dateTimePicker_orderTime.Enabled = !true;
                 this.textBox_orderID.ReadOnly = true;
                 this.textBox_distribute.ReadOnly = true;
@@ -889,6 +808,8 @@ namespace dp2Circulation
             this.textBox_copy.ReadOnly = false;
             this.textBox_price.ReadOnly = false;
             this.textBox_totalPrice.ReadOnly = false;
+            this.textBox_fixedPrice.ReadOnly = false;
+            this.textBox_discount.ReadOnly = false;
             this.dateTimePicker_orderTime.Enabled = !false;
             this.textBox_orderID.ReadOnly = false;
             this.textBox_distribute.ReadOnly = false;
@@ -1017,6 +938,12 @@ namespace dp2Circulation
             if (this.TotalPrice != refControl.TotalPrice)
                 this.label_totalPrice_color.BackColor = this.ColorDifference;
 
+            if (this.FixedPrice != refControl.FixedPrice)
+                this.label_fixedPrice_color.BackColor = this.ColorDifference;
+
+            if (this.Discount != refControl.Discount)
+                this.label_discount_color.BackColor = this.ColorDifference;
+
             if (this.OrderTime != refControl.OrderTime)
                 this.label_orderTime_color.BackColor = this.ColorDifference;
 
@@ -1074,6 +1001,10 @@ namespace dp2Circulation
                     e1.Name = "Price";
                 else if (sender == (object)this.textBox_totalPrice)
                     e1.Name = "TotalPrice";
+                else if (sender == (object)this.textBox_fixedPrice)
+                    e1.Name = "FixedPrice";
+                else if (sender == (object)this.textBox_discount)
+                    e1.Name = "Discount";
                 else if (sender == (object)this.dateTimePicker_orderTime)
                     e1.Name = "OrderTime";
                 else if (sender == (object)this.textBox_orderID)
@@ -1132,6 +1063,10 @@ namespace dp2Circulation
                     e1.Name = "Price";
                 else if (sender == (object)this.textBox_totalPrice)
                     e1.Name = "TotalPrice";
+                else if (sender == (object)this.textBox_fixedPrice)
+                    e1.Name = "FixedPrice";
+                else if (sender == (object)this.textBox_discount)
+                    e1.Name = "Discount";
                 else if (sender == (object)this.dateTimePicker_orderTime)
                     e1.Name = "OrderTime";
                 else if (sender == (object)this.textBox_orderID)
@@ -1266,6 +1201,7 @@ namespace dp2Circulation
                 //      -1  出错
                 //      0   正确
                 nRet = LibraryServerUtil.CheckPublishTimeRange(strRange,
+                    true,   // TODO: 期刊要用 false
                     out strError);
                 if (nRet == -1)
                     return -1;
@@ -1302,6 +1238,30 @@ namespace dp2Circulation
                 }
             }
 
+            if (this.FixedPrice.StartsWith("@") == false
+                && this.Price.StartsWith("@") == false
+                && string.IsNullOrEmpty(this.FixedPrice) == false
+                && string.IsNullOrEmpty(this.Price) == false)
+            {
+                // 检查码洋、折扣和单价之间的关系
+                // return:
+                //      -2  码洋和订购价货币单位不同，无法进行校验。
+                //      -1  校验过程出错
+                //      0   校验发现三者关系不正确
+                //      1   校验三者关系正确
+                nRet = OrderDesignControl.VerifyOrderPriceByFixedPricePair(
+                    this.FixedPrice,
+                    this.Discount,
+                    this.Price,
+                    "both",
+                    out strError);
+                if (nRet != 1 && nRet != -2)
+                {
+                    strError = "校验码洋、折扣和单价三者之间关系时出现错误: " + strError;
+                    return -1;
+                }
+            }
+
             return 0;
         }
 
@@ -1324,5 +1284,136 @@ namespace dp2Circulation
         {
             this.dateTimePicker_orderTime.Value = this.dateTimePicker_orderTime.MinDate;
         }
+
+        string _displayMode = "full";
+
+        /// <summary>
+        ///  编辑区显示模式
+        ///  full/simplebook/simpleseries
+        /// </summary>
+        public string DisplayMode
+        {
+            get
+            {
+                return this._displayMode;
+            }
+            set
+            {
+                if (value == "simple")
+                    throw new ArgumentException("simple 模式已经废止，请使用 simplebook 或者 simpleseries");
+
+                this._displayMode = value;
+
+                SetDisplayMode(value);
+            }
+        }
+
+        void SetDisplayMode(string strMode)
+        {
+            this.DisableUpdate();
+            try
+            {
+                if (strMode == "simplebook" || strMode == "simpleseries")
+                {
+                    this.tableLayoutPanel_main.AutoScroll = true;
+                    this.tableLayoutPanel_main.AutoSize = true;
+                    this.tableLayoutPanel_main.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+                }
+
+                List<Control> controls = new List<Control>();
+
+                if (strMode == "simplebook" || strMode == "simpleseries")
+                {
+                    controls.Add(this.textBox_catalogNo);
+                    controls.Add(this.comboBox_seller);
+                    controls.Add(this.comboBox_source);
+                    controls.Add(this.textBox_copy);
+                    controls.Add(this.textBox_price);
+                    controls.Add(this.textBox_fixedPrice);
+                    controls.Add(this.textBox_discount);
+                    controls.Add(this.textBox_distribute);
+                    controls.Add(this.comboBox_class);
+                    controls.Add(this.textBox_batchNo);
+                }
+
+                if (strMode == "simpleseries")
+                {
+                    controls.Add(this.textBox_issueCount);
+                    controls.Add(this.textBox_range);
+                }
+
+                for (int i = 0; i < this.tableLayoutPanel_main.RowStyles.Count; i++)
+                {
+                    //
+                    Control control = this.tableLayoutPanel_main.GetAnyControlAt(2, i);
+                    if (control == null)
+                        continue;
+
+#if NO
+                    {
+                        Control label = this.tableLayoutPanel_main.GetControlFromPosition(0, i) as System.Windows.Forms.Label;
+                        if (label != null)
+                        {
+                            if (label != this.label_barcode)
+                            {
+                                label.MouseUp -= new System.Windows.Forms.MouseEventHandler(this.tableLayoutPanel_main_MouseUp);
+                                label.MouseUp += new System.Windows.Forms.MouseEventHandler(this.tableLayoutPanel_main_MouseUp);
+                            }
+                        }
+                    }
+#endif
+
+
+                    if (strMode == "full" || controls.IndexOf(control) != -1)
+                    {
+                        // 显示
+                        if (this.Visible == false || control.Visible == false)
+                        {
+                            SetLineVisible(control, true);
+                            this.tableLayoutPanel_main.RowStyles[i] = new RowStyle(SizeType.AutoSize);
+                        }
+                    }
+                    else
+                    {
+                        // 隐藏
+                        if (this.Visible == false || control.Visible == true)
+                        {
+                            SetLineVisible(control, false);
+                            this.tableLayoutPanel_main.RowStyles[i] = new RowStyle(SizeType.Absolute, 0);
+                        }
+                    }
+                }
+
+            }
+            finally
+            {
+                this.EnableUpdate();
+            }
+        }
+
+#if NO
+        public void AdjustScrollSize()
+        {
+            this.tableLayoutPanel_main.PerformLayout();
+
+            int nHeight = this.textBox_refID.Location.Y + this.textBox_refID.Height;
+            this.tableLayoutPanel_main.AutoScrollMinSize = new Size(this.tableLayoutPanel_main.AutoScrollMinSize.Width, nHeight);
+        }
+#endif
+
+        void SetLineVisible(Control control, bool bVisible)
+        {
+            TableLayoutPanelCellPosition position = this.tableLayoutPanel_main.GetPositionFromControl(control);
+            Control label = this.tableLayoutPanel_main.GetControlFromPosition(0, position.Row);
+            Control color = this.tableLayoutPanel_main.GetControlFromPosition(1, position.Row);
+            Control button = this.tableLayoutPanel_main.GetControlFromPosition(3, position.Row);
+
+            control.Visible = bVisible;
+            label.Visible = bVisible;
+            color.Visible = bVisible;
+            if (button != null)
+                button.Visible = bVisible;
+        }
+
     }
 }

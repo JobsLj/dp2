@@ -1,24 +1,9 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Xml;
 using System.Text;
-using System.Reflection;
-using System.Threading;
-using System.Diagnostics;
-using System.Runtime.Serialization;
 
-using System.ServiceModel;
-
-//using DigitalPlatform;
-//using DigitalPlatform.rms;
-//using DigitalPlatform.IO;
-//using DigitalPlatform.Xml;
-//using DigitalPlatform.Text;
-//using DigitalPlatform.ResultSet;
 using DigitalPlatform.IO;
-using DigitalPlatform.ResultSet;
 
 namespace DigitalPlatform.rms
 {
@@ -101,6 +86,7 @@ namespace DigitalPlatform.rms
             }
         }
 
+        // 停止所有批处理任务
         public void StopAllBatchTasks()
         {
             for (int i = 0; i < this.BatchTasks.Count; i++)
@@ -261,7 +247,7 @@ namespace DigitalPlatform.rms
             {
                 task.Stop();
 
-                infos.Add( task.GetCurrentInfo(param.ResultOffset,
+                infos.Add(task.GetCurrentInfo(param.ResultOffset,
                     param.MaxResultBytes));
             }
 
@@ -336,7 +322,7 @@ namespace DigitalPlatform.rms
         }
     }
 
-            // 系统挂起的理由
+    // 系统挂起的理由
     public enum HangupReason
     {
         None = 0,   // 没有挂起

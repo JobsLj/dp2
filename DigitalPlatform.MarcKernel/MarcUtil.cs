@@ -8,8 +8,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 
-using DigitalPlatform.Xml;
 using DigitalPlatform;
+using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
 
 namespace DigitalPlatform.Marc
@@ -29,7 +29,6 @@ namespace DigitalPlatform.Marc
     /// </summary>
     public class MarcUtil
     {
-
         public const char FLDEND = (char)30;	// 字段结束符
         public const char RECEND = (char)29;	// 记录结束符
         public const char SUBFLD = (char)31;	// 子字段指示符
@@ -120,7 +119,6 @@ namespace DigitalPlatform.Marc
             bool bSubfieldReturn)
         {
             StringBuilder strResult = new StringBuilder("\r\n<table class='marc'>", 4096);
-
 
             for (int i = 0; ; i++)
             {
@@ -1003,6 +1001,9 @@ namespace DigitalPlatform.Marc
                 nMaxBytes = 2 * nMaxBytes;
             }
 
+            // TODO: 如果是文件开头，要检查头三个 bytes 是不是 UTF-8 的 BOM
+            bool bIsFirstRecord = s.Position == 0;
+
             for (i = 0; i < nMaxBytes; i++)
             {
                 nRet = s.ReadByte();
@@ -1052,11 +1053,20 @@ namespace DigitalPlatform.Marc
                 nRet = -1;	// 记录太大，或者文件不是ISO2709格式
             }
 
+            // 2018/3/8
+            // 检查 UTF-8 文件头部的 BOM
+            if (bIsFirstRecord == true && baTemp.Count >= 3)
+            {
+                // ef bb bf
+                if (baTemp[0] == 0xef && baTemp[1] == 0xbb && baTemp[2] == 0xbf)
+                    baTemp.RemoveRange(0, 3); // 删除开头的 BOM
+            }
+
+
             //       int i = 0;
 
             if (bRemoveEndCrLf)
             {
-
                 // 看看开头的byte
                 if (bUcs2 == true)
                 {
@@ -1079,7 +1089,6 @@ namespace DigitalPlatform.Marc
                     }
                     if (i > 0)
                         baTemp.RemoveRange(0, i * 2); // 删除开头连续的CR LF
-
                 }
                 else
                 {
@@ -1114,7 +1123,6 @@ namespace DigitalPlatform.Marc
 
             return nRet;
         }
-
 
         // 将MARC记录转换为字段(字符串)数组。
         public static int ConvertMarcToFieldArray(string strMARC,
@@ -1616,6 +1624,25 @@ out strError);
         }
 
         // 包装以后的版本
+        public static int Xml2Marc(XmlDocument dom,
+            bool bWarning,
+            string strMarcSyntax,
+            out string strOutMarcSyntax,
+            out string strMARC,
+            out string strError)
+        {
+            // Debug.Assert(string.IsNullOrEmpty(strXml) == false, "");
+            string strFragmentXml = "";
+            return Xml2Marc(dom,
+                bWarning ? Xml2MarcStyle.Warning : Xml2MarcStyle.None,
+                strMarcSyntax,
+                out strOutMarcSyntax,
+                out strMARC,
+                out strFragmentXml,
+                out strError);
+        }
+
+        // 包装以后的版本
         public static int Xml2Marc(string strXml,
             bool bWarning,
             string strMarcSyntax,
@@ -1668,9 +1695,6 @@ out strError);
 
             Debug.Assert(string.IsNullOrEmpty(strXml) == false, "");
 
-            bool bWarning = (style & Xml2MarcStyle.Warning) != 0;
-            bool bOutputFragmentXml = (style & Xml2MarcStyle.OutputFragmentXml) != 0;
-
             XmlDocument dom = new XmlDocument();
             dom.PreserveWhitespace = true;  // 在意空白符号
             try
@@ -1682,6 +1706,34 @@ out strError);
                 strError = "Xml2Marc() strXml 加载 XML 到 DOM 时出错: " + ex.Message;
                 return -1;
             }
+
+            return Xml2Marc(dom,
+    style,
+    strMarcSyntax,
+    out strOutMarcSyntax,
+    out strMARC,
+    out strFragmentXml,
+    out strError);
+        }
+
+        public static int Xml2Marc(XmlDocument dom,
+    Xml2MarcStyle style,
+    string strMarcSyntax,
+    out string strOutMarcSyntax,
+    out string strMARC,
+    out string strFragmentXml,
+    out string strError)
+        {
+            strMARC = "";
+            strError = "";
+            strOutMarcSyntax = "";
+            strFragmentXml = "";
+
+            if (dom.DocumentElement == null)
+                return 0;
+
+            bool bWarning = (style & Xml2MarcStyle.Warning) != 0;
+            bool bOutputFragmentXml = (style & Xml2MarcStyle.OutputFragmentXml) != 0;
 
             XmlNamespaceManager nsmgr = new XmlNamespaceManager(new NameTable());
             nsmgr.AddNamespace("unimarc", Ns.unimarcxml);
@@ -1923,6 +1975,7 @@ out strError);
 
             return 0;
         }
+
 
         // 将marcxchange格式转化为机内使用的marcxml格式
         public static int MarcXChangeToXml(string strSource,
@@ -3033,11 +3086,21 @@ out strError);
 
             if (textType == ItemType.Field)
             {
+#if NO
                 if (strText.Length < 3)
                     return -1;	// 字段内容长度不足3字符
 
                 if (strText.Length == 3)
                     return 0;	// 不存在任何子字段内容
+#endif
+                if (strText.Length < 3)
+                    return -1;	// 字段内容长度不足3字符
+
+                if (strText.Length <= 5)
+                    return 0;	// 不存在任何子字段内容
+
+                // 2016/10/16
+                strText = strText.Substring(5);
             }
             if (textType == ItemType.Group)
             {
@@ -3047,7 +3110,6 @@ out strError);
                 if (strText.Length == 1)
                     return 0;	// 不存在任何子字段内容
             }
-
 
             if (strSubfieldName != null)
             {
@@ -3609,6 +3671,131 @@ out strError);
         // return:
         //      0   没有实质性修改
         //      1   有实质性修改
+
+        static public int GetMappedRecord(ref string strMARC,
+    string strStyle)
+        {
+            bool bChanged = false;
+
+            MarcRecord record = new MarcRecord(strMARC);
+            MarcRecord result = new MarcRecord(strMARC.PadRight(24, ' ').Substring(0, 24));
+
+            foreach (MarcField field in record.ChildNodes)
+            {
+                string strContent = field.Content;
+
+                string strBlank = strContent;   // .Trim();
+                int nRet = strBlank.IndexOf((char)SUBFLD);
+                if (nRet != -1)
+                    strBlank = strBlank.Substring(0, nRet); // .Trim();
+
+                string strCmd = StringUtil.GetLeadingCommand(strBlank);
+                if (string.IsNullOrEmpty(strStyle) == false
+                    && string.IsNullOrEmpty(strCmd) == false
+                    && StringUtil.HasHead(strCmd, "cr:") == true)
+                {
+                    string strRule = strCmd.Substring(3);
+                    if (strRule != strStyle
+                        && string.IsNullOrEmpty(strStyle) == false)
+                    {
+                        bChanged = true;
+                        continue;
+                    }
+                }
+
+                MarcField new_field = new MarcField(field.Text);
+
+                MarcNodeList xings = new_field.select("subfield[@name='*']");
+                if (xings.count > 0
+                    && xings.FirstContent != strStyle && string.IsNullOrEmpty(strStyle) == false)
+                {
+                    bChanged = true;
+                    continue;
+                }
+
+                if (xings.count > 0)
+                {
+                    xings.detach();
+                    bChanged = true;
+                }
+
+                if (string.IsNullOrEmpty(strCmd) == false)
+                {
+                    new_field.Content = strContent.Substring(strCmd.Length + 2);
+                    bChanged = true;
+                }
+
+                if (new_field.Name == "hdr" && string.IsNullOrEmpty(strStyle) == false)
+                {
+                    result.Header[0, 24] = new_field.Content.PadRight(24, ' ').Substring(0, 24);
+                    bChanged = true;
+                    continue;
+                }
+
+                FilterSubfields(new_field, strStyle);
+
+                result.add(new_field);
+            }
+
+            strMARC = result.Text;
+            if (bChanged == true)
+                return 1;
+            return 0;
+        }
+
+        // return:
+        //      false   没有发生修改
+        //      true    发生了修改
+        static bool FilterSubfields(MarcField field, string strStyle)
+        {
+            if (field.IsControlField == true)
+                return false;
+            bool bChanged = false;
+            MarcField result = new MarcField();
+            //result.Name = field.Name;
+            //result.Indicator = field.Indicator;
+            foreach (MarcSubfield subfield in field.Subfields)
+            {
+                string strCmd = StringUtil.GetLeadingCommand(subfield.Content);
+                if (string.IsNullOrEmpty(strStyle) == false
+                    && string.IsNullOrEmpty(strCmd) == false)
+                {
+                    if (StringUtil.HasHead(strCmd, "cr:") == true)
+                    {
+                        string strRule = strCmd.Substring(3);
+                        if (strRule != strStyle
+                            && string.IsNullOrEmpty(strStyle) == false)
+                        {
+                            bChanged = true;
+                            continue;
+                        }
+                    }
+                    else
+                        strCmd = null;  // 其他 xx: 命令不算
+                }
+
+                MarcSubfield new_subfield = new MarcSubfield(subfield.Name, subfield.Content);
+                if (string.IsNullOrEmpty(strCmd) == false)
+                {
+                    new_subfield.Content = subfield.Content.Substring(strCmd.Length + 2);
+                    bChanged = true;
+                }
+
+                result.add(new_subfield);
+            }
+
+            if (bChanged == true)
+                field.Content = result.Content;
+            return bChanged;
+        }
+
+#if NO
+        // 获得一个特定风格的 MARC 记录
+        // parameters:
+        //      strStyle    要匹配的style值。如果为null，表示任何$*值都匹配，实际上效果是去除$*并返回全部字段内容
+        // return:
+        //      0   没有实质性修改
+        //      1   有实质性修改
         static public int GetMappedRecord(ref string strMARC,
             string strStyle)
         {
@@ -3766,7 +3953,7 @@ out strError);
                 if (nRet == 0)
                     break;
 
-                // TODO: 没有子字段的字段内容部分，师傅哦可以包含{...} ?
+                // TODO: 没有子字段的字段内容部分，是否可以包含{...} ?
                 bool bFieldChanged = false;
                 for (int j = 0; ; j++)
                 {
@@ -3836,7 +4023,7 @@ out strError);
 
             return 0;
         }
-
+#endif
 
         // 删除空的字段
         // return:
@@ -4038,6 +4225,7 @@ out strError);
 
         #region 处理MARC记录转换为ISO209任务的静态函数
 
+        // 2017/4/7 改为用 MarcRecord 处理 100$a
         // 根据MARC格式类型和输出的编码方式要求，修改MARC记录的头标区或100字段。
         // parameters:
         //		strMarcSyntax   "unimarc" "usmarc"
@@ -4047,7 +4235,94 @@ out strError);
             Encoding encoding,
             out string strResult)
         {
+            strResult = strMARC;
 
+            if (String.Compare(strMarcSyntax, "unimarc", true) == 0) // UNIMARC
+            {
+                /*
+                In UNIMARC the information about enconding sets are stored in field 100, 
+        position 26-29 & 30-33. The
+        code for Unicode is "50" in positions 26-27 and the position 28-33 will 
+        contain blanks.
+                */
+                // 将100字段中28开始的位置按照UTF-8编码特性强行置值。
+
+                MarcRecord record = new MarcRecord(strMARC);
+                bool bChanged = false;
+
+                string strValue = record.select("field[@name='100']/subfield[@name='a']").FirstContent;
+                if (strValue == null)
+                    strValue = "";
+
+                // 确保子字段内容长度为 36 字符。
+                int nOldLength = strValue.Length;
+                strValue = strValue.PadRight(36, ' ');
+                if (strValue.Length != nOldLength)
+                    bChanged = true;
+
+                string strPart = strValue.Substring(26, 8);
+                // 看看26-29是否已经符合要求
+                if (encoding == Encoding.UTF8)
+                {
+                    if (strPart == "50      ")
+                    { // 已经符合要求
+                    }
+                    else
+                    {
+                        strValue = strValue.Remove(26, 8);
+                        strValue = strValue.Insert(26, "50      ");
+                        bChanged = true;
+                    }
+                }
+                else
+                {
+                    if (strPart == "50      ")
+                    { // 需要改变
+                        strValue = strValue.Remove(26, 8);
+                        strValue = strValue.Insert(26, "0120    ");
+                        bChanged = true;
+                    }
+                    else
+                    {	// 不需要改变
+                    }
+                }
+
+                if (bChanged == true)
+                {
+                    record.setFirstSubfield("100", "a", strValue, "  ");
+                    strResult = record.Text;
+                }
+
+            }
+
+            // 修改头标区
+            if (String.Compare(strMarcSyntax, "unimarc", true) == 0)
+            {
+                // UNIMARC
+                strResult = StringUtil.SetAt(strResult, 9, ' ');
+            }
+            else if (true/*nMARCType == 1*/)
+            {
+                // USMARC。所有非UNIMARC的都仿USMARC处理，因为不必使用100字段
+                if (encoding == Encoding.UTF8)
+                    strResult = StringUtil.SetAt(strResult, 9, 'a');	// UTF-8(UCS-2也仿此)
+                else
+                    strResult = StringUtil.SetAt(strResult, 9, ' ');	// # DBCS或者MARC-8 // 2007/8/8 change '#' to ' '
+            }
+
+            return 0;
+        }
+
+#if NO
+        // 根据MARC格式类型和输出的编码方式要求，修改MARC记录的头标区或100字段。
+        // parameters:
+        //		strMarcSyntax   "unimarc" "usmarc"
+        public static int ModifyOutputMARC(
+            string strMARC,
+            string strMarcSyntax,
+            Encoding encoding,
+            out string strResult)
+        {
             strResult = strMARC;
 
             if (String.Compare(strMarcSyntax, "unimarc", true) == 0) // UNIMARC
@@ -4138,7 +4413,7 @@ out strError);
 
             return 0;
         }
-
+#endif
 
         // 将机内格式记录构造为ISO2709格式记录。
         // parameters:
@@ -4170,6 +4445,13 @@ out strError);
                 return -1;
             if (baMARC.Length < 24)
                 return -1;
+
+            // 2018/3/8
+            if (baMARC[0] == 0
+    || baMARC[1] == 0)
+            {
+                throw new Exception("ISO2709 格式无法使用编码方式 UCS-2 (UTF-16)");
+            }
 
             MarcHeaderStruct header = new MarcHeaderStruct(baMARC);
 
@@ -4691,6 +4973,19 @@ out strError);
                     if (strLine == "***")
                         break;
 
+#if NO
+                    // 2018/11/19
+                    {
+                        // 遇到全是空格的行，也当作记录结束
+                        if (string.IsNullOrEmpty(strLine.Trim())
+                            && i > 0)
+                            break;
+
+                        if (string.IsNullOrEmpty(strLine.Trim()) && lines.Count == 0)
+                            continue;
+                    }
+#endif
+
                     if (IsContinueLine(ref strLine) == false)
                     {
                         if (string.IsNullOrEmpty(strLine) == true)
@@ -4763,7 +5058,7 @@ out strError);
             return false;
         }
 
-        #endregion
+#endregion
     }
 
 

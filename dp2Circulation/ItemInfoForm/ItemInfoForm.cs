@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
@@ -11,15 +9,14 @@ using System.IO;
 using System.Diagnostics;
 
 using DigitalPlatform;
-using DigitalPlatform.CirculationClient;
 using DigitalPlatform.Xml;
-using DigitalPlatform.IO;
 using DigitalPlatform.Marc;
 using DigitalPlatform.LibraryClient.localhost;
 using DigitalPlatform.Text;
 using DigitalPlatform.CommonControl;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.CommonDialog;
+using DigitalPlatform.Drawing;
 
 namespace dp2Circulation
 {
@@ -67,7 +64,9 @@ namespace dp2Circulation
         /// </summary>
         public string BiblioRecPath { get; set; }   // 当前已装载的书目记录路径
 
+#if NO
         string _xml = "";
+
         /// <summary>
         /// 记录 XML
         /// </summary>
@@ -89,7 +88,36 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                 // 把 XML 字符串装入一个Web浏览器控件
                 // 这个函数能够适应"<root ... />"这样的没有prolog的XML内容
                 Global.SetXmlToWebbrowser(this.webBrowser_itemXml,
-                    this.MainForm.DataDir,
+                    Program.MainForm.DataDir,
+                    "xml",
+                    value);
+
+                SetItemRefID(value);
+            }
+        }
+#endif
+        /// <summary>
+        /// 记录 XML
+        /// </summary>
+        public string Xml
+        {
+            get
+            {
+                return this.textBox_editor.Text;
+            }
+            set
+            {
+                this.textBox_editor.Text = value;
+
+                this.ItemXmlChanged = true;
+                /*
+SetXmlToWebbrowser(this.webBrowser_itemXml,
+    strItemText);
+ * */
+                // 把 XML 字符串装入一个Web浏览器控件
+                // 这个函数能够适应"<root ... />"这样的没有prolog的XML内容
+                Global.SetXmlToWebbrowser(this.webBrowser_itemXml,
+                    Program.MainForm.DataDir,
                     "xml",
                     value);
 
@@ -127,18 +155,6 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
         WebExternalHost m_chargingInterface = new WebExternalHost();
         WebExternalHost m_webExternalHost_biblio = new WebExternalHost();
 
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        /// <summary>
-        /// 框架窗口
-        /// </summary>
-        public MainForm MainForm = null;
-
-        DigitalPlatform.Stop stop = null;
-#endif
-
         /// <summary>
         /// 构造函数
         /// </summary>
@@ -149,14 +165,14 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
 
         private void ItemInfoForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 #if NO
             MainForm.AppInfo.LoadMdiChildFormStates(this,
     "mdi_form_state");
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -179,14 +195,17 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
             }
 
             // webbrowser
-            this.m_webExternalHost_item.Initial(this.MainForm, this.webBrowser_itemHTML);
+            this.m_webExternalHost_item.Initial(// Program.MainForm, 
+                this.webBrowser_itemHTML);
             this.webBrowser_itemHTML.ObjectForScripting = this.m_webExternalHost_item;
 
-            this.m_chargingInterface.Initial(this.MainForm, this.webBrowser_borrowHistory);
+            this.m_chargingInterface.Initial(// Program.MainForm, 
+                this.webBrowser_borrowHistory);
             this.m_chargingInterface.CallFunc += m_chargingInterface_CallFunc;
             this.webBrowser_borrowHistory.ObjectForScripting = this.m_chargingInterface;
 
-            this.m_webExternalHost_biblio.Initial(this.MainForm, this.webBrowser_biblio);
+            this.m_webExternalHost_biblio.Initial(// Program.MainForm,
+                this.webBrowser_biblio);
             this.webBrowser_biblio.ObjectForScripting = this.m_webExternalHost_biblio;
 
             this.commander = new Commander(this);
@@ -341,11 +360,11 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
             stop.BeginLoop();
 
             Global.ClearHtmlPage(this.webBrowser_itemHTML,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
             Global.ClearHtmlPage(this.webBrowser_itemXml,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
             Global.ClearHtmlPage(this.webBrowser_biblio,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
 
             ClearBorrowHistoryPage();
             SetItemRefID("");
@@ -393,7 +412,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
 #if NO
                 Global.SetHtmlString(this.webBrowser_itemHTML,
                     strItemText,
-                    this.MainForm.DataDir,
+                    Program.MainForm.DataDir,
                     "iteminfoform_item");
 #endif
                 this.m_webExternalHost_item.SetHtmlString(strItemText,
@@ -407,7 +426,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
 #if NO
                     Global.SetHtmlString(this.webBrowser_biblio,
                         strBiblioText,
-                        this.MainForm.DataDir,
+                        Program.MainForm.DataDir,
                         "iteminfoform_biblio");
 #endif
                     this.m_webExternalHost_biblio.SetHtmlString(strBiblioText,
@@ -451,7 +470,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                             this.Channel,
                             strItemRecPath,
                             this.Xml,
-                            this.MainForm.ServerVersion,
+                            Program.MainForm.ServerVersion,
                             out strError);
                         if (nRet == -1)
                         {
@@ -474,7 +493,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
 
             tabControl_item_SelectedIndexChanged(this, new EventArgs());
             return 1;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -518,7 +537,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             bool bPrevNext = false;
 
@@ -534,11 +553,11 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
             if (bPrevNext == false)
             {
                 Global.ClearHtmlPage(this.webBrowser_itemHTML,
-                    this.MainForm.DataDir);
+                    Program.MainForm.DataDir);
                 Global.ClearHtmlPage(this.webBrowser_itemXml,
-                    this.MainForm.DataDir);
+                    Program.MainForm.DataDir);
                 Global.ClearHtmlPage(this.webBrowser_biblio,
-                    this.MainForm.DataDir);
+                    Program.MainForm.DataDir);
 
                 // this.textBox_message.Text = "";
                 this.toolStripLabel_message.Text = "";
@@ -578,7 +597,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                     lRet = Channel.GetCommentInfo(
                          stop,
                          strBarcode,    // "@path:" + strItemRecPath,
-                        // "",
+                                        // "",
                          "html",
                          out strItemText,
                          out strOutputItemRecPath,
@@ -591,7 +610,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                     lRet = Channel.GetOrderInfo(
                          stop,
                          strBarcode,    // "@path:" + strItemRecPath,
-                        // "",
+                                        // "",
                          "html",
                          out strItemText,
                          out strOutputItemRecPath,
@@ -604,7 +623,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                     lRet = Channel.GetIssueInfo(
                          stop,
                          strBarcode,    // "@path:" + strItemRecPath,
-                        // "",
+                                        // "",
                          "html",
                          out strItemText,
                          out strOutputItemRecPath,
@@ -613,6 +632,10 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                          out strBiblioText,
                          out strBiblioRecPath,
                          out strError);
+                else if (this.m_strDbType == "arrive")
+                {
+
+                }
                 else
                     throw new Exception("未知的DbType '" + this.m_strDbType + "'");
 
@@ -672,7 +695,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                     lRet = Channel.GetCommentInfo(
                          stop,
                          "@path:" + strOutputItemRecPath,
-                        // "",
+                         // "",
                          "xml",
                          out strItemText,
                          out strOutputItemRecPath,
@@ -685,7 +708,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                     lRet = Channel.GetOrderInfo(
                          stop,
                          "@path:" + strOutputItemRecPath,
-                        // "",
+                         // "",
                          "xml",
                          out strItemText,
                          out strOutputItemRecPath,
@@ -698,7 +721,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                     lRet = Channel.GetIssueInfo(
                          stop,
                          "@path:" + strOutputItemRecPath,
-                        // "",
+                         // "",
                          "xml",
                          out strItemText,
                          out strOutputItemRecPath,
@@ -729,7 +752,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                     // 把 XML 字符串装入一个Web浏览器控件
                     // 这个函数能够适应"<root ... />"这样的没有prolog的XML内容
                     Global.SetXmlToWebbrowser(this.webBrowser_itemXml,
-                        this.MainForm.DataDir,
+                        Program.MainForm.DataDir,
                         "xml",
                         strItemText);
 
@@ -743,7 +766,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                             this.Channel,
                             strOutputItemRecPath,
                             this.Xml,
-                            this.MainForm.ServerVersion,
+                            Program.MainForm.ServerVersion,
                             out strError);
                         if (nRet == -1)
                         {
@@ -763,7 +786,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
 
             tabControl_item_SelectedIndexChanged(this, new EventArgs());
             return 1;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -795,7 +818,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                 //		>=0 实际上载的资源对象数
                 nRet = this.binaryResControl1.Save(
                     this.Channel,
-                    this.MainForm.ServerVersion,
+                    Program.MainForm.ServerVersion,
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;
@@ -812,7 +835,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
             }
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -1033,16 +1056,16 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
 
             // 工具条按钮
 
-            this.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
-            this.MainForm.MenuItem_font.Enabled = false;
-            this.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
+            Program.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
+            Program.MainForm.MenuItem_font.Enabled = false;
+            Program.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
 
-            this.MainForm.toolButton_refresh.Enabled = true;
+            Program.MainForm.toolButton_refresh.Enabled = true;
         }
 
         private void ItemInfoForm_Activated(object sender, EventArgs e)
         {
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 
             SetMenuItemState();
         }
@@ -1181,7 +1204,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -1284,9 +1307,9 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
                 if (StringUtil.IsInList("已处理", strCommentState) == false)
                     dlg.NewSubjects = dlg.HiddenNewSubjects;
 
-                this.MainForm.AppInfo.LinkFormState(dlg, "iteminfoform_addsubjectdialog_state");
+                Program.MainForm.AppInfo.LinkFormState(dlg, "iteminfoform_addsubjectdialog_state");
                 dlg.ShowDialog(this);
-                this.MainForm.AppInfo.UnlinkFormState(dlg);
+                Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
                 if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                     return;
@@ -1348,7 +1371,7 @@ SetXmlToWebbrowser(this.webBrowser_itemXml,
             // 重新装载内容
             this.Reload();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -1493,7 +1516,7 @@ out strError);
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1625,7 +1648,7 @@ out strError);
             long lRet = Channel.GetCommentInfo(
      stop,
      "@path:" + strCommentRecPath,
-                // "",
+     // "",
      "xml",
      out strCommentXml,
      out strOutputItemRecPath,
@@ -1986,7 +2009,7 @@ out strError);
             if (nRet == -1)
                 goto ERROR1;
             return;
-        ERROR1:
+            ERROR1:
             this.ShowMessage(strError, "red", true);
         }
 
@@ -2108,10 +2131,11 @@ out strError);
             if ((nTotalCount % _itemsPerPage) > 0)
                 _pageCount++;
 
-            string strBinDir = Environment.CurrentDirectory;
+            // string strBinDir = Environment.CurrentDirectory;
+            string strBinDir = Program.MainForm.UserDir;    // 2017/2/23
 
-            string strCssUrl = Path.Combine(this.MainForm.DataDir, "default\\charginghistory.css");
-            string strSummaryJs = Path.Combine(this.MainForm.DataDir, "getsummary.js");
+            string strCssUrl = Path.Combine(Program.MainForm.DataDir, "default\\charginghistory.css");
+            string strSummaryJs = Path.Combine(Program.MainForm.DataDir, "getsummary.js");
             string strLink = "<link href='" + strCssUrl + "' type='text/css' rel='stylesheet' />";
             string strScriptHead = "<script type=\"text/javascript\" src=\"%bindir%/jquery/js/jquery-1.4.4.min.js\"></script>"
                 + "<script type=\"text/javascript\" src=\"%bindir%/jquery/js/jquery-ui-1.8.7.min.js\"></script>"
@@ -2120,7 +2144,7 @@ out strError);
 
 </style>";
 
-            text.Append("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"><html xmlns=\"http://www.w3.org/1999/xhtml\">"
+            text.Append("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"><html xmlns=\"http://www.w3.org/1999/xhtml\"><head>"
                 + strLink
                 + strScriptHead.Replace("%bindir%", strBinDir)
                 + strStyle
@@ -2197,7 +2221,7 @@ out strError);
         /// </summary>
         public void ClearHtml()
         {
-            string strCssUrl = Path.Combine(this.MainForm.DataDir, "default\\charginghistory.css");
+            string strCssUrl = Path.Combine(Program.MainForm.DataDir, "default\\charginghistory.css");
             string strLink = "<link href='" + strCssUrl + "' type='text/css' rel='stylesheet' />";
             string strJs = "";
 
@@ -2270,6 +2294,15 @@ out strError);
                 goto ERROR1;
             }
 
+            // 从剪贴板中取得图像对象
+            List<Image> images = ImageUtil.GetImagesFromClipboard(out strError);
+            if (images == null)
+            {
+                strError = "。无法创建封面图像";
+                goto ERROR1;
+            }
+            Image image = images[0];
+#if NO
             Image image = null;
             IDataObject obj1 = Clipboard.GetDataObject();
             if (obj1.GetDataPresent(typeof(Bitmap)))
@@ -2295,6 +2328,7 @@ out strError);
                 strError = "当前 Windows 剪贴板中没有图形对象。无法创建封面图像";
                 goto ERROR1;
             }
+#endif
 
             CreateCoverImageDialog dlg = null;
             try
@@ -2302,10 +2336,12 @@ out strError);
                 dlg = new CreateCoverImageDialog();
 
                 MainForm.SetControlFont(dlg, this.Font, false);
-                dlg.OriginImage = image;
-                this.MainForm.AppInfo.LinkFormState(dlg, "entityform_CreateCoverImageDialog_state");
+                ImageInfo info = new ImageInfo();
+                info.Image = image;
+                dlg.ImageInfo = info;
+                Program.MainForm.AppInfo.LinkFormState(dlg, "entityform_CreateCoverImageDialog_state");
                 dlg.ShowDialog(this);
-                this.MainForm.AppInfo.UnlinkFormState(dlg);
+                Program.MainForm.AppInfo.UnlinkFormState(dlg);
                 if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                     return;
             }
@@ -2334,7 +2370,7 @@ out strError);
                     this.binaryResControl1,
                     type.Image,
                     strType,    // "coverimage",
-                    // out strShrinkComment,
+                                // out strShrinkComment,
                     out strID,
                     out strError);
                 if (nRet == -1)
@@ -2372,21 +2408,22 @@ out strError);
             MessageBox.Show(this, "封面图像已经成功创建。\r\n"
                 + "\r\n\r\n(但因当前记录还未保存，图像数据尚未提交到服务器)\r\n\r\n注意稍后保存当前记录。");
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
         private void ToolStripMenuItem_clearCoverImage_Click(object sender, EventArgs e)
         {
-            string[] types = new string[] {
-                "FrontCover.SmallImage",
-                "FrontCover.MediumImage",
-                "FrontCover.LargeImage"};
 
             if (this.tabControl_item.SelectedTab != this.tabPage_object)
                 this.tabControl_item.SelectedTab = this.tabPage_object;
 
             bool bChanged = false;
+#if NO
+            string[] types = new string[] {
+                "FrontCover.SmallImage",
+                "FrontCover.MediumImage",
+                "FrontCover.LargeImage"};
             foreach (string type in types)
             {
                 // TODO: 最好支持 CoverImage.* 通配符匹配。或者用正则表达式
@@ -2397,6 +2434,8 @@ out strError);
                     bChanged = true;
                 }
             }
+#endif
+            bChanged = this.binaryResControl1.MaskDeleteCoverImageObject();
 
             if (bChanged == true)
                 MessageBox.Show(this, "封面图像对象已经成功标记删除。\r\n"
@@ -2421,6 +2460,49 @@ out strError);
 
             this.Xml = (string)ido.GetData(DataFormats.UnicodeText);
 
+        }
+
+        private void textBox_editor_TextChanged(object sender, EventArgs e)
+        {
+            this.ItemXmlChanged = true;
+        }
+
+        private void ToolStripMenuItem_edit_indentXml_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+            string strXml = "";
+            int nRet = DomUtil.GetIndentXml(this.textBox_editor.Text,
+                true,
+                out strXml,
+                out strError);
+            if (nRet == -1)
+            {
+                MessageBox.Show(this, strError);
+                return;
+            }
+
+            this.textBox_editor.Text = strXml;
+        }
+
+        // 删除 XML 中的空元素
+        private void ToolStripMenuItem_edit_removeEmptyElements_Click(object sender, EventArgs e)
+        {
+            XmlDocument dom = new XmlDocument();
+            try
+            {
+                dom.LoadXml(this.textBox_editor.Text);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "XML 格式错误: " + ex.Message);
+                return;
+            }
+
+            DomUtil.RemoveEmptyElements(dom.DocumentElement, false);
+            if (dom.DocumentElement != null)
+                this.textBox_editor.Text = DomUtil.GetIndentInnerXml(dom.DocumentElement);  // dom.DocumentElement.OuterXml;
+            else
+                this.textBox_editor.Text = "";
         }
 
     }

@@ -20,6 +20,12 @@ using DigitalPlatform.CommonControl;
 using DigitalPlatform.Drawing;
 using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
+using ZXing;
+using ZXing.QrCode;
+using ZXing.QrCode.Internal;
+using ZXing.Common;
+using System.Drawing.Imaging;
+using DigitalPlatform.IO;
 
 namespace dp2Circulation
 {
@@ -44,7 +50,7 @@ namespace dp2Circulation
         /// <summary>
         /// ？？？
         /// </summary>
-        public bool DisplayMessage = true; 
+        public bool DisplayMessage = true;
 
         /// <summary>
         /// 获得资源的本地文件路径
@@ -96,7 +102,7 @@ namespace dp2Circulation
         /// <summary>
         /// 框架窗口
         /// </summary>
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
 
         DigitalPlatform.Stop stop = null;
 
@@ -130,17 +136,16 @@ namespace dp2Circulation
         /// <summary>
         /// 初始化
         /// </summary>
-        /// <param name="mainform">框架窗口</param>
         /// <param name="webBrowser">浏览器控件</param>
         /// <param name="bDisplayMessage">是否显示消息。缺省为 false</param>
-        public void Initial(MainForm mainform,
+        public void Initial(// MainForm mainform,
             WebBrowser webBrowser,
             bool bDisplayMessage = false)
         {
-            this.MainForm = mainform;
+            // this.MainForm = mainform;
             this.WebBrowser = webBrowser;
 #if SINGLE_CHANNEL
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -159,7 +164,7 @@ namespace dp2Circulation
             if (bDisplayMessage == true)
             {
                 stop = new DigitalPlatform.Stop();
-                stop.Register(MainForm.stopManager, true);	// 和容器关联
+                stop.Register(Program.MainForm.stopManager, true);	// 和容器关联
             }
 
             // this.BeginThread();
@@ -226,9 +231,9 @@ namespace dp2Circulation
                 {
                     DateTime now = DateTime.Now;
                     // 每隔 5 分钟才允许使用一次 AbortIt()
-                    if (this._lastAbortTime - now > new TimeSpan(0,5,0))
+                    if (this._lastAbortTime - now > new TimeSpan(0, 5, 0))
                     {
-                        this.Channel.AbortIt();
+                        this.Channel.TryAbortIt();
                         this._lastAbortTime = now;
                     }
                     else
@@ -348,7 +353,7 @@ namespace dp2Circulation
 
         void Channel_BeforeLogin(object sender, BeforeLoginEventArgs e)
         {
-            MainForm.Channel_BeforeLogin(sender, e);    // 2015/11/8
+            Program.MainForm.Channel_BeforeLogin(sender, e);    // 2015/11/8
         }
 #else
         void Channels_BeforeLogin(object sender, BeforeLoginEventArgs e)
@@ -393,15 +398,15 @@ namespace dp2Circulation
                 if (this.IsBelongToHoverWindow == true)
                     return;
 
-                if (this.MainForm.CanDisplayItemProperty() == false)
+                if (Program.MainForm.CanDisplayItemProperty() == false)
                     return;
 
-                if (this.MainForm.GetItemPropertyTitle() == strItemBarcode)
+                if (Program.MainForm.GetItemPropertyTitle() == strItemBarcode)
                     return; // 优化
 
                 if (string.IsNullOrEmpty(strItemBarcode) == true)
                 {
-                    this.MainForm.DisplayItemProperty("",
+                    Program.MainForm.DisplayItemProperty("",
         "",
         "");
                     return;
@@ -482,7 +487,7 @@ namespace dp2Circulation
         out strBiblioRecPath,
         out strError);
 
-                        this.MainForm.DisplayItemProperty(strItemBarcode,
+                        Program.MainForm.DisplayItemProperty(strItemBarcode,
                             strItemText,
                             strXml);
 
@@ -511,7 +516,7 @@ namespace dp2Circulation
 
             ERROR1:
 
-                this.MainForm.DisplayItemProperty("error",
+                Program.MainForm.DisplayItemProperty("error",
                     strError,
                     "");
             }
@@ -528,7 +533,7 @@ namespace dp2Circulation
         /// <param name="strFormName">窗口名称。ItemInfoForm / EntityForm / ReaderInfoForm</param>
         /// <param name="strParameter">参数字符串</param>
         /// <param name="bOpenNew">是否打开新的窗口</param>
-        public void OpenForm(string strFormName, 
+        public void OpenForm(string strFormName,
             string strParameter,
             bool bOpenNew)
         {
@@ -537,14 +542,14 @@ namespace dp2Circulation
                 ItemInfoForm form = null;
                 if (bOpenNew == false)
                 {
-                    form = this.MainForm.EnsureItemInfoForm();
+                    form = Program.MainForm.EnsureItemInfoForm();
                     Global.Activate(form);
                 }
                 else
                 {
                     form = new ItemInfoForm();
-                    form.MainForm = this.MainForm;
-                    form.MdiParent = this.MainForm;
+                    form.MainForm = Program.MainForm;
+                    form.MdiParent = Program.MainForm;
                     form.Show();
                 }
                 form.LoadRecord(strParameter);  // 用册条码号装载
@@ -556,14 +561,14 @@ namespace dp2Circulation
                 EntityForm form = null;
                 if (bOpenNew == false)
                 {
-                    form = this.MainForm.EnsureEntityForm();
+                    form = Program.MainForm.EnsureEntityForm();
                     Global.Activate(form);
                 }
                 else
                 {
                     form = new EntityForm();
-                    form.MainForm = this.MainForm;
-                    form.MdiParent = this.MainForm;
+                    form.MainForm = Program.MainForm;
+                    form.MdiParent = Program.MainForm;
                     form.Show();
                 }
                 form.LoadItemByBarcode(strParameter, false);  // 用册条码号装载
@@ -575,18 +580,18 @@ namespace dp2Circulation
                 ReaderInfoForm form = null;
                 if (bOpenNew == false)
                 {
-                    form = this.MainForm.EnsureReaderInfoForm();
+                    form = Program.MainForm.EnsureReaderInfoForm();
                     Global.Activate(form);
                 }
                 else
                 {
                     form = new ReaderInfoForm();
-                    form.MainForm = this.MainForm;
-                    form.MdiParent = this.MainForm;
+                    form.MainForm = Program.MainForm;
+                    form.MdiParent = Program.MainForm;
                     form.Show();
                 }
                 form.LoadRecord(strParameter,
-                    false); 
+                    false);
                 return;
             }
         }
@@ -599,17 +604,19 @@ namespace dp2Circulation
             // this.WebBrowser.Document.InvokeScript(strCallBackFuncName, new object[] { "state", o, "result" });
             AsyncCall call = new AsyncCall();
             call.FuncType = "AsyncGetObjectFilePath";
-            call.InputParameters = new object[] { strPatronBarcode, strUsage, strCallBackFuncName, element};
+            call.InputParameters = new object[] { strPatronBarcode, strUsage, strCallBackFuncName, element };
             this.AddCall(call);
         }
+
+        private static readonly Object _syncRootOfTempFilenames = new Object();
 
         List<string> _tempfilenames = new List<string>();
 
         string GetTempFileName()
         {
-            string strTempFilePath = Path.Combine(this.MainForm.UserTempDir, "~res_" + Guid.NewGuid().ToString());
+            string strTempFilePath = Path.Combine(Program.MainForm.UserTempDir, "~res_" + Guid.NewGuid().ToString());
 
-            lock (this._tempfilenames)
+            lock (_syncRootOfTempFilenames)
             {
                 _tempfilenames.Add(strTempFilePath);
             }
@@ -617,10 +624,42 @@ namespace dp2Circulation
             return strTempFilePath;
         }
 
+        /*
+操作类型 crashReport -- 异常报告 
+主题 dp2circulation 
+发送者 xxx@ffe282be-e99d-4d82-87f1-d378174c78bb 
+媒体类型 text 
+内容 发生未捕获的界面线程异常: 
+Type: System.InvalidOperationException
+Message: 集合已修改；可能无法执行枚举操作。
+Stack:
+在 System.ThrowHelper.ThrowInvalidOperationException(ExceptionResource resource)
+在 System.Collections.Generic.List`1.Enumerator.MoveNextRare()
+在 dp2Circulation.WebExternalHost.DeleteAllTempFiles()
+在 dp2Circulation.WebExternalHost.Clear()
+在 dp2Circulation.WebExternalHost.Stop()
+在 dp2Circulation.WebExternalHost.StopPrevious()
+在 dp2Circulation.WebExternalHost.SetHtmlString(String strHtml, String strTempFileType)
+在 dp2Circulation.QuickChargingForm._setReaderHtmlString(String strHtml)
+
+
+dp2Circulation 版本: dp2Circulation, Version=2.28.6282.24093, Culture=neutral, PublicKeyToken=null
+操作系统：Microsoft Windows NT 6.2.9200.0
+操作时间 2017/3/15 12:13:04 (Wed, 15 Mar 2017 12:13:04 +0800) 
+前端地址 xxxx 经由 http://dp2003.com/dp2library 
+         * * */
         // 2015/1/4
         void DeleteAllTempFiles()
         {
-            foreach (string filename in this._tempfilenames)
+            // 2017/3/16 减少锁定时间
+            List<string> filenames = new List<string>();
+            lock (_syncRootOfTempFilenames)
+            {
+                filenames.AddRange(this._tempfilenames);
+                this._tempfilenames.Clear();
+            }
+
+            foreach (string filename in filenames)
             {
                 try
                 {
@@ -631,9 +670,84 @@ namespace dp2Circulation
                 }
             }
 
-            lock (this._tempfilenames)
+        }
+
+        static void BuildQrCodeImage(
+            string strType,
+            string strCode,
+            string strFileName)
+        {
+            string strCharset = "ISO-8859-1";
+            bool bDisableECI = false;
+
+            BarcodeFormat format = BarcodeFormat.QR_CODE;
+            if (strType == "39")
             {
-                this._tempfilenames.Clear();
+                format = BarcodeFormat.CODE_39;
+                strCode = strCode.ToUpper();    // 小写字符会无法编码
+            }
+
+            EncodingOptions options = new QrCodeEncodingOptions
+                {
+                    Height = 400,
+                    Width = 400,
+                    DisableECI = bDisableECI,
+                    ErrorCorrection = ErrorCorrectionLevel.L,
+                    CharacterSet = strCharset // "UTF-8"
+                };
+
+            if (strType == "39")
+                options = new EncodingOptions
+                {
+                    Width = 500,
+                    Height = 100,
+                    Margin = 10
+                };
+
+            var writer = new BarcodeWriter
+            {
+                // Format = BarcodeFormat.QR_CODE,
+                Format = format,
+                // Options = new EncodingOptions
+                Options = options
+            };
+
+            try
+            {
+                using (var bitmap = writer.Write(strCode))
+                {
+                    bitmap.Save(strFileName, System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+            catch (Exception ex)
+            {
+                BuildTextImage("异常: " + ex.Message, strFileName, Color.FromArgb(255, Color.DarkRed));
+            }
+        }
+
+        static void BuildTextImage(string strText,
+            string strFileName,
+            Color color,
+            int nWidth = 400)
+        {
+            // 文字图片
+            using (MemoryStream image = ArtText.BuildArtText(
+                strText,
+                "Consolas", // "Microsoft YaHei",
+                (float)16,
+                FontStyle.Bold,
+            color,
+            Color.Transparent,
+            Color.Gray,
+            ArtEffect.None,
+            ImageFormat.Png,
+            nWidth))
+            {
+                using (FileStream output = File.Create(strFileName))
+                {
+                    image.Seek(0, SeekOrigin.Begin);
+                    StreamUtil.DumpStream(image, output);
+                }
             }
         }
 
@@ -657,7 +771,7 @@ namespace dp2Circulation
              * */
             long lRet = 0;
 
-            string strNoneFilePath = Path.Combine(this.MainForm.UserDir, "nonephoto.png");
+            string strNoneFilePath = Path.Combine(Program.MainForm.UserDir, "nonephoto.png");
 
             // 2012/1/6
             if (string.IsNullOrEmpty(strPatronBarcode) == true)
@@ -666,7 +780,7 @@ namespace dp2Circulation
             // 获得本地图像资源
             if (strPatronBarcode == "?")
             {
-                // return this.MainForm.DataDir + "/~current_unsaved_patron_photo.png";
+                // return Program.MainForm.DataDir + "/~current_unsaved_patron_photo.png";
                 if (this.GetLocalPath != null)
                 {
                     GetLocalFilePathEventArgs e = new GetLocalFilePathEventArgs();
@@ -733,6 +847,22 @@ namespace dp2Circulation
                         if (string.IsNullOrEmpty(strResPath) == true)
                             return strNoneFilePath;
                     }
+                    else if (StringUtil.HasHead(strPatronBarcode, "qrcode:") == true)
+                    {
+                        // 可以直接获得图像对象
+                        string strCode = strPatronBarcode.Substring("qrcode:".Length);
+                        string strFileName = Path.Combine(Program.MainForm.UserTempDir, "~qr" + this.GetHashCode() + ".png");
+                        BuildQrCodeImage("", strCode, strFileName);
+                        return strFileName;
+                    }
+                    else if (StringUtil.HasHead(strPatronBarcode, "39code:") == true)
+                    {
+                        // 可以直接获得图像对象
+                        string strCode = strPatronBarcode.Substring("39code:".Length);
+                        string strFileName = Path.Combine(Program.MainForm.UserTempDir, "~qr" + this.GetHashCode() + ".png");
+                        BuildQrCodeImage("39", strCode, strFileName);
+                        return strFileName;
+                    }
                     else
                     {
                         // 需要先取得读者记录然后再获得图像对象
@@ -744,7 +874,7 @@ namespace dp2Circulation
                         //      -1  出错
                         //      0   没有找到
                         //      1   找到
-                        int nRet = this.MainForm.GetCachedReaderXml(strPatronBarcode,
+                        int nRet = Program.MainForm.GetCachedReaderXml(strPatronBarcode,
                             "",
         out strXml,
         out strOutputPath,
@@ -785,7 +915,7 @@ namespace dp2Circulation
                             strXml = results[0];
 
                             // 加入到缓存
-                            this.MainForm.SetReaderXmlCache(strPatronBarcode,
+                            Program.MainForm.SetReaderXmlCache(strPatronBarcode,
                                 "",
                                 strXml,
                                 strOutputPath);
@@ -824,10 +954,9 @@ namespace dp2Circulation
 
                         strResPath = strOutputPath + "/object/" + strID;
                         strResPath = strResPath.Replace(":", "/");
-
                     }
 
-                    // string strTempFilePath = this.MainForm.DataDir + "/~temp_obj";
+                    // string strTempFilePath = Program.MainForm.DataDir + "/~temp_obj";
 
                     string strTempFilePath = GetTempFileName();
                     // TODO: 是否可以建立本地 cache 机制
@@ -844,6 +973,7 @@ namespace dp2Circulation
                         stop,
                         strResPath,
                         strTempFilePath,
+                        "content,data,metadata,timestamp,outputpath,gzip",  // 2017/10/7 增加 gzip
                         out strMetaData,
                         out baOutputTimeStamp,
                         out strTempOutputPath,
@@ -851,7 +981,7 @@ namespace dp2Circulation
                     if (lRet == -1)
                     {
                         strError = "下载资源文件失败，原因: " + strError;
-                        throw new Exception(strError);
+                        throw new ChannelException(this.Channel.ErrorCode, strError);
                         // return strError;
                     }
 
@@ -926,12 +1056,12 @@ namespace dp2Circulation
 
             int nRet = strPatronBarcode.IndexOf("|");
             if (nRet != -1)
-                return "证条码号字符串 '"+strPatronBarcode+"' 中不应该有竖线字符";
+                return "证条码号字符串 '" + strPatronBarcode + "' 中不应该有竖线字符";
 
 
             // 看看cache中是否已经有了
             StringCacheItem item = null;
-            item = this.MainForm.SummaryCache.SearchItem(
+            item = Program.MainForm.SummaryCache.SearchItem(
                 "P:" + strPatronBarcode);   // 前缀是为了和册条码号区别
             if (item != null)
             {
@@ -968,89 +1098,89 @@ namespace dp2Circulation
                 stop.BeginLoop();
             }
 
-                try
-                {
-                    // Application.DoEvents();
+            try
+            {
+                // Application.DoEvents();
 
 #if SINGLE_CHANNEL
-                    // 因为本对象只有一个Channel通道，所以要锁定使用
-                    if (this.m_inSearch > 0)
-                    {
-                        return "Channel被占用";
-                    }
-                    //// LibraryChannel channel = this.Channel;
+                // 因为本对象只有一个Channel通道，所以要锁定使用
+                if (this.m_inSearch > 0)
+                {
+                    return "Channel被占用";
+                }
+                //// LibraryChannel channel = this.Channel;
 #else
                 LibraryChannel channel = GetChannelByID(strIdString);
 #endif
 
-                    this.m_inSearch++;
+                this.m_inSearch++;
+                try
+                {
+                    string strXml = "";
+                    string[] results = null;
+                    this.Channel.Timeout = new TimeSpan(0, 0, 5);
+                    long lRet = Channel.GetReaderInfo(stop,
+                        strPatronBarcode,
+                        "xml",
+                        out results,
+                        out strError);
+                    if (lRet == -1)
+                    {
+                        strSummary = strError;
+                        return strSummary;
+                    }
+                    else if (lRet > 1)
+                    {
+                        strSummary = "读者证条码号 " + strPatronBarcode + " 有重复记录 " + lRet.ToString() + "条";
+                        return strSummary;
+                    }
+
+                    // 2012/10/1
+                    if (lRet == 0)
+                        return "";  // not found
+
+                    Debug.Assert(results.Length > 0, "");
+                    strXml = results[0];
+
+                    XmlDocument dom = new XmlDocument();
                     try
                     {
-                        string strXml = "";
-                        string[] results = null;
-                        this.Channel.Timeout = new TimeSpan(0, 0, 5);
-                        long lRet = Channel.GetReaderInfo(stop,
-                            strPatronBarcode,
-                            "xml",
-                            out results,
-                            out strError);
-                        if (lRet == -1)
-                        {
-                            strSummary = strError;
-                            return strSummary;
-                        }
-                        else if (lRet > 1)
-                        {
-                            strSummary = "读者证条码号 " + strPatronBarcode + " 有重复记录 " + lRet.ToString() + "条";
-                            return strSummary;
-                        }
-
-                        // 2012/10/1
-                        if (lRet == 0)
-                            return "";  // not found
-
-                        Debug.Assert(results.Length > 0, "");
-                        strXml = results[0];
-
-                        XmlDocument dom = new XmlDocument();
-                        try
-                        {
-                            dom.LoadXml(strXml);
-                        }
-                        catch (Exception ex)
-                        {
-                            strSummary = "读者记录XML装入DOM时出错: " + ex.Message;
-                            return strSummary;
-                        }
-
-                        // 读者姓名
-                        strSummary = DomUtil.GetElementText(dom.DocumentElement,
-                            "name");
+                        dom.LoadXml(strXml);
                     }
                     catch (Exception ex)
                     {
-                        return "GetPatronSummary()异常: " + ex.Message;
-                    }
-                    finally
-                    {
-                        this.m_inSearch--;
+                        strSummary = "读者记录XML装入DOM时出错: " + ex.Message;
+                        return strSummary;
                     }
 
-                    // 如果cache中没有，则加入cache
-                    item = this.MainForm.SummaryCache.EnsureItem(
-                        "P:" + strPatronBarcode);
-                    item.Content = strSummary;
+                    // 读者姓名
+                    strSummary = DomUtil.GetElementText(dom.DocumentElement,
+                        "name");
+                }
+                catch (Exception ex)
+                {
+                    return "GetPatronSummary()异常: " + ex.Message;
                 }
                 finally
                 {
-                    if (stop != null)
-                    {
-                        stop.EndLoop();
-                        stop.OnStop -= new StopEventHandler(this.DoStop);
-                        stop.Initial("");
-                    }
+                    this.m_inSearch--;
                 }
-                return strSummary;
+
+                // 如果cache中没有，则加入cache
+                item = Program.MainForm.SummaryCache.EnsureItem(
+                    "P:" + strPatronBarcode);
+                item.Content = strSummary;
+            }
+            finally
+            {
+                if (stop != null)
+                {
+                    stop.EndLoop();
+                    stop.OnStop -= new StopEventHandler(this.DoStop);
+                    stop.Initial("");
+                }
+            }
+            return strSummary;
 #if USE_LOCK
             }
             finally
@@ -1117,7 +1247,7 @@ namespace dp2Circulation
             // 看看cache中是否已经有了
             StringCacheItem item = null;
 
-            item = this.MainForm.SummaryCache.SearchItem(strItemBarcodeUnionPath);
+            item = Program.MainForm.SummaryCache.SearchItem(strItemBarcodeUnionPath);
             if (item != null)
             {
                 // Application.DoEvents();
@@ -1208,7 +1338,7 @@ namespace dp2Circulation
                         }
 
                         // 注: Channel.Timeout 在 GetBiblioSummary() 函数中会自动设置
-                        
+
                         lRet = this.Channel.GetBiblioSummary(
                             stop,
                             strItemBarcode,
@@ -1233,7 +1363,7 @@ namespace dp2Circulation
                 }
 
                 // 如果cache中没有，则加入cache
-                item = this.MainForm.SummaryCache.EnsureItem(strItemBarcodeUnionPath);
+                item = Program.MainForm.SummaryCache.EnsureItem(strItemBarcodeUnionPath);
                 item.Content = strSummary;
             }
             finally
@@ -1306,7 +1436,7 @@ namespace dp2Circulation
                         strSummary = strSummary.Insert(12, "<br/>");
                 }
             }
-            END2:
+        END2:
             return strSummary;
         }
 
@@ -1399,7 +1529,7 @@ namespace dp2Circulation
                         return;
                     if (this.IsInLoop == false)
                         return;
-                    
+
                     // AsyncCall call = doingCalls[i];
 
                     this._doEvents = false; // 只要调用过一次异步功能，从此就不出让控制权
@@ -1413,6 +1543,12 @@ namespace dp2Circulation
                             // 此调用可能耗费时间好几秒
                             strResult = GetObjectFilePath((string)call.InputParameters[0], (string)call.InputParameters[1]);
                         }
+                        catch (ChannelException ex)
+                        {
+                            // 图像对象没有找到。有可能是书目摘要本地缓存没有刷新 2016/11/24
+                            strResult = ex.Message;
+                            continue;
+                        }
                         catch (Exception ex)
                         {
                             strResult = ex.Message;
@@ -1423,7 +1559,7 @@ namespace dp2Circulation
                         }
 
                         // this.WebBrowser.Document.InvokeScript((string)call.InputParameters[2], new object[] { (object)call.InputParameters[3], (object)strResult });
-                        this.MainForm.BeginInvokeScript(this.WebBrowser,
+                        Program.MainForm.BeginInvokeScript(this.WebBrowser,
                             (string)call.InputParameters[2],
                             new object[] { (object)call.InputParameters[3], (object)strResult });
                     }
@@ -1431,7 +1567,7 @@ namespace dp2Circulation
                     {
                         string strResult = GetSummary((string)call.InputParameters[0], (bool)call.InputParameters[1]);
                         // this.WebBrowser.Document.InvokeScript((string)call.InputParameters[2], new object[] { (object)call.InputParameters[3], (object)strResult });
-                        this.MainForm.BeginInvokeScript(this.WebBrowser,
+                        Program.MainForm.BeginInvokeScript(this.WebBrowser,
                             (string)call.InputParameters[2],
                             new object[] { (object)call.InputParameters[3], (object)strResult });
                     }
@@ -1439,7 +1575,7 @@ namespace dp2Circulation
                     {
                         string strResult = GetPatronSummary((string)call.InputParameters[0]);
                         // this.WebBrowser.Document.InvokeScript((string)call.InputParameters[2], new object[] { (object)call.InputParameters[3], (object)strResult });
-                        this.MainForm.BeginInvokeScript(this.WebBrowser,
+                        Program.MainForm.BeginInvokeScript(this.WebBrowser,
                             (string)call.InputParameters[1],
                             new object[] { (object)call.InputParameters[2], (object)strResult });
                     }
@@ -1462,7 +1598,7 @@ namespace dp2Circulation
                 // 要在一个控制台输出这些异常信息，帮助诊断
                 string strError = "WebExternalHost 异常：" + ExceptionUtil.GetDebugText(ex);
                 DoOutputDebugInfo(strError);
-                this.MainForm.ReportError("dp2circulation WebExternalHost 异常",
+                Program.MainForm.ReportError("dp2circulation WebExternalHost 异常",
                     strError);
             }
         }
@@ -1495,7 +1631,7 @@ namespace dp2Circulation
 
             Global.SetHtmlString(this.WebBrowser,
                 strHtml,
-                this.MainForm.DataDir,
+                Program.MainForm.DataDir,
                 strTempFileType);
         }
 
@@ -1524,10 +1660,10 @@ namespace dp2Circulation
 <head>
 <style type='text/css'>
 body {
-background-color: "+body_backcolor+@";
+background-color: " + body_backcolor + @";
 }
 div {
-background-color: "+div_backcolor+@";
+background-color: " + div_backcolor + @";
 margin: 32px;
 padding: 32px;
 border-style: solid;
@@ -1546,7 +1682,7 @@ text-align: center;
 
             Global.SetHtmlString(this.WebBrowser,
                 strHtml,
-                this.MainForm.DataDir,
+                Program.MainForm.DataDir,
                 strTempFileType);
         }
 
@@ -1557,7 +1693,7 @@ text-align: center;
         public void ClearHtmlPage()
         {
             Global.ClearHtmlPage(this.WebBrowser,
-                this.MainForm.DataDir,
+                Program.MainForm.DataDir,
                 this.BackColor);
         }
 

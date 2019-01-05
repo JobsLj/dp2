@@ -19,16 +19,24 @@ library_data.zip
 opac_app.zip
 opac_data.zip
 opac_style.zip
+zserver_app.zip
+
+*.dll
+*.exe
+dp2Installer/library_data/
 
 _[Dd]ocs/
 kernel_app/
 library_app/
+opac_app/
+zserver_app/
+.vs/
 
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
-x64/
+[Dd]ebug/x64/
 build/
 bld/
 [Bb]in/
@@ -206,3 +214,11 @@ FakesAssemblies/
 GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
+/dp2Installer/library_data_save
+
+!/dp2Kernel/gsdll32.dll
+!/dp2LibraryXE/gsdll32.dll
+
+!/fingerprintcenter/libzkfpcsharp.dll
+
+FaceCenter/

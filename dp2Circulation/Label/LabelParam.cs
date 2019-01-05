@@ -4,11 +4,11 @@ using System.Text;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.Xml;
+using System.Diagnostics;
 
 using DigitalPlatform.Xml;
 using DigitalPlatform.Drawing;
 using DigitalPlatform.Text;
-using System.Diagnostics;
 
 namespace dp2Circulation
 {
@@ -27,13 +27,14 @@ namespace dp2Circulation
         // 行间距 2014/2/23
         public double LineSep = 0;
 
-
         // 标签内文字区的边距
         public DecimalPadding LabelPaddings = new DecimalPadding(0, 0, 0, 0);
 
         public List<LineFormat> LineFormats = new List<LineFormat>();
 
+        // TODO: Dispose Font
         public Font Font = new Font("Arial", 10, FontStyle.Regular, GraphicsUnit.Point);
+
         public bool IsBarcodeFont = false;  // 是否为条码字体？ 如果是条码字体，则要在文字左右加上 *
 
         public double PageWidth = 0;
@@ -325,6 +326,7 @@ namespace dp2Circulation
                     format.Font = null; // 继承页面的字体
 
                 format.Align = DomUtil.GetAttr(node, "align");
+                format.Style = DomUtil.GetAttr(node, "style");
 
                 string strOffset = DomUtil.GetAttr(node, "offset");
                 if (string.IsNullOrEmpty(strOffset) == false)
@@ -368,6 +370,27 @@ namespace dp2Circulation
                     }
                 }
 
+                string strSize = DomUtil.GetAttr(node, "size");
+                if (string.IsNullOrEmpty(strSize) == false)
+                {
+                    try
+                    {
+                        double left = double.NaN;
+                        double right = double.NaN;
+                        ParsetTwoDouble(strSize,
+                            true,
+                            out left,
+                            out right);
+                        format.Width = left;
+                        format.Height = right;
+                    }
+                    catch (Exception ex)
+                    {
+                        strError = "<line>元素size属性值格式错误: " + ex.Message;
+                        return -1;
+                    }
+                }
+
                 format.ForeColor = DomUtil.GetAttr(node, "foreColor");
                 format.BackColor = DomUtil.GetAttr(node, "backColor");
 
@@ -400,7 +423,7 @@ namespace dp2Circulation
             {
                 if (double.TryParse(strLeft, out left) == false)
                 {
-                    throw new Exception("字符串 '"+strLeft+"' 格式错误。逗号左侧应该是一个数字");
+                    throw new Exception("字符串 '" + strLeft + "' 格式错误。逗号左侧应该是一个数字");
                 }
             }
             if (string.IsNullOrEmpty(strRight) == false)
@@ -479,6 +502,7 @@ namespace dp2Circulation
                     }
 
                     DomUtil.SetAttr(line, "align", format.Align);
+                    DomUtil.SetAttr(line, "style", format.Style);
 
                     Debug.Assert(double.IsNaN(format.OffsetX) == false, "OffsetX 不可能为 NaN");
                     Debug.Assert(double.IsNaN(format.OffsetY) == false, "OffsetY 不可能为 NaN");
@@ -488,6 +512,9 @@ namespace dp2Circulation
 
                     if (double.IsNaN(format.StartX) == false || double.IsNaN(format.StartY) == false)
                         line.SetAttribute("start", ToString(format.StartX) + "," + ToString(format.StartY));
+
+                    if (double.IsNaN(format.Width) == false || double.IsNaN(format.Height) == false)
+                        line.SetAttribute("size", ToString(format.Width) + "," + ToString(format.Height));
 
                     if (string.IsNullOrEmpty(format.ForeColor) == false)
                         line.SetAttribute("foreColor", format.ForeColor);
@@ -513,7 +540,9 @@ namespace dp2Circulation
     public class LineFormat
     {
         public Font Font = null;    // 如果为空，则表示继承页面的字体
+
         public string Align = "left";
+
         public bool IsBarcodeFont = false;  // 是否为条码字体？ 如果是条码字体，则要在文字左右加上 *
 
         // 左上角绝对位置
@@ -524,11 +553,37 @@ namespace dp2Circulation
         public double OffsetX = 0;
         public double OffsetY = 0;
 
+        // 2017/2/26
+        // 宽高
+        public double Width = Double.NaN;
+        public double Height = Double.NaN;
+
+
         // 前景颜色
         public string ForeColor = "";   // 缺省为黑色
         // 背景颜色
         public string BackColor = "";   // 缺省为透明
 
+        public string Style = "";   // 风格
+
+        public override string ToString()
+        {
+            StringBuilder text = new StringBuilder();
+            text.Append("Font=" + (this.Font != null ? this.Font.ToString() : "{null}") + "\r\n");
+            text.Append("Align=" + this.Align + "\r\n");
+            text.Append("IsBarcodeFont=" + this.IsBarcodeFont + "\r\n");
+            text.Append("StartX=" + this.StartX + "\r\n");
+            text.Append("StartY=" + this.StartY + "\r\n");
+            text.Append("OffsetX=" + this.OffsetX + "\r\n");
+            text.Append("OffsetY=" + this.OffsetY + "\r\n");
+            text.Append("Width=" + this.Width + "\r\n");
+            text.Append("Height=" + this.Height + "\r\n");
+            text.Append("ForeColor=" + this.ForeColor + "\r\n");
+            text.Append("BackColor=" + this.BackColor + "\r\n");
+            text.Append("Style=" + this.Style + "\r\n");
+
+            return text.ToString();
+        }
     }
 
 }

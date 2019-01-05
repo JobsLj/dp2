@@ -133,13 +133,13 @@ false);
                 this.textBox_server_authorNumber_gcatUrl.Text =
                     MainForm.AppInfo.GetString("config",
                     "gcat_server_url",
-                    "http://dp2003.com/gcatserver/");  // "http://dp2003.com/dp2libraryws/gcat.asmx"
+                    "http://dp2003.com/dp2library/");  // "http://dp2003.com/dp2libraryws/gcat.asmx"
 
                 // pinyin serverurl
                 this.textBox_server_pinyin_gcatUrl.Text =
                     MainForm.AppInfo.GetString("config",
                     "pinyin_server_url",
-                    "http://dp2003.com/gcatserver/");
+                    "http://dp2003.com/dp2library/");
 
 
                 // *** 全局
@@ -154,6 +154,42 @@ false);
             {
                 this.m_nPreventFire--;
             }
+        }
+
+        public class SecretInfo
+        {
+            public string AwsAccessKeyID = "";
+            public string AwsSecretKey = "";
+        }
+
+        // 可能会抛出异常
+        public static SecretInfo GetSecretInfo(
+            string strUserDir,
+            string name)
+        {
+            string strCfgFileName = Path.Combine(strUserDir, "amazon.xml");
+            XmlDocument dom = new XmlDocument();
+            try
+            {
+                dom.Load(strCfgFileName);
+            }
+            catch(FileNotFoundException)
+            {
+                return null;
+            }
+            catch(DirectoryNotFoundException)
+            {
+                return null;
+            }
+
+            SecretInfo info = new SecretInfo();
+            if (dom.DocumentElement != null)
+            {
+                info.AwsAccessKeyID = dom.DocumentElement.GetAttribute("AwsAccessKeyID");
+                info.AwsSecretKey = dom.DocumentElement.GetAttribute("AwsSecretKey");
+            }
+
+            return info;
         }
 
         // 可能会抛出异常
@@ -406,7 +442,11 @@ this.checkBox_marcDetailForm_verifyDataWhenSaving.Checked);
             GuiUtil.SetControlFont(dlg, this.Font);
 
             dlg.Text = "请指定一个 dp2library 数据库，以作为模拟的查重起点";
+#if OLD_CHANNEL
             dlg.dp2Channels = dp2_searchform.Channels;
+#endif
+            dlg.ChannelManager = Program.MainForm;
+
             dlg.Servers = this.MainForm.Servers;
             dlg.EnabledIndices = new int[] { dp2ResTree.RESTYPE_DB };
             dlg.Path = strDefaultStartPath;

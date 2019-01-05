@@ -68,6 +68,8 @@ namespace DigitalPlatform.rms.Client
         ApplicationStartError = 24,	//Application启动错误
 
         NotFoundSubRes = 25,    // 部分下级资源记录不存在
+        NotFoundObjectFile = 26,    // 对象文件没有找到
+        Compressed = 27,    // 返回的内容是压缩的 2017/10/7
 
         // LoginFail = 26, // dp2library向dp2Kernel登录失败。这意味着library.xml中的代理帐户有问题
     }
@@ -527,6 +529,14 @@ namespace DigitalPlatform.rms.Client
             {
                 this.ErrorCode = ChannelErrorCode.RequestCanceled;
             }
+            else if (result.ErrorCode == ErrorCodeValue.NotFoundObjectFile)
+            {
+                this.ErrorCode = ChannelErrorCode.NotFoundObjectFile;
+            }
+            else if (result.ErrorCode == ErrorCodeValue.Compressed)
+            {
+                this.ErrorCode = ChannelErrorCode.Compressed;
+            }
             else
             {
                 this.ErrorCode = ChannelErrorCode.OtherError;
@@ -650,7 +660,7 @@ namespace DigitalPlatform.rms.Client
             return strResult;
         }
 
-        void DoIdle()
+        public void DoIdle()
         {
 #if NO
             bool bDoEvents = true;
@@ -1418,10 +1428,10 @@ namespace DigitalPlatform.rms.Client
         {
             strError = "";
 
-            LogicNameItem[] logicnames = new LogicNameItem[logicNames.Count];
+            DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem[] logicnames = new DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem[logicNames.Count];
             for (int i = 0; i < logicnames.Length; i++)
             {
-                logicnames[i] = new LogicNameItem();
+                logicnames[i] = new DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem();
                 string[] cols = (string[])logicNames[i];
                 logicnames[i].Lang = cols[1];
                 logicnames[i].Value = cols[0];
@@ -1522,7 +1532,7 @@ namespace DigitalPlatform.rms.Client
             strKeysDef = "";
             strBrowseDef = "";
 
-            LogicNameItem[] logicnames = null;
+            DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem[] logicnames = null;
 
         REDO:
             try
@@ -1622,10 +1632,10 @@ namespace DigitalPlatform.rms.Client
         {
             strError = "";
 
-            LogicNameItem[] logicnames = new LogicNameItem[logicNames.Count];
+            DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem[] logicnames = new DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem[logicNames.Count];
             for (int i = 0; i < logicnames.Length; i++)
             {
-                logicnames[i] = new LogicNameItem();
+                logicnames[i] = new DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem();
                 string[] cols = (string[])logicNames[i];
                 logicnames[i].Lang = cols[1];
                 logicnames[i].Value = cols[0];
@@ -3014,8 +3024,8 @@ namespace DigitalPlatform.rms.Client
             out List<string> aPath,
             out string strError)
         {
-            strError = "";
             aPath = new List<string>();
+            strError = "";
 
             Record[] records = null;
 
@@ -4108,8 +4118,6 @@ namespace DigitalPlatform.rms.Client
                                 + ((lTotalCount == -1) ? "?" : Convert.ToString(lTotalCount)));
                         }
 
-
-
                         KeyInfo keyInfo = keys[i];
 
                         dlg.NewLine(keyInfo);
@@ -4130,13 +4138,11 @@ namespace DigitalPlatform.rms.Client
                         return -1;
                     goto REDO;
                 }
-
             }
 
             this.ClearRedoCount();
             return 0;
         }
-
 
         // 列目录。返回字符串数组的简化版本
         // parameters:
@@ -4177,6 +4183,7 @@ namespace DigitalPlatform.rms.Client
         }
 
         // 列资源目录
+        // 注意，此函数内部会进行循环，直到把全部事项都获取到了以后再返回。但这样可能会无限制地使用内存，需要引起注意
         public long DoDir(string strPath,
             string strLang,
             string strStyle,
@@ -4210,8 +4217,6 @@ namespace DigitalPlatform.rms.Client
                         strStyle,
                         null,
                         null);
-
-
                     for (; ; )
                     {
                         DoIdle(); // 出让控制权，避免CPU资源耗费过度
@@ -4291,6 +4296,81 @@ namespace DigitalPlatform.rms.Client
             return 0;
         }
 
+        // 2016/11/6
+        // 浅包装版本
+        public long DoDir(string strPath,
+            int nStart,
+            int nCount,
+            string strLang,
+            string strStyle,
+            out ResInfoItem[] results,
+            out string strError)
+        {
+            strError = "";
+            results = null;
+
+        REDO:
+            try
+            {
+            REDODIR:
+                IAsyncResult soapresult = this.ws.BeginDir(strPath,
+                    nStart,
+                    nCount,
+                    strLang,
+                    strStyle,
+                    null,
+                    null);
+                for (; ; )
+                {
+                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                    bool bRet = soapresult.AsyncWaitHandle.WaitOne(100, false);
+                    if (bRet == true)
+                        break;
+                }
+                if (this.m_ws == null)
+                {
+                    strError = "用户中断";
+                    this.ErrorCode = ChannelErrorCode.RequestCanceled;
+                    return -1;
+                }
+                Result result = this.ws.EndDir(
+                    out results, soapresult);
+
+                if (result.Value == -1)
+                {
+                    if (result.ErrorCode == ErrorCodeValue.NotLogin
+                        && this.Container != null)
+                    {
+                        // return:
+                        //		-1	error
+                        //		0	login failed
+                        //		1	login succeed
+                        int nRet = this.UiLogin(strPath,
+                            out strError);
+                        if (nRet == -1 || nRet == 0)
+                        {
+                            return -1;
+                        }
+
+                        goto REDODIR;
+                    }
+
+                    ConvertErrorCode(result);
+                    strError = result.ErrorString;
+                    return -1;
+                }
+
+                this.ClearRedoCount();
+                return result.Value;
+            }
+            catch (Exception ex)
+            {
+                int nRet = ConvertWebError(ex, out strError);
+                if (nRet == 0)
+                    return -1;
+                goto REDO;
+            }
+        }
 
         // 写入资源。原始版本。2007/5/27
         public long WriteRes(string strResPath,
@@ -5372,7 +5452,6 @@ ref strNewStyle);	// 不要数据体和metadata
                 Debug.Assert(false, "attachment style暂时不能使用");
             }
 
-
             // 检查参数
             if (StringUtil.IsInList("data", strStyle) == false)
             {
@@ -5520,9 +5599,7 @@ ref strNewStyle);	// 不要数据体和metadata
                         bHasMetadataStyle = false;
                     }
 
-
                     lTotalLength = result.Value;
-
 
                     if (StringUtil.IsInList("timestamp", strStyle) == true
                         /*
@@ -5594,7 +5671,6 @@ ref strNewStyle);	// 不要数据体和metadata
                         break;	// 结束
 
                 } // end try
-
 
                 catch (Exception ex)
                 {
@@ -5772,7 +5848,199 @@ ref strNewStyle);	// 不要数据体和metadata
             return 0;
         }
 
+        // 包装后的版本
+        public static int UploadObjectFile(
+            Stop stop,
+            RmsChannel channel,
+            string strRecordPath,
+            string strLocalFilePath,
+            byte[] timestamp_param,
+            int nChunkSize,
+            out byte[] output_timestamp,
+            out string strError)
+        {
+            using (FileStream stream = File.OpenRead(strLocalFilePath))
+            {
+                return UploadObjectFile(
+ stop,
+ channel,
+ strRecordPath,
+ stream,
+ stream.Length,
+ timestamp_param,
+ nChunkSize,
+ out output_timestamp,
+ out strError);
+            }
+        }
 
+        // 上载一个res
+        // parameters:
+        //      strRecordPath   主记录的路径
+        //		inputfile:   源流。注意嗲用本函数以前，需要把文件指针放在想要上传的开始位置。并用 length 参数给出想要上传的总长度。这个长度可以小于文件流的最大长度，也就是说可以用本函数上传流中间的一部分作为对象内容
+        //		bIsFirstRes: 是否是第一个资源(xml)
+        //		strError:    error info
+        // return:
+        //		-2	片断中发现时间戳不匹配。本函数调主可重上载整个资源
+        //		-1	error
+        //		0	successed
+        public static int UploadObjectFile(
+            Stop stop,
+            RmsChannel channel,
+            string strRecordPath,
+            Stream inputfile,
+            long length,
+            byte[] timestamp_param,
+            int nChunkSize,
+            out byte[] output_timestamp,
+            out string strError)
+        {
+            strError = "";
+            output_timestamp = null;
+            long lRet = 0;
+
+            if (length == 0)
+            {
+                Debug.Assert(false, "");
+                return 0;	// 空包不需上载
+            }
+
+            long lStartOffs = inputfile.Position;
+
+            string strStyle = "";
+            string strMetadata = "";
+
+            // 3.将body文件拆分成片断进行上载
+            string[] ranges = null;
+
+            if (length == 0)
+            {
+                // 空文件
+                ranges = new string[1];
+                ranges[0] = "";
+            }
+            else
+            {
+                string strRange = "";
+                strRange = "0-" + Convert.ToString(length - 1);
+
+                // 切割为若干块
+                ranges = RangeList.ChunkRange(strRange,
+                    nChunkSize // 100 * 1024
+                    );
+            }
+
+            byte[] input_timestamp = timestamp_param;
+
+            string strOutputPath = "";
+
+            int loop = 0;
+            for (int j = 0; j < ranges.Length; j++)
+            {
+            REDO:
+
+                channel.DoIdle();
+
+                if (stop != null && stop.State != 0)
+                {
+                    strError = "用户中断";
+                    return -1;
+                }
+
+                // RangeList rl = new RangeList(ranges[j]);
+
+                byte[] baTotal = null;
+
+                if (inputfile != null)
+                {
+                    if (inputfile.Position + length > inputfile.Length)
+                    {
+                        strError = "文件从当前位置 " + Convert.ToString(inputfile.Position) + " 开始到末尾长度不足 " + Convert.ToString(length);
+                        return -1;
+                    }
+
+                    lRet = RangeList.CopyFragment(
+                        inputfile,
+                        length,
+                        ranges[j],
+                        out baTotal,
+                        out strError);
+                    if (lRet == -1)
+                        return -1;
+                }
+                else
+                {
+                    baTotal = new byte[0];	// 这是一个缺憾。应当许可为null
+                }
+
+                inputfile.FastSeek(lStartOffs);
+                lRet = channel.WriteRes(strRecordPath,
+                    ranges[j],
+                    length,
+                    baTotal,
+                    strMetadata,
+                    strStyle,
+                    input_timestamp,
+                    out strOutputPath,
+                    out output_timestamp,
+                    out strError);
+                if (lRet == -1)
+                {
+                    if (channel.ErrorCode == ChannelErrorCode.TimestampMismatch)
+                    {
+                        if (loop == 0 && timestamp_param == null)
+                        {
+                            if (output_timestamp != null)
+                            {
+                                input_timestamp = new byte[output_timestamp.Length];
+                                Array.Copy(output_timestamp, 0, input_timestamp, 0, output_timestamp.Length);
+                            }
+                            else
+                            {
+                                input_timestamp = output_timestamp;
+                            }
+                        }
+                        goto REDO;
+                    }
+
+                    return -1;
+                }
+
+                input_timestamp = output_timestamp;
+                loop++;
+            }
+            return 0;
+        }
+
+        // TODO: 尽快废止这个函数
+        // 包装后的版本，兼容以前的调用方式。
+        public long DoSaveResObject(string strPath,
+    Stream file,
+    long lTotalLength,
+    string strStyle,
+    string strMetadata,
+    string strRange,
+    bool bTailHint,
+    byte[] timestamp,
+    out byte[] output_timestamp,
+    out string strOutputPath,
+    out string strError)
+        {
+            return DoSaveResObject(strPath,
+file,
+lTotalLength,
+strStyle,
+strMetadata,
+strRange,
+file.Position,
+bTailHint,
+timestamp,
+out output_timestamp,
+out strOutputPath,
+out strError);
+        }
+
+        // 警告：如果用本函数一次调用写入一个很大的文件的话，可能会内存溢出
         // 保存资源记录
         // parameters:
         //		strPath	格式: 库名/记录号/object/对象xpath
@@ -5788,6 +6056,7 @@ ref strNewStyle);	// 不要数据体和metadata
             string strStyle,	// 2005/11/4
             string strMetadata,
             string strRange,
+            long lHead,
             bool bTailHint,
             byte[] timestamp,
             out byte[] output_timestamp,
@@ -5806,8 +6075,7 @@ ref strNewStyle);	// 不要数据体和metadata
 
             if (file != null)
             {
-
-                if (file.Position + lTotalLength > file.Length)
+                if (lHead/*file.Position*/ + lTotalLength > file.Length)
                 {
                     strError = "文件从当前位置 " + Convert.ToString(file.Position) + " 开始到末尾长度不足 " + Convert.ToString(lTotalLength);
                     return -1;
@@ -5817,6 +6085,7 @@ ref strNewStyle);	// 不要数据体和metadata
                     file,
                     lTotalLength,
                     strRange,
+                    lHead,
                     out baTotal,
                     out strError);
                 if (lRet == -1)
@@ -5904,9 +6173,6 @@ ref strNewStyle);	// 不要数据体和metadata
                     return -1;
                 }
             }
-
-
-
             catch (Exception ex)
             {
                 /*
@@ -6120,6 +6386,8 @@ ref strNewStyle);	// 不要数据体和metadata
         public string RecPath = "";
         public string Metadata = "";
         public byte[] Timestamp = null;
+
+        public string Url = ""; // 2017/5/3
 
         public static KernelRecord From(Record record)
         {

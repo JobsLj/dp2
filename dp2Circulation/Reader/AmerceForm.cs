@@ -1,17 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using System.Xml;
 using System.Diagnostics;
 using System.Threading;
-
-using System.Runtime.Remoting;
-using System.Runtime.Remoting.Channels;
-using System.Runtime.Remoting.Channels.Ipc;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
@@ -19,7 +12,6 @@ using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 using DigitalPlatform.Text;
 using DigitalPlatform.CommonControl;
-using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.LibraryClient.localhost;
 
@@ -38,11 +30,11 @@ namespace dp2Circulation
         internal Thread threadFillSummary = null;
          * */
 
-        bool m_bStopFillAmercing = true;
+        volatile bool m_bStopFillAmercing = true;
         internal Thread threadFillAmercing = null;
         FillAmercingParam FillAmercingParam = null;
 
-        bool m_bStopFillAmerced = true;
+        volatile bool m_bStopFillAmerced = true;
         internal Thread threadFillAmerced = null;
         FillAmercedParam FillAmercedParam = null;
 
@@ -183,21 +175,6 @@ namespace dp2Circulation
 
         #endregion
 
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        /// <summary>
-        /// 框架窗口
-        /// </summary>
-        public MainForm MainForm = null;
-
-        DigitalPlatform.Stop stop = null;
-#endif
-
-
-        // bool m_bChanged = false;
-
         /// <summary>
         /// 构造函数
         /// </summary>
@@ -215,17 +192,16 @@ namespace dp2Circulation
             this.listView_overdues.Tag = prop_1;
             prop_1.SetSortStyle(COLUMN_AMERCING_PRICE, ColumnSortStyle.RightAlign);
             prop_1.SetSortStyle(COLUMN_AMERCING_BORROWPERIOD, ColumnSortStyle.RightAlign);
-
         }
 
         private void AmerceForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 #if NO
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -235,7 +211,8 @@ namespace dp2Circulation
 #endif
 
             // webbrowser
-            this.m_webExternalHost.Initial(this.MainForm, this.webBrowser_readerInfo);
+            this.m_webExternalHost.Initial(// Program.MainForm, 
+                this.webBrowser_readerInfo);
             this.webBrowser_readerInfo.ObjectForScripting = this.m_webExternalHost;
 
             this.commander = new Commander(this);
@@ -249,7 +226,7 @@ namespace dp2Circulation
             this.listView_amerced.LargeImageList = this.imageList_itemType;
              * */
 
-            this.checkBox_fillSummary.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_fillSummary.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "amerce_form",
                 "fill_summary",
                 true);
@@ -275,13 +252,13 @@ namespace dp2Circulation
             try
             {
                 // 获得splitContainer_main的状态
-                this.MainForm.LoadSplitterPos(
+                Program.MainForm.LoadSplitterPos(
     this.splitContainer_main,
     "amerceform_state",
     "splitContainer_main_ratio");
 
                 // 获得splitContainer_upper的状态
-                this.MainForm.LoadSplitterPos(
+                Program.MainForm.LoadSplitterPos(
 this.splitContainer_lists,
 "amerceform_state",
 "splitContainer_lists_ratio");
@@ -291,7 +268,7 @@ this.splitContainer_lists,
             {
             }
 
-            string strWidths = this.MainForm.AppInfo.GetString(
+            string strWidths = Program.MainForm.AppInfo.GetString(
                 "amerce_form",
                 "amerced_list_column_width",
                 "");
@@ -302,7 +279,7 @@ this.splitContainer_lists,
                     true);
             }
 
-            strWidths = this.MainForm.AppInfo.GetString(
+            strWidths = Program.MainForm.AppInfo.GetString(
                 "amerce_form",
                 "overdues_list_column_width",
                 "");
@@ -325,27 +302,27 @@ this.splitContainer_lists,
         /*public*/
         void SaveSize()
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
                 // 保存splitContainer_main的状态
-                this.MainForm.SaveSplitterPos(
+                Program.MainForm.SaveSplitterPos(
                     this.splitContainer_main,
                     "amerceform_state",
                     "splitContainer_main_ratio");
                 // 保存splitContainer_upper的状态
-                this.MainForm.SaveSplitterPos(
+                Program.MainForm.SaveSplitterPos(
                     this.splitContainer_lists,
                     "amerceform_state",
                     "splitContainer_lists_ratio");
 
                 string strWidths = ListViewUtil.GetColumnWidthListString(this.listView_amerced);
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "amerce_form",
                     "amerced_list_column_width",
                     strWidths);
 
                 strWidths = ListViewUtil.GetColumnWidthListString(this.listView_overdues);
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "amerce_form",
                     "overdues_list_column_width",
                     strWidths);
@@ -360,7 +337,7 @@ this.splitContainer_lists,
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("amerce_form",
+                return Program.MainForm.AppInfo.GetString("amerce_form",
         "layout",
         "左右分布");
             }
@@ -477,9 +454,9 @@ this.splitContainer_lists,
 
         private void AmerceForm_FormClosed(object sender, FormClosedEventArgs e)
         {
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
         "amerce_form",
         "fill_summary",
         this.checkBox_fillSummary.Checked);
@@ -555,20 +532,20 @@ this.splitContainer_lists,
 #endif
 
             //this.Update();
-            //this.MainForm.Update();
+            //Program.MainForm.Update();
 
             int nRecordCount = 0;
 
             try
             {
 
-                Global.ClearHtmlPage(this.webBrowser_readerInfo, this.MainForm.DataDir);
+                Global.ClearHtmlPage(this.webBrowser_readerInfo, Program.MainForm.DataDir);
 
                 byte[] baTimestamp = null;
                 string strOutputRecPath = "";
                 int nRedoCount = 0;
 
-            REDO:
+                REDO:
 
                 stop.SetMessage("正在装入读者记录 " + strBarcode + " ...");
                 string[] results = null;
@@ -600,18 +577,16 @@ this.splitContainer_lists,
 
                     dlg.Overflow = StringUtil.SplitList(strOutputRecPath).Count < lRet;
                     nRet = dlg.Initial(
-                        this.MainForm,
-                        //this.Channel,
-                        //this.stop,
+                        // Program.MainForm,
                         StringUtil.SplitList(strOutputRecPath),
                         "请选择一个读者记录",
                         out strError);
                     if (nRet == -1)
                         goto ERROR1;
                     // TODO: 保存窗口内的尺寸状态
-                    this.MainForm.AppInfo.LinkFormState(dlg, "AmerceForm_SelectPatronDialog_state");
+                    Program.MainForm.AppInfo.LinkFormState(dlg, "AmerceForm_SelectPatronDialog_state");
                     dlg.ShowDialog(this);
-                    this.MainForm.AppInfo.UnlinkFormState(dlg);
+                    Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
                     if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                     {
@@ -654,7 +629,7 @@ this.splitContainer_lists,
 #if NO
                 Global.SetHtmlString(this.webBrowser_readerInfo,
                     strHtml,
-                    this.MainForm.DataDir,
+                    Program.MainForm.DataDir,
                     "amercing_reader");
 #endif
                 this.m_webExternalHost.SetHtmlString(strHtml,
@@ -670,7 +645,7 @@ this.splitContainer_lists,
             }
 
             return nRecordCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -679,7 +654,7 @@ this.splitContainer_lists,
             //this.listView_overdues.Items.Clear();
             //this.listView_amerced.Items.Clear();
             Global.ClearHtmlPage(this.webBrowser_readerInfo,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
             /*
             this.button_amerced_undoAmerce.Enabled = false;
             this.button_amercingOverdue_submit.Enabled = false;
@@ -691,7 +666,7 @@ this.splitContainer_lists,
         void ClearAllDisplay1()
         {
             Global.ClearHtmlPage(this.webBrowser_readerInfo,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
 
             SetAmercedButtonsEnable();
             SetOverduesButtonsEnable();
@@ -701,7 +676,7 @@ this.splitContainer_lists,
         {
             //this.listView_overdues.Items.Clear();
             Global.ClearHtmlPage(this.webBrowser_readerInfo,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
             this.toolStripButton_submit.Enabled = false;
         }
 
@@ -753,15 +728,13 @@ this.splitContainer_lists,
                     // 搜索出记录，显示在窗口中
                     ClearAllDisplay();
 
-                    string strXml = "";
-
                     // 装入读者记录
                     // return:
                     //      -1  error
                     //      0   not found
                     //      >=1 命中的读者记录条数
                     int nRet = LoadReaderHtmlRecord(ref strReaderBarcode,
-                        out strXml,
+                        out string strXml,
                         out strError);
 
                     if (this.textBox_readerBarcode.Text != strReaderBarcode)
@@ -841,7 +814,7 @@ this.splitContainer_lists,
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -881,7 +854,7 @@ this.splitContainer_lists,
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
 
             try
@@ -1030,7 +1003,7 @@ this.splitContainer_lists,
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
 
             try
@@ -1193,6 +1166,7 @@ this.splitContainer_lists,
             }
         }
 
+        // 开始填充已交费信息
         // 如果有ids，则表示追加它们。否则为重新装载strReaderBaroode指明的读者的已交费记录
         void BeginFillAmerced(string strReaderBarcode,
             List<string> ids)
@@ -1210,15 +1184,13 @@ this.splitContainer_lists,
             this.threadFillAmerced.Start();
         }
 
-
-        /*public*/
         void ThreadFillAmercedMain()
         {
             string strError = "";
             m_bStopFillAmerced = false;
 
             LibraryChannel channel = new LibraryChannel();
-            channel.Url = this.MainForm.LibraryServerUrl;
+            channel.Url = Program.MainForm.LibraryServerUrl;
 
             channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
 
@@ -1254,7 +1226,7 @@ this.splitContainer_lists,
 
                 if (string.IsNullOrEmpty(this.FillAmercedParam.ReaderBarcode) == false)
                 {
-                    Safe_clearList(this.listView_amerced);
+                    ClearList(this.listView_amerced);
 
                     string strFrom = "读者证条码";
                     string strMatchStyle = "exact";
@@ -1369,7 +1341,11 @@ this.splitContainer_lists,
                         if (lRet == -1)
                         {
                             if (channel.ErrorCode == ErrorCode.AccessDenied)
+                            {
+                                // 2018/11/6
+                                SetError(listView_amerced, "获取记录 '" + strPath + "' 时权限不够: " + strError);
                                 continue;
+                            }
                             goto ERROR1;
                         }
 
@@ -1380,7 +1356,6 @@ this.splitContainer_lists,
                             out strError);
                         if (nRet == -1)
                             goto ERROR1;
-
                     }
 
                     lStart += searchresults.Length;
@@ -1392,7 +1367,7 @@ this.splitContainer_lists,
                 // 第二阶段，填充摘要
                 if (this.FillAmercedParam.FillSummary == true)
                 {
-                    List<ListViewItem> items = Safe_getItemList(this.listView_amerced);
+                    List<ListViewItem> items = GetItemList(this.listView_amerced);
 
                     for (int i = 0; i < items.Count; i++)
                     {
@@ -1439,7 +1414,7 @@ this.splitContainer_lists,
                         {
                         }
 
-                        Safe_changeItemText(item, COLUMN_AMERCING_BIBLIOSUMMARY, strSummary);
+                        ChangeItemText(item, COLUMN_AMERCING_BIBLIOSUMMARY, strSummary);
                     }
                 }
                 return;
@@ -1452,8 +1427,8 @@ this.splitContainer_lists,
                 m_bStopFillAmerced = true;
             }
 
-        ERROR1:
-            Safe_setError(this.listView_amerced, strError);
+            ERROR1:
+            SetError(this.listView_amerced, strError);
             // Safe_errorBox(strError);
         }
 
@@ -1514,46 +1489,61 @@ this.splitContainer_lists,
         }
 
         // ClearList
-        delegate void Delegate_ClearList(ListView list);
+        // delegate void Delegate_ClearList(ListView list);
 
         void ClearList(ListView list)
         {
-            list.Items.Clear();
+            this.Invoke((Action)(() =>
+            {
+                list.Items.Clear();
+            }));
         }
 
+#if NO
         void Safe_clearList(ListView list)
         {
             Delegate_ClearList d = new Delegate_ClearList(ClearList);
             this.Invoke(d, new object[] { list });
         }
+#endif
 
         // ErrorBox
-        delegate void Delegate_ErrorBox(string strText);
+        // delegate void Delegate_ErrorBox(string strText);
 
         void ErrorBox(string strText)
         {
-            MessageBox.Show(this, strText);
+            this.Invoke((Action)(() =>
+            {
+                MessageBox.Show(this, strText);
+            }));
         }
 
+#if NO
         void Safe_errorBox(string strText)
         {
             Delegate_ErrorBox d = new Delegate_ErrorBox(ErrorBox);
             this.Invoke(d, new object[] { strText });
         }
+#endif
 
         // AddListItem
-        delegate void Delegate_AddListItem(ListView list, ListViewItem item);
+        // delegate void Delegate_AddListItem(ListView list, ListViewItem item);
 
         void AddListItem(ListView list, ListViewItem item)
         {
-            list.Items.Add(item);
+            this.Invoke((Action)(() =>
+            {
+                list.Items.Add(item);
+            }));
         }
 
+#if NO
         void Safe_addListItem(ListView list, ListViewItem item)
         {
             Delegate_AddListItem d = new Delegate_AddListItem(AddListItem);
             this.Invoke(d, new object[] { list, item });
         }
+#endif
 
         // GetBarcodeAndSummary
         delegate void Delegate_GetBarcodeAndSummary(ListView list,
@@ -1593,61 +1583,77 @@ this.splitContainer_lists,
         }
 
         // ChangeItemText
-        delegate void Delegate_ChangeItemText(ListViewItem item, int nCol, string strText);
+        // delegate void Delegate_ChangeItemText(ListViewItem item, int nCol, string strText);
 
         void ChangeItemText(ListViewItem item, int nCol, string strText)
         {
-            ListViewUtil.ChangeItemText(item, nCol, strText);
+            this.Invoke((Action)(() =>
+            {
+                ListViewUtil.ChangeItemText(item, nCol, strText);
+            }));
         }
 
+#if NO
         void Safe_changeItemText(ListViewItem item, int nCol, string strText)
         {
             Delegate_ChangeItemText d = new Delegate_ChangeItemText(ChangeItemText);
             this.Invoke(d, new object[] { item, nCol, strText });
         }
+#endif
 
         // GetItemList
-        delegate List<ListViewItem> Delegate_GetItemList(ListView list);
+        // delegate List<ListViewItem> Delegate_GetItemList(ListView list);
 
         List<ListViewItem> GetItemList(ListView list)
         {
-            List<ListViewItem> results = new List<ListViewItem>();
-            foreach (ListViewItem item in list.Items)
+            return (List<ListViewItem>)this.Invoke((Func<List<ListViewItem>>)(() =>
             {
-                results.Add(item);
-            }
-            return results;
+                List<ListViewItem> results = new List<ListViewItem>();
+                foreach (ListViewItem item in list.Items)
+                {
+                    results.Add(item);
+                }
+                return results;
+            }));
         }
 
+#if NO
         List<ListViewItem> Safe_getItemList(ListView list)
         {
             Delegate_GetItemList d = new Delegate_GetItemList(GetItemList);
             return (List<ListViewItem>)this.Invoke(d, new object[] { list });
         }
+#endif
 
+#if NO
         // SetError
         delegate void Delegate_SetError(ListView list,
             string strError);
+#endif
 
         // 设置错误字符串显示
         static void SetError(ListView list,
             string strError)
         {
-            // list.Items.Clear();
-            ListViewItem item = new ListViewItem();
-            // item.ImageIndex = ITEMTYPE_ERROR;
-            item.Text = "";
-            item.SubItems.Add("错误: " + strError);
-            ListViewUtil.ChangeItemText(item, COLUMN_AMERCED_STATE, "error");
-            list.Items.Add(item);
+            list.Invoke((Action)(() =>
+            {
+                ListViewItem item = new ListViewItem();
+                // item.ImageIndex = ITEMTYPE_ERROR;
+                item.Text = "";
+                item.SubItems.Add("错误: " + strError);
+                ListViewUtil.ChangeItemText(item, COLUMN_AMERCED_STATE, "error");
+                list.Items.Add(item);
+            }));
         }
 
+#if NO
         void Safe_setError(ListView list,
             string strError)
         {
             Delegate_SetError d = new Delegate_SetError(SetError);
             this.Invoke(d, new object[] { list, strError });
         }
+#endif
 
         /*public*/
         void ThreadFillAmercingMain()
@@ -1656,14 +1662,13 @@ this.splitContainer_lists,
             m_bStopFillAmercing = false;
 
             LibraryChannel channel = new LibraryChannel();
-            channel.Url = this.MainForm.LibraryServerUrl;
+            channel.Url = Program.MainForm.LibraryServerUrl;
 
             channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
 
             try
             {
-
-                Safe_clearList(this.listView_overdues);
+                ClearList(this.listView_overdues);
 
                 XmlDocument dom = new XmlDocument();
                 try
@@ -1764,7 +1769,7 @@ this.splitContainer_lists,
                     info.Xml = node.OuterXml;
                     item.Tag = info;
 
-                    Safe_addListItem(this.listView_overdues, item);
+                    AddListItem(this.listView_overdues, item);
                 }
 
                 if (dup_ids.Count > 0)
@@ -1778,7 +1783,7 @@ this.splitContainer_lists,
                 // 第二阶段，填充摘要
                 if (this.FillAmercingParam.FillSummary == true)
                 {
-                    List<ListViewItem> items = Safe_getItemList(listView_overdues);
+                    List<ListViewItem> items = GetItemList(listView_overdues);
 
                     for (int i = 0; i < items.Count; i++)
                     {
@@ -1825,7 +1830,7 @@ this.splitContainer_lists,
                         {
                         }
 
-                        Safe_changeItemText(item, COLUMN_AMERCING_BIBLIOSUMMARY, strSummary);
+                        ChangeItemText(item, COLUMN_AMERCING_BIBLIOSUMMARY, strSummary);
                     }
                 }
 
@@ -1839,8 +1844,8 @@ this.splitContainer_lists,
                 m_bStopFillAmercing = true;
             }
 
-        ERROR1:
-            Safe_setError(this.listView_overdues, strError);
+            ERROR1:
+            SetError(this.listView_overdues, strError);
             // Safe_errorBox(strError);
         }
 
@@ -1876,7 +1881,7 @@ this.splitContainer_lists,
             m_bStopFilling = false;
 
             LibraryChannel channel = new LibraryChannel();
-            channel.Url = this.MainForm.LibraryServerUrl;
+            channel.Url = Program.MainForm.LibraryServerUrl;
 
             channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -2163,7 +2168,7 @@ this.splitContainer_lists,
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
 
             try
@@ -2885,26 +2890,26 @@ this.splitContainer_lists,
             string strError = "";
 
             // 看看是不是符合服务器要求的交费接口
-            if (String.IsNullOrEmpty(this.MainForm.ClientFineInterfaceName) == false)
+            if (String.IsNullOrEmpty(Program.MainForm.ClientFineInterfaceName) == false)
             {
                 // 注：如果服务器端要配置要求前端不用接口，则应明显配置为“<无>”
                 string strThisInterface = this.AmerceInterface;
                 if (String.IsNullOrEmpty(strThisInterface) == true)
                     strThisInterface = "<无>";
 
-                if (string.Compare(this.MainForm.ClientFineInterfaceName, "cardCenter", true) == 0)
+                if (string.Compare(Program.MainForm.ClientFineInterfaceName, "cardCenter", true) == 0)
                 {
                     if (strThisInterface == "<无>")
                     {
-                        strError = "应用服务器要求前端必须采用 CardCenter 类型交费接口 '" + this.MainForm.ClientFineInterfaceName + "'。然而本前端当前配置的交费接口为'" + this.AmerceInterface + "'";
+                        strError = "应用服务器要求前端必须采用 CardCenter 类型交费接口 '" + Program.MainForm.ClientFineInterfaceName + "'。然而本前端当前配置的交费接口为'" + this.AmerceInterface + "'";
                         goto ERROR1;
                     }
 
                     // TODO: 是否要排除“迪科远望” 类型 ?
                 }
-                else if (this.MainForm.ClientFineInterfaceName != strThisInterface)
+                else if (Program.MainForm.ClientFineInterfaceName != strThisInterface)
                 {
-                    strError = "应用服务器要求前端必须采用交费接口 '" + this.MainForm.ClientFineInterfaceName + "'。然而本前端当前配置的交费接口为'" + this.AmerceInterface + "'";
+                    strError = "应用服务器要求前端必须采用交费接口 '" + Program.MainForm.ClientFineInterfaceName + "'。然而本前端当前配置的交费接口为'" + this.AmerceInterface + "'";
                     goto ERROR1;
                 }
             }
@@ -3001,7 +3006,7 @@ this.splitContainer_lists,
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3101,7 +3106,7 @@ this.splitContainer_lists,
                     }
                 }
 
-                this.MainForm.OperHistory.AmerceAsync(
+                Program.MainForm.OperHistory.AmerceAsync(
                     this.textBox_readerBarcode.Text,
                     strReaderSummary,
                     overdue_infos,
@@ -3217,7 +3222,7 @@ this.splitContainer_lists,
                 return 1;
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -3341,9 +3346,9 @@ this.splitContainer_lists,
             dlg.CardNumber = strReaderBarcode;
             dlg.SubmitPrice = strPrice; //  PriceUtil.GetPurePrice(strPrice); // 是否要去除货币单位?
             dlg.StartPosition = FormStartPosition.CenterScreen;
-            this.MainForm.AppInfo.LinkFormState(dlg, "AmerceCardDialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "AmerceCardDialog_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return 0;
@@ -3373,9 +3378,9 @@ this.splitContainer_lists,
             dlg.CardNumber = strReaderBarcode;
             dlg.SubmitPrice = PriceUtil.GetPurePrice(strPrice); // 是否要去除货币单位?
             dlg.StartPosition = FormStartPosition.CenterScreen;
-            this.MainForm.AppInfo.LinkFormState(dlg, "AmerceCardDialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "AmerceCardDialog_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return 0;
@@ -3546,7 +3551,7 @@ this.splitContainer_lists,
                     }
                 }
 
-                this.MainForm.OperHistory.AmerceAsync(
+                Program.MainForm.OperHistory.AmerceAsync(
                     this.textBox_readerBarcode.Text,
                     strReaderSummary,
                     overdue_infos,
@@ -3618,7 +3623,7 @@ this.splitContainer_lists,
                 return 1;
 
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -3699,22 +3704,22 @@ COLUMN_AMERCED_STATE);
         private void textBox_readerBarcode_Enter(object sender, EventArgs e)
         {
             this.AcceptButton = this.button_load;
-            this.MainForm.EnterPatronIdEdit(InputType.PQR);
+            Program.MainForm.EnterPatronIdEdit(InputType.PQR);
         }
 
         private void textBox_readerBarcode_Leave(object sender, EventArgs e)
         {
             this.AcceptButton = null;
-            this.MainForm.LeavePatronIdEdit();
+            Program.MainForm.LeavePatronIdEdit();
         }
 
         private void AmerceForm_Activated(object sender, EventArgs e)
         {
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 
-            this.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
-            this.MainForm.MenuItem_font.Enabled = false;
-            this.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
+            Program.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
+            Program.MainForm.MenuItem_font.Enabled = false;
+            Program.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
         }
 
         // 右鼠标键菜单
@@ -4262,7 +4267,7 @@ COLUMN_AMERCED_STATE);
             if (bPartialSucceed == true)
                 return 1;
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -4308,7 +4313,7 @@ COLUMN_AMERCED_STATE);
         public void Print()
         {
             // 触发历史动作
-            this.MainForm.OperHistory.Print();
+            Program.MainForm.OperHistory.Print();
         }
 
         /// <summary>
@@ -4319,7 +4324,7 @@ COLUMN_AMERCED_STATE);
             get
             {
                 // amerce
-                return this.MainForm.AppInfo.GetString("config",
+                return Program.MainForm.AppInfo.GetString("config",
                     "amerce_interface",
                     "<无>");
             }
@@ -4356,7 +4361,7 @@ COLUMN_AMERCED_STATE);
 
         void Window_Error(object sender, HtmlElementErrorEventArgs e)
         {
-            if (this.MainForm.SuppressScriptErrors == true)
+            if (Program.MainForm.SuppressScriptErrors == true)
                 e.Handled = true;
         }
 
@@ -4370,7 +4375,7 @@ COLUMN_AMERCED_STATE);
             // 优化，避免无谓地进行服务器调用
             if (bOpenWindow == false)
             {
-                if (this.MainForm.PanelFixedVisible == false
+                if (Program.MainForm.PanelFixedVisible == false
                     && (m_operlogViewer == null || m_operlogViewer.Visible == false))
                     return;
             }
@@ -4412,11 +4417,11 @@ COLUMN_AMERCED_STATE);
             {
                 m_operlogViewer = new CommentViewerForm();
                 MainForm.SetControlFont(m_operlogViewer, this.Font, false);
-                m_operlogViewer.SuppressScriptErrors = this.MainForm.SuppressScriptErrors;
+                m_operlogViewer.SuppressScriptErrors = Program.MainForm.SuppressScriptErrors;
                 bNew = true;
             }
 
-            m_operlogViewer.MainForm = this.MainForm;  // 必须是第一句
+            // m_operlogViewer.MainForm = Program.MainForm;  // 必须是第一句
 
             if (bNew == true)
                 m_operlogViewer.InitialWebBrowser();
@@ -4431,11 +4436,11 @@ COLUMN_AMERCED_STATE);
             {
                 if (m_operlogViewer.Visible == false)
                 {
-                    this.MainForm.AppInfo.LinkFormState(m_operlogViewer, "operlog_viewer_state");
+                    Program.MainForm.AppInfo.LinkFormState(m_operlogViewer, "operlog_viewer_state");
                     m_operlogViewer.Show(this);
                     m_operlogViewer.Activate();
 
-                    this.MainForm.CurrentPropertyControl = null;
+                    Program.MainForm.CurrentPropertyControl = null;
                 }
                 else
                 {
@@ -4452,12 +4457,12 @@ COLUMN_AMERCED_STATE);
                 }
                 else
                 {
-                    if (this.MainForm.CurrentPropertyControl != m_operlogViewer.MainControl)
+                    if (Program.MainForm.CurrentPropertyControl != m_operlogViewer.MainControl)
                         m_operlogViewer.DoDock(false); // 不会自动显示FixedPanel
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, "DoViewOperlog() 出错: " + strError);
         }
 
@@ -4465,7 +4470,7 @@ COLUMN_AMERCED_STATE);
         {
             if (m_operlogViewer != null)
             {
-                this.MainForm.AppInfo.UnlinkFormState(m_operlogViewer);
+                Program.MainForm.AppInfo.UnlinkFormState(m_operlogViewer);
                 this.m_operlogViewer = null;
             }
         }
@@ -4565,7 +4570,7 @@ COLUMN_AMERCED_STATE);
 
         string GetHeadString(bool bAjax = true)
         {
-            string strCssFilePath = PathUtil.MergePath(this.MainForm.DataDir, "amercehtml.css");
+            string strCssFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "amercehtml.css");
 
             if (bAjax == true)
                 return

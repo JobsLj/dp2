@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 
 using System.IO;
@@ -16,14 +13,11 @@ using System.Reflection;
 using DigitalPlatform;
 using DigitalPlatform.GUI;
 using DigitalPlatform.Xml;
-using DigitalPlatform.CirculationClient;
 
 using DigitalPlatform.IO;
 using DigitalPlatform.Text;
 using DigitalPlatform.Marc;
 using DigitalPlatform.Script;
-
-using DigitalPlatform.LibraryClient.localhost;
 
 namespace dp2Circulation
 {
@@ -48,17 +42,6 @@ namespace dp2Circulation
         string BatchNo = "";    // 面板输入的批次号
         string LocationString = ""; // 面板输入的馆藏地点
 
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        /// <summary>
-        /// 框架窗口
-        /// </summary>
-        public MainForm MainForm = null;
-
-        DigitalPlatform.Stop stop = null;
-#endif
         /// <summary>
         /// 事项图标下标: 出错
         /// </summary>
@@ -84,7 +67,7 @@ namespace dp2Circulation
         SortColumns SortColumns_parent = new SortColumns();
         SortColumns SortColumns_member = new SortColumns();
 
-        #region 列号
+        #region 合订册列号
         /// <summary>
         /// 列号: 册条码号
         /// </summary>
@@ -188,29 +171,70 @@ namespace dp2Circulation
         /// 列号: 完好率
         /// </summary>
         public static int COLUMN_INTACT = 19;        // 完好率
-        /*
-        public static int COLUMN_BARCODE = 0;    // 册条码号
-        public static int COLUMN_SUMMARY = 1;    // 摘要
-        public static int COLUMN_ERRORINFO = 1;  // 错误信息
-        public static int COLUMN_ISBNISSN = 2;           // ISBN/ISSN
+                                                     /*
+                                                     public static int COLUMN_BARCODE = 0;    // 册条码号
+                                                     public static int COLUMN_SUMMARY = 1;    // 摘要
+                                                     public static int COLUMN_ERRORINFO = 1;  // 错误信息
+                                                     public static int COLUMN_ISBNISSN = 2;           // ISBN/ISSN
 
-        public static int COLUMN_STATE = 3;      // 状态
-        public static int COLUMN_LOCATION = 4;   // 馆藏地点
-        public static int COLUMN_PRICE = 5;      // 价格
-        public static int COLUMN_BOOKTYPE = 6;   // 册类型
-        public static int COLUMN_REGISTERNO = 7; // 登录号
-        public static int COLUMN_COMMENT = 8;    // 注释
-        public static int COLUMN_MERGECOMMENT = 9;   // 合并注释
-        public static int COLUMN_BATCHNO = 10;    // 批次号
-        public static int COLUMN_BORROWER = 11;  // 借阅者
-        public static int COLUMN_BORROWDATE = 12;    // 借阅日期
-        public static int COLUMN_BORROWPERIOD = 13;  // 借阅期限
-        public static int COLUMN_RECPATH = 14;   // 册记录路径
-        public static int COLUMN_BIBLIORECPATH = 15; // 种记录路径
-        public static int COLUMN_ACCESSNO = 16; // 索取号
-        public static int COLUMN_TARGETRECPATH = 17; // 目标记录路径
-         * */
-#endregion
+                                                     public static int COLUMN_STATE = 3;      // 状态
+                                                     public static int COLUMN_LOCATION = 4;   // 馆藏地点
+                                                     public static int COLUMN_PRICE = 5;      // 价格
+                                                     public static int COLUMN_BOOKTYPE = 6;   // 册类型
+                                                     public static int COLUMN_REGISTERNO = 7; // 登录号
+                                                     public static int COLUMN_COMMENT = 8;    // 注释
+                                                     public static int COLUMN_MERGECOMMENT = 9;   // 合并注释
+                                                     public static int COLUMN_BATCHNO = 10;    // 批次号
+                                                     public static int COLUMN_BORROWER = 11;  // 借阅者
+                                                     public static int COLUMN_BORROWDATE = 12;    // 借阅日期
+                                                     public static int COLUMN_BORROWPERIOD = 13;  // 借阅期限
+                                                     public static int COLUMN_RECPATH = 14;   // 册记录路径
+                                                     public static int COLUMN_BIBLIORECPATH = 15; // 种记录路径
+                                                     public static int COLUMN_ACCESSNO = 16; // 索取号
+                                                     public static int COLUMN_TARGETRECPATH = 17; // 目标记录路径
+                                                      * */
+        #endregion
+
+
+        #region 成员册列号
+
+        /// <summary>
+        /// 列号: 册条码号
+        /// </summary>
+        public static int COLUMN_MEMBER_BARCODE = 0;    // 册条码号
+
+        /// <summary>
+        /// 列号: 错误信息
+        /// </summary>
+        public static int COLUMN_MEMBER_ERRORINFO = 1;  // 错误信息
+
+        /// <summary>
+        /// 列号: 状态
+        /// </summary>
+        public static int COLUMN_MEMBER_STATE = 2;      // 状态
+
+        /// <summary>
+        /// 列号: 出版时间
+        /// </summary>
+        public static int COLUMN_MEMBER_PUBLISHTIME = 3;          // 出版时间
+        /// <summary>
+        /// 列号: 卷期
+        /// </summary>
+        public static int COLUMN_MEMBER_VOLUME = 4;          // 卷期
+
+        /// <summary>
+        /// 列号: 登录号
+        /// </summary>
+        public static int COLUMN_MEMBER_REGISTERNO = 5; // 登录号
+
+        public static int COLUMN_MEMBER_INTACT = 6; // 完好率
+
+        /// <summary>
+        /// 列号: 参考ID
+        /// </summary>
+        public static int COLUMN_MEMBER_REFID = 7; // 参考ID
+
+        #endregion
 
         const int WM_LOADSIZE = API.WM_USER + 201;
 
@@ -224,16 +248,17 @@ namespace dp2Circulation
 
         private void PrintBindingForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
+
             CreateColumnHeader(this.listView_parent);
 
-            CreateColumnHeader(this.listView_member);
+            CreateMemberColumnHeader(this.listView_member);
 
 #if NO
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -242,30 +267,30 @@ namespace dp2Circulation
             stop.Register(MainForm.stopManager, true);	// 和容器关联
 #endif
 
-            this.BarcodeFilePath = this.MainForm.AppInfo.GetString(
+            this.BarcodeFilePath = Program.MainForm.AppInfo.GetString(
                 "printbindingform",
                 "barcode_filepath",
                 "");
 
-            this.BatchNo = this.MainForm.AppInfo.GetString(
+            this.BatchNo = Program.MainForm.AppInfo.GetString(
                 "printbindingform",
                 "batchno",
                 "");
 
-            this.LocationString = this.MainForm.AppInfo.GetString(
+            this.LocationString = Program.MainForm.AppInfo.GetString(
                 "printbindingform",
                 "location_string",
                 "");
-            this.comboBox_sort_sortStyle.Text = this.MainForm.AppInfo.GetString(
+            this.comboBox_sort_sortStyle.Text = Program.MainForm.AppInfo.GetString(
                 "printbindingform",
                 "sort_style",
                 "书目记录路径");
-
-            this.checkBox_print_barcodeFix.Checked = this.MainForm.AppInfo.GetBoolean(
+#if NO
+            this.checkBox_print_barcodeFix.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "printbindingform",
                 "barcode_fix",
                 false);
-
+#endif
             API.PostMessage(this.Handle, WM_LOADSIZE, 0, 0);
         }
 
@@ -278,34 +303,35 @@ namespace dp2Circulation
                 stop = null;
             }
 #endif
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "printbindingform",
                     "barcode_filepath",
                     this.BarcodeFilePath);
 
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "printbindingform",
                     "batchno",
                     this.BatchNo);
 
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "printbindingform",
                     "location_string",
                     this.LocationString);
 
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
         "printbindingform",
         "sort_style",
         this.comboBox_sort_sortStyle.Text);
 
-                this.MainForm.AppInfo.SetBoolean(
+#if NO
+                Program.MainForm.AppInfo.SetBoolean(
         "printbindingform",
         "barcode_fix",
         this.checkBox_print_barcodeFix.Checked);
+#endif
             }
-
             SaveSize();
 
             if (this.ErrorInfoForm != null)
@@ -354,7 +380,8 @@ namespace dp2Circulation
              * */
         }
 
-        /*public*/ void LoadSize()
+        /*public*/
+        void LoadSize()
         {
 #if NO
             // 设置窗口尺寸状态
@@ -362,7 +389,7 @@ namespace dp2Circulation
                 "mdi_form_state");
 #endif
 
-            string strWidths = this.MainForm.AppInfo.GetString(
+            string strWidths = Program.MainForm.AppInfo.GetString(
                 "printbindingform",
                 "list_parent_width",
                 "");
@@ -373,7 +400,7 @@ namespace dp2Circulation
                     true);
             }
 
-            strWidths = this.MainForm.AppInfo.GetString(
+            strWidths = Program.MainForm.AppInfo.GetString(
     "printbindingform",
     "list_member_width",
     "");
@@ -385,7 +412,8 @@ namespace dp2Circulation
             }
         }
 
-        /*public*/ void SaveSize()
+        /*public*/
+        void SaveSize()
         {
 #if NO
             MainForm.AppInfo.SaveMdiChildFormStates(this,
@@ -393,18 +421,18 @@ namespace dp2Circulation
 #endif
             /*
             // 如果MDI子窗口不是MainForm刚刚准备退出时的状态，恢复它。为了记忆尺寸做准备
-            if (this.WindowState != this.MainForm.MdiWindowState)
-                this.WindowState = this.MainForm.MdiWindowState;
+            if (this.WindowState != Program.MainForm.MdiWindowState)
+                this.WindowState = Program.MainForm.MdiWindowState;
              * */
 
             string strWidths = ListViewUtil.GetColumnWidthListStringExt(this.listView_parent);
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "printbindingform",
                 "list_parent_width",
                 strWidths);
 
             strWidths = ListViewUtil.GetColumnWidthListStringExt(this.listView_member);
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "printbindingform",
                 "list_member_width",
                 strWidths);
@@ -444,7 +472,7 @@ namespace dp2Circulation
 
 
             // print page
-            this.button_print_option.Enabled = bEnable;
+            this.button_printOption.Enabled = bEnable;
             this.button_print_print.Enabled = bEnable;
 
         }
@@ -540,7 +568,7 @@ namespace dp2Circulation
             dlg.GetBatchNoTable += new GetKeyCountListEventHandler(dlg_GetBatchNoTable);
             dlg.RefDbName = "";
 
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
 
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog(this);
@@ -610,7 +638,7 @@ namespace dp2Circulation
                     // 2013/3/25
                     lRet = Channel.SearchItem(
                     stop,
-                        // 2010/2/25 changed
+                     // 2010/2/25 changed
                      "<all series>",
                     "", //
                     -1,
@@ -631,7 +659,7 @@ namespace dp2Circulation
                 else
                     lRet = Channel.SearchItem(
                         stop,
-                        // 2010/2/25 changed
+                         // 2010/2/25 changed
                          "<all series>",
                         dlg.BatchNo,
                         -1,
@@ -800,7 +828,7 @@ namespace dp2Circulation
 
 
             return;
-        ERROR1:
+            ERROR1:
             this.Text = "打印装订单";
             MessageBox.Show(this, strError);
         }
@@ -863,7 +891,7 @@ namespace dp2Circulation
 
             this.SetNextButtonEnable();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -1003,7 +1031,7 @@ namespace dp2Circulation
             }
         }
 
-        // 设置listview栏目标题
+        // 设置合订册listview栏目标题
         void CreateColumnHeader(ListView list)
         {
             ColumnHeader columnHeader_barcode = new ColumnHeader();
@@ -1027,12 +1055,7 @@ namespace dp2Circulation
             ColumnHeader columnHeader_refID = new ColumnHeader();
             ColumnHeader columnHeader_publishTime = new ColumnHeader();
             ColumnHeader columnHeader_volume = new ColumnHeader();
-            /*
-            ColumnHeader columnHeader_class = new ColumnHeader();
-            ColumnHeader columnHeader_catalogNo = new ColumnHeader();
-            ColumnHeader columnHeader_orderTime = new ColumnHeader();
-            ColumnHeader columnHeader_orderID = new ColumnHeader();
-             * */
+
             ColumnHeader columnHeader_seller = new ColumnHeader();
             ColumnHeader columnHeader_source = new ColumnHeader();
             ColumnHeader columnHeader_intact = new ColumnHeader();
@@ -1314,6 +1337,73 @@ namespace dp2Circulation
 
         }
 
+        // 设置成员册listview栏目标题
+        void CreateMemberColumnHeader(ListView list)
+        {
+            ColumnHeader columnHeader_barcode = new ColumnHeader();
+            ColumnHeader columnHeader_errorInfo = new ColumnHeader();
+            ColumnHeader columnHeader_state = new ColumnHeader();
+            ColumnHeader columnHeader_publishTime = new ColumnHeader();
+            ColumnHeader columnHeader_volume = new ColumnHeader();
+            ColumnHeader columnHeader_registerNo = new ColumnHeader();
+            ColumnHeader columnHeader_intact = new ColumnHeader();
+            ColumnHeader columnHeader_refID = new ColumnHeader();
+
+
+            list.Columns.Clear();
+
+            list.Columns.AddRange(new ColumnHeader[] {
+            columnHeader_barcode,
+            columnHeader_errorInfo,
+            columnHeader_state,
+            columnHeader_publishTime,
+            columnHeader_volume,
+            columnHeader_registerNo,
+            columnHeader_intact,
+            columnHeader_refID});
+
+            // 
+            // columnHeader_volume
+            // 
+            columnHeader_volume.Text = "卷期";
+            columnHeader_volume.Width = 100;
+            // 
+            // columnHeader_publishTime
+            // 
+            columnHeader_publishTime.Text = "出版时间";
+            columnHeader_publishTime.Width = 100;
+            // 
+            // columnHeader_intact
+            // 
+            columnHeader_intact.Text = "完好率";
+            columnHeader_intact.Width = 150;
+            // 
+            // columnHeader_refID
+            // 
+            columnHeader_refID.Text = "参考ID";
+            columnHeader_refID.Width = 200;
+            // 
+            // columnHeader_barcode
+            // 
+            columnHeader_barcode.Text = "册条码号";
+            columnHeader_barcode.Width = 150;
+            // 
+            // columnHeader_errorInfo
+            // 
+            columnHeader_errorInfo.Text = "摘要/错误信息";
+            columnHeader_errorInfo.Width = 200;
+            // 
+            // columnHeader_state
+            // 
+            columnHeader_state.Text = "状态";
+            columnHeader_state.Width = 100;
+            // 
+            // columnHeader_registerNo
+            // 
+            columnHeader_registerNo.Text = "登录号";
+            columnHeader_registerNo.Width = 150;
+        }
+
         // 根据册条码号或者记录路径，装入册记录
         // parameters:
         //      strBarcodeOrRecPath 册条码号或者记录路径。如果内容前缀为"@path:"则表示为路径
@@ -1323,12 +1413,13 @@ namespace dp2Circulation
         //      -1  出错(注意表示出错的行已经加入listview中了)
         //      0   因为馆藏地点不匹配，没有加入list中
         //      1   成功
-        /*public*/ int LoadOneItem(
-            string strBarcodeOrRecPath,
-            ListView list,
-            string strMatchLocation,
-            out string strOutputItemRecPath,
-            out string strError)
+        /*public*/
+        int LoadOneItem(
+ string strBarcodeOrRecPath,
+ ListView list,
+ string strMatchLocation,
+ out string strOutputItemRecPath,
+ out string strError)
         {
             strError = "";
             strOutputItemRecPath = "";
@@ -1468,7 +1559,6 @@ namespace dp2Circulation
                 goto ERROR1;
             }
 
-
             // 附加的馆藏地点匹配
             if (strMatchLocation != null)
             {
@@ -1533,7 +1623,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1543,11 +1633,13 @@ namespace dp2Circulation
         //      1   是。图标尚未设置
         int CheckBindingItem(ListViewItem item)
         {
+            Debug.Assert(item.ListView == this.listView_parent, "");
+
             string strError = "";
             string strPublishTime = ListViewUtil.GetItemText(item, COLUMN_PUBLISHTIME);
             if (strPublishTime.IndexOf("-") == -1)
             {
-                strError = "不是合订册。出版日期 '"+strPublishTime+"' 不是范围形式";
+                strError = "不是合订册。出版日期 '" + strPublishTime + "' 不是范围形式";
                 goto ERROR1;
             }
 
@@ -1581,11 +1673,11 @@ namespace dp2Circulation
                 }
             }
 
-        CONTINUE:
+            CONTINUE:
             // 如果必要，继续进行其他检查
 
             return 1;
-        ERROR1:
+            ERROR1:
             SetItemColor(item, TYPE_ERROR);
 
             // 不破坏原来的列内容，而只是增补到前面
@@ -1629,12 +1721,13 @@ namespace dp2Circulation
 
         }
 
-        /*public*/ static ListViewItem AddToListView(ListView list,
-    XmlDocument dom,
-    string strRecPath,
-    string strBiblioSummary,
-    string strISBnISSN,
-    string strBiblioRecPath)
+        /*public*/
+        static ListViewItem AddToListView(ListView list,
+XmlDocument dom,
+string strRecPath,
+string strBiblioSummary,
+string strISBnISSN,
+string strBiblioRecPath)
         {
             string strBarcode = DomUtil.GetElementText(dom.DocumentElement,
     "barcode");
@@ -1657,13 +1750,14 @@ namespace dp2Circulation
         // 本函数会自动把事项的data.Changed设置为false
         // parameters:
         //      bSetBarcodeColumn   是否要设置条码列内容(第一列)
-        /*public*/ static void SetListViewItemText(XmlDocument dom,
-            bool bSetBarcodeColumn,
-            string strRecPath,
-            string strBiblioSummary,
-            string strISBnISSN,
-            string strBiblioRecPath,
-            ListViewItem item)
+        /*public*/
+        static void SetListViewItemText(XmlDocument dom,
+ bool bSetBarcodeColumn,
+ string strRecPath,
+ string strBiblioSummary,
+ string strISBnISSN,
+ string strBiblioRecPath,
+ ListViewItem item)
         {
             OriginItemData data = null;
             data = (OriginItemData)item.Tag;
@@ -1786,7 +1880,7 @@ namespace dp2Circulation
 
             string strWarning = "";
 
-            string strLibPaths = "\"" + this.MainForm.DataDir + "\"";
+            string strLibPaths = "\"" + Program.MainForm.DataDir + "\"";
             Type entryClassType = this.GetType();
 
 
@@ -1824,15 +1918,15 @@ namespace dp2Circulation
 
             // 一些必要的链接库
             string[] saAddRef1 = {
-										 Environment.CurrentDirectory + "\\digitalplatform.marcdom.dll",
-										 Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marcquery.dll",
+                                         Environment.CurrentDirectory + "\\digitalplatform.marcdom.dll",
+                                         Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marcquery.dll",
 										 //Environment.CurrentDirectory + "\\digitalplatform.rms.client.dll",
 										 //Environment.CurrentDirectory + "\\digitalplatform.library.dll",
 										 Environment.CurrentDirectory + "\\digitalplatform.dll",
-										 Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
-										 Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
-										 Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
+                                         Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
+                                         Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
+                                         Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
 										 // Environment.CurrentDirectory + "\\Interop.SHDocVw.dll",
 										 Environment.CurrentDirectory + "\\dp2circulation.exe"
                 };
@@ -1871,7 +1965,7 @@ namespace dp2Circulation
             filter.Assembly = assemblyFilter;
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1948,24 +2042,31 @@ namespace dp2Circulation
             // 批次号或文件名 多个宏不方便判断后选用，只好合并为一个宏
             macro_table["%sourcedescription%"] = this.SourceDescription;
 
-            macro_table["%libraryname%"] = this.MainForm.LibraryName;
+            macro_table["%libraryname%"] = Program.MainForm.LibraryName;
             macro_table["%date%"] = DateTime.Now.ToLongDateString();
-            macro_table["%datadir%"] = this.MainForm.DataDir;   // 便于引用datadir下templates目录内的某些文件
-            ////macro_table["%libraryserverdir%"] = this.MainForm.LibraryServerDir;  // 便于引用服务器端的CSS文件
+            macro_table["%datadir%"] = Program.MainForm.DataDir;   // 便于引用datadir下templates目录内的某些文件
+            ////macro_table["%libraryserverdir%"] = Program.MainForm.LibraryServerDir;  // 便于引用服务器端的CSS文件
 
             // 获得打印参数
             string strPubType = "连续出版物";
-            PrintBindingPrintOption option = new PrintBindingPrintOption(this.MainForm.DataDir,
+            PrintBindingPrintOption main_option = new PrintBindingPrintOption(Program.MainForm.DataDir,
                 strPubType);
-            option.LoadData(this.MainForm.AppInfo,
-                "printbinding_printoption");
+            main_option.LoadData(Program.MainForm.AppInfo,
+                MAIN_NAME_PATH // "printbinding_printoption"
+                );
+
+            PrintBindingPrintOption1 secondary_option = new PrintBindingPrintOption1(Program.MainForm.DataDir,
+strPubType);
+            secondary_option.LoadData(Program.MainForm.AppInfo,
+                SECONDARY_NAME_PATH // "printbinding_printoption_secondary"
+                );
 
             /*
             macro_table["%pagecount%"] = nPageCount.ToString();
             macro_table["%linesperpage%"] = option.LinesPerPage.ToString();
              * */
 
-            string strMarcFilterFilePath = option.GetTemplatePageFilePath("MARC过滤器");
+            string strMarcFilterFilePath = main_option.GetTemplatePageFilePath("MARC过滤器");
             if (String.IsNullOrEmpty(strMarcFilterFilePath) == false)
             {
                 ColumnFilterDocument filter = null;
@@ -2009,15 +2110,16 @@ namespace dp2Circulation
                             continue;
                         }
 
-                        string strFilename = "";
-                        string strOneWarning = "";
+                        //string strFilename = "";
+                        //string strOneWarning = "";
                         nRet = PrintOneBinding(
-                                option,
+                                main_option,
+                                secondary_option,
                                 macro_table,
                                 item,
                                 i,
-                                out strFilename,
-                                out strOneWarning,
+                                out string strFilename,
+                                out string strOneWarning,
                                 out strError);
                         if (nRet == -1)
                             goto ERROR1;
@@ -2049,14 +2151,14 @@ namespace dp2Circulation
                 {
                     if (String.IsNullOrEmpty(strWarning) == false)
                         strWarning += "\r\n";
-                    strWarning += "打印过程中，有 "+nSkipCount.ToString()+" 个错误状态的事项被跳过";
+                    strWarning += "打印过程中，有 " + nSkipCount.ToString() + " 个错误状态的事项被跳过";
                 }
 
                 if (String.IsNullOrEmpty(strWarning) == false)
                 {
                     // TODO: 如果警告文字的行数太多，需要截断，以便正常显示在MessageBox()中。但是进入文件的内容没有必要截断
                     MessageBox.Show(this, "警告:\r\n" + strWarning);
-                    string strErrorFilename = this.MainForm.DataDir + "\\~printbinding_" + "warning.txt";
+                    string strErrorFilename = Program.MainForm.DataDir + "\\~printbinding_" + "warning.txt";
                     StreamUtil.WriteText(strErrorFilename, "警告:\r\n" + strWarning);
                     filenames.Insert(0, strErrorFilename);
                 }
@@ -2064,11 +2166,11 @@ namespace dp2Circulation
                 HtmlPrintForm printform = new HtmlPrintForm();
 
                 printform.Text = "打印装订单";
-                printform.MainForm = this.MainForm;
+                // printform.MainForm = Program.MainForm;
                 printform.Filenames = filenames;
-                this.MainForm.AppInfo.LinkFormState(printform, "printbinding_htmlprint_formstate");
+                Program.MainForm.AppInfo.LinkFormState(printform, "printbinding_htmlprint_formstate");
                 printform.ShowDialog(this);
-                this.MainForm.AppInfo.UnlinkFormState(printform);
+                Program.MainForm.AppInfo.UnlinkFormState(printform);
 
             }
             finally
@@ -2081,14 +2183,59 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
+        }
+
+        public static void ParseItemVolumeString(string strVolumeString,
+           out string strIssue,
+           out string strZong,
+           out string strVolume)
+        {
+            strIssue = "";
+            strZong = "";
+            strVolume = "";
+
+            string[] segments = strVolumeString.Split(new char[] { '=' });
+            for (int i = 0; i < segments.Length; i++)
+            {
+                string strSegment = segments[i].Trim();
+
+                if (strSegment.IndexOf("no.") != -1)
+                    strIssue = strSegment;
+                else if (strSegment.IndexOf("总.") != -1)
+                    strZong = strSegment;
+                else if (strSegment.IndexOf("v.") != -1)
+                    strVolume = strSegment;
+            }
+        }
+
+        // 根据 type 在 Table XML 中获得一个内容值
+        static string FindBiblioTableContent(XmlDocument dom, string type)
+        {
+            XmlNodeList nodes = dom.DocumentElement.SelectNodes("line");
+            int i = 0;
+            foreach (XmlElement line in nodes)
+            {
+                string strName = line.GetAttribute("name");
+                string strValue = line.GetAttribute("value");
+                string strType = line.GetAttribute("type");
+
+                if (strName == "_coverImage")
+                    continue;
+
+                if (strType == type)
+                    return strValue;
+            }
+
+            return "";
         }
 
 
         // 打印一个合订册的装订单
         int PrintOneBinding(
-            PrintBindingPrintOption option,
+            PrintBindingPrintOption main_option,
+            PrintBindingPrintOption1 secondary_option,
             Hashtable macro_table,
             ListViewItem item,
             int nIndex,
@@ -2107,38 +2254,83 @@ namespace dp2Circulation
             macro_table["%bindingaccessno%"] = ListViewUtil.GetItemText(item, COLUMN_ACCESSNO);
 
             // 2012/5/29
-            string strBidningBarcode = ListViewUtil.GetItemText(item, COLUMN_BARCODE);
+            string strBindingBarcode = ListViewUtil.GetItemText(item, COLUMN_BARCODE);
+#if NO
             string strBindingBarcodeStyle = "";
             if (this.checkBox_print_barcodeFix.Checked == true)
             {
-                if (string.IsNullOrEmpty(strBidningBarcode) == false)
-                    strBidningBarcode = "*" + strBidningBarcode + "*";
+                if (string.IsNullOrEmpty(strBindingBarcode) == false)
+                    strBindingBarcode = "*" + strBindingBarcode + "*";
 
                 // strStyle = " style=\"font-family: C39HrP24DhTt; \"";
             }
-            macro_table["%bindingbarcode%"] = strBidningBarcode;
+#endif
+            macro_table["%bindingbarcode%"] = strBindingBarcode;
+            if (string.IsNullOrEmpty(strBindingBarcode) == false)
+                macro_table["%bindingbarcode_label%"] = "*" + strBindingBarcode + "*";
+
+            string strBindingVolume = ListViewUtil.GetItemText(item, COLUMN_VOLUME);
 
             macro_table["%bindingintact%"] = ListViewUtil.GetItemText(item, COLUMN_INTACT);
             macro_table["%bindingprice%"] = ListViewUtil.GetItemText(item, COLUMN_PRICE);
-            macro_table["%bindingvolume%"] = ListViewUtil.GetItemText(item, COLUMN_VOLUME);
+            macro_table["%bindingvolume%"] = strBindingVolume;
             macro_table["%bindingpublishtime%"] = ListViewUtil.GetItemText(item, COLUMN_PUBLISHTIME);
             macro_table["%bindinglocation%"] = ListViewUtil.GetItemText(item, COLUMN_LOCATION);
             macro_table["%bindingrefid%"] = ListViewUtil.GetItemText(item, COLUMN_REFID);
 
+            // 2018/8/20
+            ParseItemVolumeString(strBindingVolume,
+                     out string strIssue,
+                     out string strZong,
+                     out string strVolume);
+            macro_table["%bindingvolume_issue%"] = strIssue;
+            macro_table["%bindingvolume_volume%"] = strVolume;
+            macro_table["%bindingvolume_zong%"] = strZong;
+
             // string strBiblioRecPath = ListViewUtil.GetItemText(item, COLUMN_BIBLIORECPATH);
-            // TODO: 获得书目记录，创建某种格式，并获得某些宏内容？
+
+            // 添加书目 table 格式列
+            {
+                string strBiblioRecPath = ListViewUtil.GetItemText(item, COLUMN_BIBLIORECPATH);
+
+                Debug.Assert(String.IsNullOrEmpty(strBiblioRecPath) == false, "strBiblioRecPath值不能为空");
+
+                nRet = GetTable(strBiblioRecPath,
+                    "",
+                    out string strTableXml,
+                    out strError);
+                if (nRet == -1)
+                    return -1;
+
+                XmlDocument dom = new XmlDocument();
+                dom.LoadXml(strTableXml);
+                int i = 0;
+                foreach (Column column in secondary_option.Columns)
+                {
+                    string col = StringUtil.GetLeft(column.Name);
+                    if (col.StartsWith("bindingbiblio_") == false)
+                        continue;
+                    string key = col.Substring("bindingbiblio_".Length);
+                    string strValue = "";
+                    if (key == "recpath" || key.EndsWith("_recpath"))
+                        strValue = strBiblioRecPath;
+                    else
+                        strValue = FindBiblioTableContent(dom, key);
+
+                    macro_table.Remove("%" + col + "%");
+                    macro_table.Add("%" + col + "%", strValue);
+                }
+            }
 
             if (this.MarcFilter != null)
             {
-                string strMARC = "";
-                string strOutMarcSyntax = "";
 
                 // TODO: 有错误要明显报出来，否则容易在打印出来后才发现，就晚了
 
                 // 获得MARC格式书目记录
                 nRet = GetMarc(item,
-                    out strMARC,
-                    out strOutMarcSyntax,
+                    out string strMARC,
+                    out string strOutMarcSyntax,
                     out strError);
                 if (nRet == -1)
                     return -1;
@@ -2170,46 +2362,46 @@ namespace dp2Circulation
                     return -1;
 
                 // 追加到macro_table中
-                foreach(string key in this.ColumnTable.Keys)
+                foreach (string key in this.ColumnTable.Keys)
                 {
                     macro_table.Remove("%" + key + "%");
 
                     macro_table.Add("%" + key + "%", this.ColumnTable[key]);
                 }
+
             }
 
             // 需要将属于合订册的文件名前缀区别开来
             string strRecPath = ListViewUtil.GetItemText(item, COLUMN_RECPATH);
-            string strFileNamePrefix = this.MainForm.DataDir + "\\~printbinding_" + strRecPath.Replace("/", "_") + "_";
+            string strFileNamePrefix = Program.MainForm.DataDir + "\\~printbinding_" + strRecPath.Replace("/", "_") + "_";
 
             strFilename = strFileNamePrefix + "0" + ".html";
 
             // 提前创建成员表格的内容，因为里面也要顺便创建若干和统计数据有关的宏值
             // 内容暂时不输出
-            string strMemberTableResult = "";
             // 构造下属成员的详情表格
             // return:
             //      实际到达的成员册数
             nRet = BuildMembersTable(
-                option,
+                main_option,
                 macro_table,
                 item,
-                out strMemberTableResult,
+                out string strMemberTableResult,
                 out strError);
             if (nRet == -1)
                 return -1;
 
             if (nRet == 0)
             {
-                strWarning = "合订册 (记录路径="+strRecPath+"; 参考ID="
-                    +ListViewUtil.GetItemText(item, COLUMN_REFID)+") 中没有包含任何(实到的)成员册";
+                strWarning = "合订册 (记录路径=" + strRecPath + "; 参考ID="
+                    + ListViewUtil.GetItemText(item, COLUMN_REFID) + ") 中没有包含任何(实到的)成员册";
             }
 
-            BuildPageTop(option,
+            BuildPageTop(main_option,
                 macro_table,
                 strFilename);
 
-            // 输出信函内容
+            // 输出表格内容
             {
 
                 /*
@@ -2222,7 +2414,7 @@ namespace dp2Circulation
                 */
 
 
-                string strTemplateFilePath = option.GetTemplatePageFilePath("合订册正文");
+                string strTemplateFilePath = main_option.GetTemplatePageFilePath("合订册正文");
                 if (String.IsNullOrEmpty(strTemplateFilePath) == false)
                 {
                     /*
@@ -2259,6 +2451,10 @@ namespace dp2Circulation
 	<td class='name'>册条码号</td>
 	<td class='value'>%bindingbarcode%</td>
 </tr>
+<tr class='barcode'>
+	<td class='name'>册条码标签</td>
+	<td class='value barcode_label'>%bindingbarcode_label%</td>
+</tr>
 <tr class='refid'>
 	<td class='name'>参考ID</td>
 	<td class='value'>%bindingrefid%</td>
@@ -2287,14 +2483,13 @@ namespace dp2Circulation
                      * */
 
                     // 根据模板打印
-                    string strContent = "";
                     // 能自动识别文件内容的编码方式的读入文本文件内容模块
                     // return:
                     //      -1  出错
                     //      0   文件不存在
                     //      1   文件存在
                     nRet = Global.ReadTextFileContent(strTemplateFilePath,
-                        out strContent,
+                        out string strContent,
                         out strError);
                     if (nRet == -1)
                         return -1;
@@ -2308,7 +2503,7 @@ namespace dp2Circulation
                 {
                     // 缺省的固定内容打印
 
-                    string strTableTitle = option.TableTitle;
+                    string strTableTitle = main_option.TableTitle;
 
                     if (String.IsNullOrEmpty(strTableTitle) == false)
                     {
@@ -2325,134 +2520,17 @@ namespace dp2Circulation
                     StreamUtil.WriteText(strFilename,
                         "<table class='binding'>");
 
-                    // 期刊信息
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='biblio'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>期刊</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>"+HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingsummary%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // ISSN
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='issn'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>ISSN</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingissn%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-
-                    // 索取号
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='accessno'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>索取号</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingaccessno%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // 馆藏地点
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='location'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>馆藏地点</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindinglocation%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // 条码号
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='barcode'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>册条码号</td>");
-
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value' " + strBindingBarcodeStyle + " >" + HttpUtility.HtmlEncode((string)macro_table["%bindingbarcode%"])
-                        + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // 参考ID
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='refid'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>参考ID</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingrefid%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // 完好率
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='intact'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>完好率</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingintact%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // 价格
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='bindingprice'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>合订价格</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingprice%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // 出版时间
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='publishtime'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>出版时间</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingpublishtime%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-                    // 期数
-                    string strValue = "实含数: " + (string)macro_table["%arrivecount%"] + "; "
-                    + "缺期数: " + (string)macro_table["%missingcount%"] + "; "
-                    + "理论数: " + (string)macro_table["%issuecount%"];
-                    string strMissingVolume = (string)macro_table["%missingvolume%"];
-                    if (String.IsNullOrEmpty(strMissingVolume) == false)
-                        strValue += "; 缺期号: " + strMissingVolume;
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='bindingissuecount'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>期数</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(strValue) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
-
-
-                    // 包含的期
-                    StreamUtil.WriteText(strFilename,
-                        "<tr class='volume'>");
-                    StreamUtil.WriteText(strFilename,
-                       "<td class='name'>包含期号</td>");
-                    StreamUtil.WriteText(strFilename,
-                      "<td class='value'>" + HttpUtility.HtmlEncode(
-                      (string)macro_table["%bindingvolume%"]) + "</td>");
-                    StreamUtil.WriteText(strFilename,
-                        "</tr>");
+                    try
+                    {
+                        OutputBindingTableContent(strFilename,
+      macro_table,
+      secondary_option.Columns);
+                    }
+                    catch (Exception ex)
+                    {
+                        strError = "OutputBindingTableContent() 出现异常: " + ExceptionUtil.GetAutoText(ex);
+                        return -1;
+                    }
 
                     // 表格结束
                     StreamUtil.WriteText(strFilename,
@@ -2466,26 +2544,289 @@ namespace dp2Circulation
                 strMemberTableResult);
 
 
-            BuildPageBottom(option,
+            BuildPageBottom(main_option,
                 macro_table,
                 strFilename);
 
             return 0;
         }
 
+        void OutputBindingTableContent(string strFilename,
+            Hashtable macro_table,
+            List<Column> columns)
+        {
+
+            // 按照配置的行顺序进行输出
+            foreach (Column column in columns)
+            {
+                string strName = column.Name;
+                int nRet = strName.IndexOf("-");
+                if (nRet != -1)
+                    strName = strName.Substring(0, nRet).Trim();
+
+                if (strName == "bindingissuecount")
+                {
+
+                    // 期数
+                    string strValue = "实含数: " + (string)macro_table["%arrivecount%"] + "; "
+                + "缺期数: " + (string)macro_table["%missingcount%"] + "; "
+                + "理论数: " + (string)macro_table["%issuecount%"];
+                    string strMissingVolume = (string)macro_table["%missingvolume%"];
+                    if (String.IsNullOrEmpty(strMissingVolume) == false)
+                        strValue += "; 缺期号: " + strMissingVolume;
+                    StreamUtil.WriteText(strFilename,
+                        "<tr class='bindingissuecount'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>期数</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(strValue) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+                else if (strName == "bindingbarcode_label")
+                {
+
+                    // 条码标签
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='barcode'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>册条码标签</td>");
+
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value barcode_label' >" + HttpUtility.HtmlEncode((string)macro_table["%bindingbarcode_label%"])
+                        + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+#if NO
+                if (strName == "bindingsummary")
+                {
+                    // 期刊信息
+                    StreamUtil.WriteText(strFilename,
+                        "<tr class='biblio'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>期刊</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingsummary%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingissn")
+                {
+                    // ISSN
+                    StreamUtil.WriteText(strFilename,
+                        "<tr class='issn'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>ISSN</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingissn%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingaccessno")
+                {
+                    // 索取号
+                    StreamUtil.WriteText(strFilename,
+                        "<tr class='accessno'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>索取号</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingaccessno%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindinglocation")
+                {
+                    // 馆藏地点
+                    StreamUtil.WriteText(strFilename,
+                        "<tr class='location'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>馆藏地点</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindinglocation%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingbarcode")
+                {
+
+                    // 条码号
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='barcode'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>册条码号</td>");
+
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value' " /*+ strBindingBarcodeStyle*/ + " >" + HttpUtility.HtmlEncode((string)macro_table["%bindingbarcode%"])
+                        + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+
+
+                else if (strName == "bindingrefid")
+                {
+
+                    // 参考ID
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='refid'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>参考ID</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingrefid%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingintact")
+                {
+
+                    // 完好率
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='intact'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>完好率</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingintact%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingprice")
+                {
+
+                    // 价格
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='bindingprice'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>合订价格</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingprice%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingpublishtime")
+                {
+
+                    // 出版时间
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='publishtime'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>出版时间</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingpublishtime%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+
+
+                else if (strName == "bindingvolume")
+                {
+
+                    // 包含的期
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='volume'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>包含期号</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingvolume%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                //*** 以下是分解以后的序列
+                else if (strName == "bindingvolume_issue")
+                {
+                    // 包含的期
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='volume_issue'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>包含期号</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingvolume_issue%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingvolume_volume")
+                {
+                    // 包含的卷
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='volume_volume'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>包含卷号</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingvolume_volume%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+
+                else if (strName == "bindingvolume_zong")
+                {
+                    // 包含的总期号
+                    StreamUtil.WriteText(strFilename,
+                    "<tr class='volume_zong'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>包含总期号</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      (string)macro_table["%bindingvolume_zong%"]) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+#endif
+
+                else
+                {
+                    if (macro_table.ContainsKey("%" + strName + "%") == false)
+                        throw new Exception("无法识别的列名 '" + strName + "'");
+
+                    string strValue = macro_table["%" + strName + "%"] as string;
+
+                    StreamUtil.WriteText(strFilename,
+    "<tr class='" + strName + "'>");
+                    StreamUtil.WriteText(strFilename,
+                       "<td class='name'>" + column.Caption + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                      "<td class='value'>" + HttpUtility.HtmlEncode(
+                      strValue) + "</td>");
+                    StreamUtil.WriteText(strFilename,
+                        "</tr>");
+                }
+            }
+        }
+
         // 获得css文件的路径(或者http:// 地址)。将根据是否具有“统计页”来自动处理
         // parameters:
         //      strDefaultCssFileName   “css”模板缺省情况下，将采用的虚拟目录中的css文件名，纯文件名
         string GetAutoCssUrl(PrintOption option,
-            string strDefaultCssFileName)
+                string strDefaultCssFileName)
         {
             string strCssFilePath = option.GetTemplatePageFilePath("css");  // 大小写不敏感
             if (String.IsNullOrEmpty(strCssFilePath) == false)
                 return strCssFilePath;
             else
             {
-                // return this.MainForm.LibraryServerDir + "/" + strDefaultCssFileName;    // 缺省的
-                return PathUtil.MergePath(this.MainForm.DataDir, strDefaultCssFileName);    // 缺省的
+                // return Program.MainForm.LibraryServerDir + "/" + strDefaultCssFileName;    // 缺省的
+                return PathUtil.MergePath(Program.MainForm.DataDir, strDefaultCssFileName);    // 缺省的
             }
         }
 
@@ -2546,18 +2887,19 @@ namespace dp2Circulation
 
         // 解析当年期号、总期号、卷号的字符串
         // 注意这是一个特殊版本，能够识别里面的"y."
-        /*public*/ static void ParseItemVolumeString(string strVolumeString,
-            out string strYear,
-            out string strIssue,
-            out string strZong,
-            out string strVolume)
+        /*public*/
+        static void ParseItemVolumeString(string strVolumeString,
+ out string strYear,
+ out string strIssue,
+ out string strZong,
+ out string strVolume)
         {
             strYear = "";
             strIssue = "";
             strZong = "";
             strVolume = "";
 
-            string[] segments = strVolumeString.Split(new char[] { ';',',','=' });
+            string[] segments = strVolumeString.Split(new char[] { ';', ',', '=' });
             for (int i = 0; i < segments.Length; i++)
             {
                 string strSegment = segments[i].Trim();
@@ -2575,13 +2917,14 @@ namespace dp2Circulation
 
         // 创建表示范围的 期号，卷号，总期号字符串
         // 各个序列间用等号连接
-        /*public*/ static string BuildVolumeRangeString(List<string> volumes)
+        /*public*/
+        static string BuildVolumeRangeString(List<string> volumes)
         {
             Hashtable no_list_table = new Hashtable();
             List<string> volume_list = new List<string>();
             List<string> zong_list = new List<string>();
 
-            for(int i=0;i<volumes.Count;i++)
+            for (int i = 0; i < volumes.Count; i++)
             {
                 // 解析单册的volumestring
                 string strYear = "";
@@ -2664,6 +3007,7 @@ namespace dp2Circulation
             strError = "";
             strResult = "";
 
+            Debug.Assert(parent_item.ListView == this.listView_parent, "");
 
             OriginItemData data = (OriginItemData)parent_item.Tag;
             Debug.Assert(data != null, "");
@@ -2699,7 +3043,6 @@ namespace dp2Circulation
             strResult +=
                 "<div class='members_table_title'>所含单册</div>";
 
-
             // 表格开始
             strResult +=
                 "<table class='members'>";
@@ -2720,8 +3063,8 @@ namespace dp2Circulation
 
                 string strClass = StringUtil.GetLeft(column.Name);
 
-            strResult +=
-                    "<td class='" + strClass + "'>" + strCaption + "</td>";
+                strResult +=
+                        "<td class='" + strClass + "'>" + strCaption + "</td>";
             }
 
             strResult += "</tr>";
@@ -2763,7 +3106,7 @@ namespace dp2Circulation
                 if (bMissing == true)
                 {
                     // 年
-                    string strYear = IssueUtil.GetYearPart(strPublishTime);
+                    string strYear = dp2StringUtil.GetYearPart(strPublishTime);
                     missing_volumes.Add("y." + strYear + "," + strVolumeString);
                 }
 
@@ -2772,7 +3115,10 @@ namespace dp2Circulation
                 value_table["%volume%"] = strVolumeString;
                 value_table["%publishTime%"] = BindingControl.GetDisplayPublishTime(strPublishTime);
                 if (String.IsNullOrEmpty(strBarcode) == false)
+                {
                     value_table["%barcode%"] = strBarcode;
+                    value_table["%barcode_label"] = "*" + strBarcode + "*";   // 2018/1/3 加了前后缀字符的条码号字符串
+                }
                 if (String.IsNullOrEmpty(strRegisterNo) == false)
                     value_table["%registerNo%"] = strRegisterNo;
 
@@ -2795,8 +3141,8 @@ namespace dp2Circulation
                         StringUtil.GetLeft(column.Name));
 
                     string strClass = StringUtil.GetLeft(column.Name);
-            strResult +=
-                        "<td class='" + strClass + "'>" + strContent + "</td>";
+                    strResult +=
+                                "<td class='" + strClass + "'>" + strContent + "</td>";
 
                 }
 
@@ -2816,10 +3162,11 @@ namespace dp2Circulation
             return nArriveCount;
         }
 
-        /*public*/ int GetItemXmlByRefID(
-            string strRefID,
-            out string strItemXml,
-            out string strError)
+        /*public*/
+        int GetItemXmlByRefID(
+ string strRefID,
+ out string strItemXml,
+ out string strError)
         {
             strError = "";
             strItemXml = "";
@@ -2831,7 +3178,7 @@ namespace dp2Circulation
             string strBarcode = "@refID:" + strRefID;
 
             if (this.stop != null)
-                this.stop.SetMessage("正在获取参考ID为 '"+strRefID+"' 的实体记录... ");
+                this.stop.SetMessage("正在获取参考ID为 '" + strRefID + "' 的实体记录... ");
 
             long lRet = Channel.GetItemInfo(
                 stop,
@@ -2883,7 +3230,6 @@ namespace dp2Circulation
             int nRet = 0;
             string strError = "";
 
-
             string strItemXml = "";
             XmlDocument dom = (XmlDocument)this.ItemXmlTable[strRefID];
             if (dom == null)
@@ -2925,10 +3271,18 @@ namespace dp2Circulation
             }
 
             Debug.Assert(dom != null, "");
+
+            // 2018/1/3
+            if (strName == "barcode_label")
+            {
+                string barcode = DomUtil.GetElementText(dom.DocumentElement, "barcode");
+                if (string.IsNullOrEmpty(barcode))
+                    return "";
+                return "*" + barcode + "*";
+            }
             return DomUtil.GetElementText(dom.DocumentElement,
                 strName);
         }
-
 
         // 获得MARC格式书目记录
         int GetMarc(ListViewItem item,
@@ -2988,43 +3342,43 @@ namespace dp2Circulation
             return 1;
         }
 
-        private void button_print_option_Click(object sender, EventArgs e)
+        int GetMarcTable(ListViewItem item,
+    out string strResult,
+    out string strError)
         {
-            // 配置标题和风格
-            string strNamePath = "printbinding_printoption";
-            string strPubType = "连续出版物";
+            strError = "";
+            strResult = "";
+            int nRet = 0;
 
-            PrintBindingPrintOption option = new PrintBindingPrintOption(this.MainForm.DataDir,
-                strPubType);
-            option.LoadData(this.MainForm.AppInfo,
-                strNamePath);
+            string[] formats = new string[1];
+            formats[0] = "table";
 
+            string[] results = null;
+            byte[] timestamp = null;
 
-            PrintOptionDlg dlg = new PrintOptionDlg();
-            MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.MainForm = this.MainForm;
-            dlg.DataDir = this.MainForm.DataDir;
-            dlg.Text = strPubType + " 装订单 打印参数";
-            dlg.PrintOption = option;
-            dlg.ColumnItems = new string[] {
-                "missing -- 缺期状态",
-                "publishTime -- 出版日期",
-                "volume -- 卷期号",
-                "barcode -- 册条码号",
-                "intact -- 完好率",
-                "refID -- 参考ID",
-            };
+            string strBiblioRecPath = ListViewUtil.GetItemText(item, COLUMN_BIBLIORECPATH);
 
+            Debug.Assert(String.IsNullOrEmpty(strBiblioRecPath) == false, "strBiblioRecPath值不能为空");
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "printbinding_printoption_formstate");
-            dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            long lRet = Channel.GetBiblioInfos(
+                    null, // stop,
+                    strBiblioRecPath,
+                    "",
+                    formats,
+                    out results,
+                    out timestamp,
+                    out strError);
+            if (lRet == -1 || lRet == 0)
+            {
+                if (lRet == 0 && String.IsNullOrEmpty(strError) == true)
+                    strError = "书目记录 '" + strBiblioRecPath + "' 不存在";
 
-            if (dlg.DialogResult != DialogResult.OK)
-                return;
+                strError = "获得书目记录 table 格式时发生错误: " + strError;
+                return -1;
+            }
 
-            option.SaveData(this.MainForm.AppInfo,
-                strNamePath);
+            strResult = results[0];
+            return 1;
         }
 
         /// <summary>
@@ -3076,14 +3430,14 @@ namespace dp2Circulation
             strError = "";
 
             string strItemDbName = Global.GetDbName(strItemRecPath);
-            string strBiblioDbName = this.MainForm.GetBiblioDbNameFromItemDbName(strItemDbName);
+            string strBiblioDbName = Program.MainForm.GetBiblioDbNameFromItemDbName(strItemDbName);
             if (String.IsNullOrEmpty(strBiblioDbName) == true)
             {
                 strError = "实体库 '" + strItemDbName + "' 未找到对应的书目库名";
                 return -1;
             }
 
-            string strIssueDbName = this.MainForm.GetIssueDbName(strBiblioDbName);
+            string strIssueDbName = Program.MainForm.GetIssueDbName(strBiblioDbName);
 
             if (strLoadType == "图书")
             {
@@ -3142,7 +3496,7 @@ namespace dp2Circulation
                 stop.Initial("正在初始化浏览器组件 ...");
                 stop.BeginLoop();
                 this.Update();
-                this.MainForm.Update();
+                Program.MainForm.Update();
 
                 try
                 {
@@ -3295,7 +3649,7 @@ namespace dp2Circulation
             if (nState != 1)
                 goto ERROR1;
             return;
-        ERROR1:
+            ERROR1:
             this.Text = "打印装订单";
             MessageBox.Show(this, strError);
         }
@@ -3335,7 +3689,7 @@ namespace dp2Circulation
                 stop.Initial("正在初始化浏览器组件 ...");
                 stop.BeginLoop();
                 this.Update();
-                this.MainForm.Update();
+                Program.MainForm.Update();
 
                 try
                 {
@@ -3488,11 +3842,12 @@ namespace dp2Circulation
             if (nState != 1)
                 goto ERROR1;
             return;
-        ERROR1:
+            ERROR1:
             this.Text = "打印装订单";
             MessageBox.Show(this, strError);
         }
 
+        // 填充成员册信息 listView
         void FillMemberListViewItems(ListViewItem parent_item)
         {
             string strError = "";
@@ -3511,9 +3866,11 @@ namespace dp2Circulation
             {
                 string strRecPath = ListViewUtil.GetItemText(parent_item, COLUMN_RECPATH);
                 strError = "路径为 '" + strRecPath + "' 的册记录XML装入DOM时出错: " + ex.Message;
-                ListViewItem item = new ListViewItem();
-                item.Text = strError;
-                item.ImageIndex = TYPE_ERROR;
+                ListViewItem item = new ListViewItem
+                {
+                    Text = strError,
+                    ImageIndex = TYPE_ERROR
+                };
                 this.listView_member.Items.Add(item);
                 return;
             }
@@ -3522,11 +3879,10 @@ namespace dp2Circulation
             if (nodes.Count == 0)
                 return;
 
-            for (int i = 0; i < nodes.Count; i++)
+            // string strSummary = ListViewUtil.GetItemText(parent_item, COLUMN_SUMMARY);
+            foreach (XmlElement node in nodes)
             {
-                XmlNode node = nodes[i];
 
-                bool bMissing = false;
                 // 获得布尔型的属性参数值
                 // return:
                 //      -1  出错。但是nValue中已经有了nDefaultValue值，可以不加警告而直接使用
@@ -3535,8 +3891,9 @@ namespace dp2Circulation
                 DomUtil.GetBooleanParam(node,
                     "missing",
                     false,
-                    out bMissing,
+                    out bool bMissing,
                     out strError);
+                string strIntact = DomUtil.GetAttr(node, "intact");
                 string strRefID = DomUtil.GetAttr(node, "refID");
                 string strVolumeString = DomUtil.GetAttr(node, "volume");
                 string strPublishTime = DomUtil.GetAttr(node, "publishTime");
@@ -3547,16 +3904,20 @@ namespace dp2Circulation
                 item.ImageIndex = TYPE_NORMAL;
                 this.listView_member.Items.Add(item);
 
+                ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_BARCODE, strBarcode);
+
+                // ListViewUtil.ChangeItemText(item, COLUMN_SUMMARY, strSummary);
+
                 if (bMissing == true)
-                    ListViewUtil.ChangeItemText(item, COLUMN_STATE, "缺");
+                    ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_STATE, "缺");
 
-                ListViewUtil.ChangeItemText(item, COLUMN_REFID, strRefID);
-                ListViewUtil.ChangeItemText(item, COLUMN_VOLUME, strVolumeString);
-                ListViewUtil.ChangeItemText(item, COLUMN_PUBLISHTIME, strPublishTime);
-                ListViewUtil.ChangeItemText(item, COLUMN_BARCODE, strBarcode);
-                ListViewUtil.ChangeItemText(item, COLUMN_REGISTERNO, strRegisterNo);
+                ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_INTACT, strIntact);
+                ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_REFID, strRefID);
+                ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_VOLUME, strVolumeString);
+                ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_PUBLISHTIME, strPublishTime);
+                ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_BARCODE, strBarcode);
+                ListViewUtil.ChangeItemText(item, COLUMN_MEMBER_REGISTERNO, strRegisterNo);
             }
-
         }
 
         private void listView_parent_SelectedIndexChanged(object sender, EventArgs e)
@@ -3574,7 +3935,6 @@ namespace dp2Circulation
         private void listView_parent_DoubleClick(object sender, EventArgs e)
         {
             LoadToEntityForm(this.listView_parent);
-
         }
 
         private void listView_member_DoubleClick(object sender, EventArgs e)
@@ -3590,14 +3950,27 @@ namespace dp2Circulation
                 return;
             }
 
-            string strBarcode = list.SelectedItems[0].Text;
-            string strRecPath = ListViewUtil.GetItemText(list.SelectedItems[0], COLUMN_RECPATH);
-            string strRefID = ListViewUtil.GetItemText(list.SelectedItems[0], COLUMN_REFID);
+            string strBarcode = "";
+            string strRecPath = "";
+            string strRefID = "";
+
+            if (list == this.listView_parent)
+            {
+                strBarcode = list.SelectedItems[0].Text;
+                strRecPath = ListViewUtil.GetItemText(list.SelectedItems[0], COLUMN_RECPATH);
+                strRefID = ListViewUtil.GetItemText(list.SelectedItems[0], COLUMN_REFID);
+            }
+            else
+            {
+                strBarcode = list.SelectedItems[0].Text;
+                strRecPath = "";    //  ListViewUtil.GetItemText(list.SelectedItems[0], COLUMN_MEMBER_RECPATH);
+                strRefID = ListViewUtil.GetItemText(list.SelectedItems[0], COLUMN_MEMBER_REFID);
+            }
 
             EntityForm form = new EntityForm();
 
-            form.MainForm = this.MainForm;
-            form.MdiParent = this.MainForm;
+            form.MainForm = Program.MainForm;
+            form.MdiParent = Program.MainForm;
             form.Show();
 
             if (String.IsNullOrEmpty(strBarcode) == false)
@@ -3646,8 +4019,7 @@ namespace dp2Circulation
             contextMenu.MenuItems.Add(menuItem);
 
 
-            contextMenu.Show(this.listView_parent, new Point(e.X, e.Y));		
-
+            contextMenu.Show(this.listView_parent, new Point(e.X, e.Y));
         }
 
         // 移除选定的行
@@ -3699,9 +4071,64 @@ namespace dp2Circulation
         {
 
         }
+
+        const string MAIN_NAME_PATH = "printbinding_printoption";
+        const string SECONDARY_NAME_PATH = "printbinding_printoption_secondary";
+
+        private void button_print_option_Click(object sender, EventArgs e)
+        {
+            // 配置标题和风格
+            string strMainNamePath = MAIN_NAME_PATH;
+            string strSecondNamePath = SECONDARY_NAME_PATH;
+            string strPubType = "连续出版物";
+
+            PrintBindingPrintOption main_option = new PrintBindingPrintOption(Program.MainForm.DataDir,
+                strPubType);
+            main_option.LoadData(Program.MainForm.AppInfo,
+                strMainNamePath);
+            PrintBindingPrintOption1 secondary_option = new PrintBindingPrintOption1(Program.MainForm.DataDir,
+    strPubType);
+            secondary_option.LoadData(Program.MainForm.AppInfo,
+                strSecondNamePath);
+
+            BindPrintOptionDlg dlg = new BindPrintOptionDlg();
+            MainForm.SetControlFont(dlg, this.Font, false);
+            // dlg.MainForm = Program.MainForm;
+            dlg.DataDir = Program.MainForm.UserDir; // .DataDir;
+            dlg.Text = strPubType + " 装订单 打印参数";
+            dlg.PrintOption = main_option;
+            dlg.BindColumns = secondary_option.Columns;
+            dlg.BindColumnItems = secondary_option.GetAllColumnItems();
+            dlg.ColumnItems = main_option.GetAllColumnItems();
+#if NO
+            dlg.ColumnItems = new string[] {
+                "missing -- 缺期状态",
+                "publishTime -- 出版日期",
+                "volume -- 卷期号",
+                "barcode -- 册条码号",
+                "barcode_label -- 册条码标签",
+                "intact -- 完好率",
+                "refID -- 参考ID",
+            };
+#endif
+
+            Program.MainForm.AppInfo.LinkFormState(dlg, "printbinding_printoption_formstate");
+            dlg.ShowDialog(this);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
+
+            if (dlg.DialogResult != DialogResult.OK)
+                return;
+
+            main_option.SaveData(Program.MainForm.AppInfo,
+                strMainNamePath);
+            secondary_option.Columns = dlg.BindColumns;
+            secondary_option.SaveData(Program.MainForm.AppInfo,
+    strSecondNamePath);
+
+        }
     }
 
-    // 装订单打印 定义了特定缺省值的PrintOption派生类
+    // 装订单打印 成员册表格的栏目 定义了特定缺省值的PrintOption派生类
     internal class PrintBindingPrintOption : PrintOption
     {
         string PublicationType = "连续出版物"; // 图书 连续出版物
@@ -3729,7 +4156,6 @@ namespace dp2Circulation
         {
             Debug.Assert(this.PublicationType == "连续出版物", "目前仅支持连续出版物");
 
-
             this.DataDir = strDataDir;
             this.PublicationType = strPublicationType;
 
@@ -3742,50 +4168,306 @@ namespace dp2Circulation
 
             // Columns缺省值
             Columns.Clear();
+            this.Columns.AddRange(GetAllColumns(true));
+        }
+
+        public override List<Column> GetAllColumns(bool bDefault)
+        {
+            // TODO: 改造为 PrintBindingPrintOption1 的方式
+            List<Column> results = new List<Column>();
 
             // "missing -- 缺期状态",
-            Column column = new Column();
-            column.Name = "missing -- 缺期状态";
-            column.Caption = "缺期状态";
-            column.MaxChars = -1;
-            this.Columns.Add(column);
+            Column column = new Column
+            {
+                Name = "missing -- 缺期状态",
+                Caption = "缺期状态",
+                MaxChars = -1
+            };
+            results.Add(column);
 
             // "publishTime -- 出版日期",
             column = new Column();
             column.Name = "publishTime -- 出版日期";
             column.Caption = "出版日期";
             column.MaxChars = -1;
-            this.Columns.Add(column);
+            results.Add(column);
 
             // "volume -- 卷期号"
             column = new Column();
             column.Name = "volume -- 卷期号";
             column.Caption = "卷期号";
             column.MaxChars = -1;
-            this.Columns.Add(column);
-
+            results.Add(column);
 
             // "barcode -- 册条码号"
             column = new Column();
             column.Name = "barcode -- 册条码号";
             column.Caption = "册条码号";
             column.MaxChars = -1;
-            this.Columns.Add(column);
+            results.Add(column);
+
+            if (bDefault == false)
+            {
+                // "barcode_label -- 册条码标签"
+                column = new Column();
+                column.Name = "barcode_label -- 册条码标签";
+                column.Caption = "册条码标签";
+                column.MaxChars = -1;
+                results.Add(column);
+            }
 
             // "intact -- 完好率"
             column = new Column();
             column.Name = "intact -- 完好率";
             column.Caption = "完好率";
             column.MaxChars = -1;
-            this.Columns.Add(column);
+            results.Add(column);
 
             // "refID -- 参考ID"
             column = new Column();
             column.Name = "refID -- 参考ID";
             column.Caption = "参考ID";
             column.MaxChars = -1;
-            this.Columns.Add(column);
+            results.Add(column);
 
+            return results;
         }
+
+#if NO
+        public override string[] GetAllColumnItems()
+        {
+            string [] results = base.GetAllColumnItems();
+            List<string> items = new List<string>(results);
+            items.Remove("barcode_label-- 册条码标签");
+            return items.ToArray();
+        }
+#endif
     }
+
+    // 装订单打印 合订册表格的栏目 定义了特定缺省值的PrintOption派生类
+    internal class PrintBindingPrintOption1 : PrintOption
+    {
+        string PublicationType = "连续出版物"; // 图书 连续出版物
+
+        public override void LoadData(ApplicationInfo ai,
+            string strPath)
+        {
+            string strNamePath = strPath;
+            if (this.PublicationType != "图书")
+                strNamePath = "series_" + strNamePath;
+            base.LoadData(ai, strNamePath);
+        }
+
+        public override void SaveData(ApplicationInfo ai,
+            string strPath)
+        {
+            string strNamePath = strPath;
+            if (this.PublicationType != "图书")
+                strNamePath = "series_" + strNamePath;
+            base.SaveData(ai, strNamePath);
+        }
+
+        public PrintBindingPrintOption1(string strDataDir,
+            string strPublicationType)
+        {
+            Debug.Assert(this.PublicationType == "连续出版物", "目前仅支持连续出版物");
+
+
+            this.DataDir = strDataDir;
+            this.PublicationType = strPublicationType;
+
+#if NO
+            this.PageHeaderDefault = "%date% 装订单 - 来自: %sourcedescription%";
+            this.PageFooterDefault = "";
+
+            this.TableTitleDefault = "合订册";
+
+            this.LinesPerPageDefault = 20;
+#endif
+
+            // Columns缺省值
+            Columns.Clear();
+            this.Columns.AddRange(GetAllColumns(true));
+        }
+
+#if NO
+        public override List<Column> GetAllColumns(bool bDefault)
+        {
+            List<Column> results = new List<Column>();
+
+            // "bindingsummary -- 期刊"
+            Column column = new Column();
+            column.Name = "bindingsummary -- 期刊";
+            column.Caption = "期刊";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingissn -- ISSN"
+            column = new Column();
+            column.Name = "bindingissn -- ISSN";
+            column.Caption = "ISSN";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingaccessno -- 索取号"
+            column = new Column();
+            column.Name = "bindingaccessno -- 索取号";
+            column.Caption = "索取号";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindinglocation -- 馆藏地点"
+            column = new Column();
+            column.Name = "bindinglocation -- 馆藏地点";
+            column.Caption = "馆藏地点";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingbarcode -- 册条码号"
+            column = new Column();
+            column.Name = "bindingbarcode -- 册条码号";
+            column.Caption = "册条码号";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            if (bDefault == false)
+            {
+                // "bindingbarcode_label -- 册条码标签";
+                column = new Column();
+                column.Name = "bindingbarcode_label -- 册条码标签";
+                column.Caption = "册条码标签";
+                column.MaxChars = -1;
+                results.Add(column);
+            }
+
+            // "bindingrefid -- 参考ID";
+            column = new Column();
+            column.Name = "bindingrefid -- 参考ID";
+            column.Caption = "参考ID";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingintact -- 完好率"
+            column = new Column();
+            column.Name = "bindingintact -- 完好率";
+            column.Caption = "完好率";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingprice -- 合订价格"
+            column = new Column();
+            column.Name = "bindingprice -- 合订价格";
+            column.Caption = "合订价格";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingpublishtime -- 出版时间";
+            column = new Column();
+            column.Name = "bindingpublishtime -- 出版时间";
+            column.Caption = "出版时间";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            //  "bindingissuecount -- 期数"
+            column = new Column();
+            column.Name = "bindingissuecount -- 期数";
+            column.Caption = "期数";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingvolume -- 包含卷期号";
+            column = new Column();
+            column.Name = "bindingvolume -- 包含卷期号";
+            column.Caption = "包含卷期号";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingvolume_issue -- 包含卷期号(期)";
+            column = new Column();
+            column.Name = "bindingvolume_issue -- 包含卷期号(期)";
+            column.Caption = "包含卷期号(期)";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingvolume_volume -- 包含卷期号(卷)";
+            column = new Column();
+            column.Name = "bindingvolume_volume -- 包含卷期号(卷)";
+            column.Caption = "包含卷期号(卷)";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            // "bindingvolume_zong -- 包含卷期号(总)";
+            column = new Column();
+            column.Name = "bindingvolume_zong -- 包含卷期号(总)";
+            column.Caption = "包含卷期号(总)";
+            column.MaxChars = -1;
+            results.Add(column);
+
+            return results;
+        }
+
+#endif
+
+        public override List<Column> GetAllColumns(bool bDefault)
+        {
+            List<Column> results = new List<Column>();
+
+            string[] lines = new string[] {
+            "bindingsummary -- 期刊",
+            "bindingissn -- ISSN",
+            "bindingaccessno -- 索取号",
+            "bindinglocation -- 馆藏地点",
+            "bindingbarcode -- 册条码号",
+             "*bindingbarcode_label -- 册条码标签",   // 可选
+             "bindingrefid -- 参考ID",
+             "bindingintact -- 完好率",
+             "bindingprice -- 合订价格",
+             "bindingpublishtime -- 出版时间",
+             "bindingissuecount -- 期数",
+             "bindingvolume -- 包含卷期号",
+             "*bindingvolume_issue -- 包含卷期号(期)", // 可选
+             "*bindingvolume_volume -- 包含卷期号(卷)",    // 可选
+             "*bindingvolume_zong -- 包含卷期号(总)", // 可选
+             "*bindingbiblio_title -- 刊名", // 可选
+             "*bindingbiblio_author -- 编者",    // 可选
+             "*bindingbiblio_publication_area -- 出版项", // 可选
+        };
+
+            foreach (string line in lines)
+            {
+                if (line[0] == '*' && bDefault == true)
+                    continue;
+                string strLine = line;
+                if (strLine[0] == '*')
+                    strLine = strLine.Substring(1);
+                Column column = new Column();
+                column.Name = strLine;
+                column.Caption = GetRightPart(strLine);
+                column.MaxChars = -1;
+                results.Add(column);
+            }
+
+            return results;
+        }
+
+        internal static string GetRightPart(string strText)
+        {
+            int nRet = strText.IndexOf("--");
+            if (nRet == -1)
+                return "";
+
+            return strText.Substring(nRet + 2).Trim();
+        }
+
+#if NO
+        public override string[] GetAllColumnItems()
+        {
+            string[] results = base.GetAllColumnItems();
+            List<string> items = new List<string>(results);
+            items.Remove("bindingbarcode_label -- 册条码标签");
+            return items.ToArray();
+        }
+#endif
+    }
+
 }

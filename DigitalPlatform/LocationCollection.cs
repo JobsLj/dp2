@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
-namespace DigitalPlatform
+namespace DigitalPlatform.Text
 {
     public class Location
     {
@@ -138,6 +136,19 @@ namespace DigitalPlatform
             return nValue;
         }
 
+        // 统计一个馆藏地分配的册数
+        public virtual int GetLocationCopy(string location)
+        {
+            int nValue = 0;
+            foreach (Location item in this)
+            {
+                if (item.Name == location)
+                    nValue++;
+            }
+
+            return nValue;
+        }
+
         // 2012/12/22
         // 返回全部 RefID
         public virtual List<string> GetRefIDs()
@@ -219,6 +230,9 @@ namespace DigitalPlatform
             strError = "";
             this.Clear();
 
+            if (string.IsNullOrEmpty(value))    // 2018/5/9
+                return 0;
+
             string[] sections = value.Split(new char[] { ';' });
             for (int i = 0; i < sections.Length; i++)
             {
@@ -258,7 +272,7 @@ namespace DigitalPlatform
                     }
                     catch
                     {
-                        strError = "'" + strCount + "' 应为纯数字";
+                        strError = "馆藏分配片段 '" + strLocationString + "' 中 '" + strCount + "' 部分应为纯数字";
                         return -1;
                     }
 
@@ -349,7 +363,7 @@ namespace DigitalPlatform
         public int Merge()
         {
             bool bChanged = false;
-            for (int i = 0; i < this.Count; )
+            for (int i = 0; i < this.Count;)
             {
                 Location item = this[i];
 
@@ -410,6 +424,43 @@ namespace DigitalPlatform
             }
 
             return count;
+        }
+
+        // 从 source 中复制 count 个元素构成一个新的 collection
+        // 注: 若 source 中元素少于 count，则有多少复制多少
+        // 注：本函数为浅复制。即结果集合中的元素也是源集合中的元素
+        public static LocationCollection CopyItems(LocationCollection source, int count)
+        {
+            LocationCollection result = new LocationCollection();
+            int i = 0;
+            foreach (Location location in source)
+            {
+                result.Add(location);
+                i++;
+                if (i >= count)
+                    break;
+            }
+
+            return result;
+        }
+
+        // 确保集合至少有 count 个元素
+        // 注：本函数为浅复制。即结果集合中的元素也是源集合中的元素
+        public void EnsureItems(
+            int count,
+            string default_name)
+        {
+            if (this.Count >= count)
+                return;
+
+            int delta = count - this.Count;
+            for (int i = 0; i < delta; i++)
+            {
+                Location location = new Location();
+                location.Name = default_name;
+                this.Add(location);
+            }
+
         }
     }
 }

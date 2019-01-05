@@ -21,8 +21,9 @@ using System.Web;
 using System.Reflection;
 using System.Drawing.Text;
 using System.Speech.Synthesis;
-using System.Security.Permissions;
 using System.Threading.Tasks;
+
+using log4net;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
@@ -33,13 +34,9 @@ using DigitalPlatform.Script;
 using DigitalPlatform.IO;   // DateTimeUtil
 using DigitalPlatform.CommonControl;
 
-using DigitalPlatform.GcatClient.gcat_new_ws;
-using DigitalPlatform.GcatClient;
-using DigitalPlatform.Marc;
 using DigitalPlatform.LibraryServer;
 using DigitalPlatform.MarcDom;
 using DigitalPlatform.MessageClient;
-// using DigitalPlatform.LibraryClient.localhost;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.LibraryClient.localhost;
 
@@ -48,7 +45,7 @@ namespace dp2Circulation
     /// <summary>
     /// 框架窗口
     /// </summary>
-    public partial class MainForm : Form
+    public partial class MainForm : Form, IChannelManager
     {
         internal ImageManager _imageManager = null;
 
@@ -56,7 +53,12 @@ namespace dp2Circulation
 
         internal CommentViewerForm m_commentViewer = null;
 
+        // 主要的通道池，用于当前服务器
         public LibraryChannelPool _channelPool = new LibraryChannelPool();
+
+        // 次要的通道池，用于著者号码和拼音
+        public LibraryChannelPool _channelPoolExt = new LibraryChannelPool();
+
 
         // 2014/10/3
         // MarcFilter对象缓冲池
@@ -91,7 +93,7 @@ namespace dp2Circulation
                     return this.m_strInstanceDir;
 
                 this.m_strInstanceDir = PathUtil.MergePath(this.DataDir, "~bin_" + Guid.NewGuid().ToString());
-                PathUtil.CreateDirIfNeed(this.m_strInstanceDir);
+                PathUtil.TryCreateDir(this.m_strInstanceDir);
 
                 return this.m_strInstanceDir;
             }
@@ -218,6 +220,11 @@ namespace dp2Circulation
         public BiblioDbFromInfo[] ReaderDbFromInfos = null;   // 读者库检索路径信息 2012/2/8
 
         /// <summary>
+        /// 规范库检索路径信息集合
+        /// </summary>
+        public BiblioDbFromInfo[] AuthorityDbFromInfos = null;
+
+        /// <summary>
         /// 实体库检索路径信息集合
         /// </summary>
         public BiblioDbFromInfo[] ItemDbFromInfos = null;   // 实体库检索路径信息 2012/5/5
@@ -267,6 +274,12 @@ namespace dp2Circulation
         /// 读者库属性集合
         /// </summary>
         public List<ReaderDbProperty> ReaderDbProperties = null;
+
+        /// <summary>
+        /// 规范库属性集合
+        /// </summary>
+        public List<BiblioDbProperty> AuthorityDbProperties = null;
+
 
         /// <summary>
         /// 实用库属性集合
@@ -390,6 +403,9 @@ namespace dp2Circulation
             this._channelPool.BeforeLogin += new DigitalPlatform.LibraryClient.BeforeLoginEventHandle(Channel_BeforeLogin);
             this._channelPool.AfterLogin += new AfterLoginEventHandle(Channel_AfterLogin);
 
+            this._channelPoolExt.BeforeLogin += new DigitalPlatform.LibraryClient.BeforeLoginEventHandle(ChannelExt_BeforeLogin);
+            this._channelPoolExt.AfterLogin += new AfterLoginEventHandle(ChannelExt_AfterLogin);
+
             this.BeginInvoke(new Action(FirstInitial));
         }
 
@@ -441,20 +457,29 @@ Stack:
             this.DefaultFontString = "微软雅黑, 9pt";
         }
 
-        void RemoveBarcodeFont()
-        {
-            GlobalVars.PrivateFonts.Dispose();
 
-            string strFontFilePath = Path.Combine(this.DataDir, "b3901.ttf");
-            API.RemoveFontResourceA(strFontFilePath);
+        void RemoveExternalFonts(List<string> paths)
+        {
+
+            foreach (string path in paths)
+            {
+                API.RemoveFontResourceA(path);
+            }
+
+            GlobalVars.PrivateFonts.Dispose();
         }
 
-        void InstallBarcodeFont()
+        // "C39HrP24DhTt"   string strFontFilePath = Path.Combine(this.DataDir, "b3901.ttf");
+        // "OCR-B 10 BT" string strFontFilePath = Path.Combine(this.DataDir, "ocr-b.ttf");
+        void InstallExternalFont(
+            // string strFontName, 
+            string strFontFilePath)
         {
+#if NO
             bool bInstalled = true;
             try
             {
-                FontFamily family = new FontFamily("C39HrP24DhTt");
+                FontFamily family = new FontFamily(strFontName);
             }
             catch
             {
@@ -466,52 +491,29 @@ Stack:
                 // 已经安装
                 return;
             }
-
-            // 
-            string strFontFilePath = Path.Combine(this.DataDir, "b3901.ttf");
-            int nRet = API.AddFontResourceA(strFontFilePath);
-            if (nRet == 0)
+#endif
+            if (File.Exists(strFontFilePath) == false
+                // && ApplicationDeployment.IsNetworkDeployed
+                )
             {
-                // 失败
-                MessageBox.Show(this, "安装字体文件 " + strFontFilePath + " 失败");
-                return;
+                if (Detect360() == true)
+                {
+                    Program.PromptAndExit(this, "dp2Circulation (内务)受到 360 软件干扰而无法启动 [文件" + strFontFilePath + "不存在]。请关闭或者卸载 360 软件然后再重新启动 dp2Circulation (内务)");
+                    return;
+                }
             }
 
             {
-                // 成功
+                int nRet = API.AddFontResourceA(strFontFilePath);
+                if (nRet == 0)
+                {
+                    // 失败
+                    MessageBox.Show(this, "安装字体文件 " + strFontFilePath + " 失败");
+                    return;
+                }
 
-                // 为了解决 GDI+ 的一个 BUG
-                // PrivateFontCollection m_pfc = new PrivateFontCollection();
                 GlobalVars.PrivateFonts.AddFontFile(strFontFilePath);
-#if NO
-                API.SendMessage((IntPtr)0xffff,0x001d, IntPtr.Zero, IntPtr.Zero);
-                API.SendMessage(this.Handle, 0x001d, IntPtr.Zero, IntPtr.Zero);
-#endif
             }
-
-#if NO
-            /*
-            try
-            {
-                FontFamily family = new FontFamily("C39HrP24DhTt");
-            }
-            catch (Exception ex)
-            {
-                bInstalled = false;
-            }
-             * */
-            InstalledFontCollection enumFonts = new InstalledFontCollection();
-            FontFamily[] fonts = enumFonts.Families;
-
-            string strResult = "";
-            foreach (FontFamily m in fonts)
-            {
-                strResult += m.Name + "\r\n";
-            }
-
-            int i = 0;
-            i++;
-#endif
         }
 
         void MdiClient_ClientSizeChanged(object sender, EventArgs e)
@@ -701,7 +703,7 @@ Stack:
             catch (Exception ex)
             {
                 strError = "CrashReport() (退出前的提示) 过程出现异常: " + ExceptionUtil.GetDebugText(ex);
-                this.WriteErrorLog(strError);
+                MainForm.TryWriteErrorLog(strError);
             }
 
             Program.ClearPromptStringLines();   // 防止以后再次重复发送
@@ -717,7 +719,13 @@ Stack:
                 TryReportPromptLines();
             }
 
-            RemoveBarcodeFont();
+            {
+                List<string> paths = new List<string>();
+                paths.Add(Path.Combine(this.DataDir, "b3901.ttf"));
+                paths.Add(Path.Combine(this.DataDir, "ocr-b.ttf"));
+
+                RemoveExternalFonts(paths);
+            }
 
             this.PropertyTaskList.Close();
 
@@ -766,12 +774,11 @@ Stack:
             // cfgcache
             if (cfgCache != null)
             {
-                string strError;
-                int nRet = cfgCache.Save(null, out strError);
+                int nRet = cfgCache.Save(null, out string strError);
                 if (nRet == -1)
                 {
                     if (string.IsNullOrEmpty(this.UserLogDir) == false)
-                        this.WriteErrorLog(strError);
+                        MainForm.WriteErrorLog(strError);
                     // MessageBox.Show(this, strError);
                 }
             }
@@ -793,10 +800,12 @@ Stack:
                         "");
                 }
 
+#if GCAT_SERVER
                 if (this.m_bSavePinyinGcatID == false)
                     this.m_strPinyinGcatID = "";
                 this.AppInfo.SetString("entity_form", "gcat_pinyin_api_id", this.m_strPinyinGcatID);
                 this.AppInfo.GetBoolean("entity_form", "gcat_pinyin_api_saveid", this.m_bSavePinyinGcatID);
+#endif
 
                 //记住save,保存信息XML文件
                 AppInfo.Save();
@@ -815,6 +824,14 @@ Stack:
                 this._channelPool.AfterLogin -= new AfterLoginEventHandle(Channel_AfterLogin);
                 this._channelPool.Close();
             }
+
+            if (this._channelPoolExt != null)
+            {
+                this._channelPoolExt.BeforeLogin -= new DigitalPlatform.LibraryClient.BeforeLoginEventHandle(ChannelExt_BeforeLogin);
+                this._channelPoolExt.AfterLogin -= new AfterLoginEventHandle(ChannelExt_AfterLogin);
+                this._channelPoolExt.Close();
+            }
+
 #if NO
             if (this.Channel != null)
                 this.Channel.Close();   // TODO: 最好限制一个时间，超过这个时间则Abort()
@@ -1266,16 +1283,15 @@ Stack:
                 dynamic o = form;
                 o.MdiParent = this;
 
-                if (o.MainForm == null)
+                try
                 {
-                    try
-                    {
+                    // 2018/6/24 MainForm 成员可能不存在，可能会抛出异常
+                    if (o.MainForm == null)
                         o.MainForm = this;
-                    }
-                    catch
-                    {
-                        // 等将来所有窗口类型的 MainForm 都是只读的以后，再修改这里
-                    }
+                }
+                catch
+                {
+                    // 等将来所有窗口类型的 MainForm 都是只读的以后，再修改这里
                 }
                 o.Show();
             }
@@ -1445,27 +1461,34 @@ Stack:
 
             string strOldMessageUserName = this.MessageUserName;
             string strOldMessagePassword = this.MessagePassword;
+            bool bOldPrintLabelMode = this.PrintLabelMode;
 
             CfgDlg dlg = new CfgDlg();
 
             dlg.ParamChanged += new ParamChangedEventHandler(CfgDlg_ParamChanged);
-            dlg.ap = this.AppInfo;
-            dlg.MainForm = this;
+            try
+            {
+                dlg.ap = this.AppInfo;
+                // dlg.MainForm = this;
 
-            dlg.UiState = this.AppInfo.GetString(
-                    "main_form",
-                    "cfgdlg_uiState",
-                    "");
-            this.AppInfo.LinkFormState(dlg,
-                "cfgdlg_state");
-            dlg.ShowDialog(this);
-            // this.AppInfo.UnlinkFormState(dlg);
-            this.AppInfo.SetString(
-                    "main_form",
-                    "cfgdlg_uiState",
-                    dlg.UiState);
+                dlg.UiState = this.AppInfo.GetString(
+                        "main_form",
+                        "cfgdlg_uiState",
+                        "");
+                this.AppInfo.LinkFormState(dlg,
+                    "cfgdlg_state");
+                dlg.ShowDialog(this);
+                // this.AppInfo.UnlinkFormState(dlg);
+                this.AppInfo.SetString(
+                        "main_form",
+                        "cfgdlg_uiState",
+                        dlg.UiState);
 
-            dlg.ParamChanged -= new ParamChangedEventHandler(CfgDlg_ParamChanged);
+            }
+            finally
+            {
+                dlg.ParamChanged -= new ParamChangedEventHandler(CfgDlg_ParamChanged);
+            }
 
             // 缺省字体发生了变化
             if (strOldDefaultFontString != this.DefaultFontString)
@@ -1509,6 +1532,18 @@ Stack:
                     this.MessageHub.Login();    // 重新登录
 #endif
             }
+
+            SetPrintLabelMode();
+            if (bOldPrintLabelMode != this.PrintLabelMode)
+            {
+                if (this.PrintLabelMode == false)
+                    MessageBox.Show(this, "请稍后重新启动内务，以便恢复普通状态(非标签打印模式)的外观");
+                else
+                {
+                    MessageBox.Show(this, "已进入标签打印模式");
+                    EnsureChildForm<LabelPrintForm>();
+                }
+            }
         }
 
         void CfgDlg_ParamChanged(object sender, ParamChangedEventArgs e)
@@ -1526,7 +1561,92 @@ Stack:
                     chargingform.ChangeLayout((bool)e.Value);
                 }
             }
+        }
 
+        public bool PrintLabelMode
+        {
+            get
+            {
+                return this.AppInfo.GetBoolean(
+"MainForm",
+"print_label_mode",
+false);
+            }
+        }
+
+        List<ToolStripItem> _save_menu_items = null;
+
+        // 设置标签打印模式
+        void SetPrintLabelMode()
+        {
+            bool bEnabled = PrintLabelMode;
+            if (bEnabled == true)
+            {
+                this.MainMenuStrip.Items.Clear();
+
+                if (_save_menu_items == null)
+                {
+                    _save_menu_items = new List<ToolStripItem>();
+                    foreach (ToolStripItem item in this.MenuItem_help.DropDownItems)
+                    {
+                        if (item == this.MenuItem_upgradeFromDisk
+                            || item == this.MenuItem_createGreenApplication
+                            || item == this.MenuItem_configuration)
+                            _save_menu_items.Add(item);
+                    }
+                }
+
+                ToolStripMenuItem new_menu = new ToolStripMenuItem();
+                new_menu.Text = "文件(&F)";
+
+                {
+                    ToolStripMenuItem menu_item = new ToolStripMenuItem();
+                    menu_item.Text = "标签打印窗(&L)";
+                    menu_item.Click += new System.EventHandler(this.MenuItem_openLabelPrintForm_Click);
+                    new_menu.DropDownItems.Add(menu_item);
+                }
+
+#if NO
+                {
+                    ToolStripMenuItem menu_item = new ToolStripMenuItem();
+                    menu_item.Text = "参数配置(&C)";
+                    menu_item.Click += new System.EventHandler(this.MenuItem_configuration_Click);
+                    new_menu.DropDownItems.Add(menu_item);
+                }
+#endif
+
+
+                foreach (var item in _save_menu_items)
+                {
+                    new_menu.DropDownItems.Add(item);
+                }
+
+                {
+                    ToolStripMenuItem menu_item = new ToolStripMenuItem();
+                    menu_item.Text = "退出(&X)";
+                    menu_item.Click += new System.EventHandler(this.MenuItem_exit_Click);
+                    new_menu.DropDownItems.Add(menu_item);
+                }
+
+                this.MainMenuStrip.Items.Add(new_menu);
+
+                // 删除工具条
+                this.Controls.Remove(this.toolStrip_main);
+                // this.Controls.Remove(this.panel_fixed);
+                {
+                    // 删除“操作历史”以外的其他属性页
+                    List<TabPage> pages = new List<TabPage>();
+                    foreach (TabPage page in this.tabControl_panelFixed.TabPages)
+                    {
+                        if (page != this.tabPage_history)
+                            pages.Add(page);
+                    }
+                    foreach (TabPage page in pages)
+                    {
+                        this.tabControl_panelFixed.TabPages.Remove(page);
+                    }
+                }
+            }
         }
 
         // 退出
@@ -1534,6 +1654,46 @@ Stack:
         {
             this.Close();
         }
+
+        // 获得当前正在编辑、已经修改尚未保存的记录路径集合
+        public List<RecordForm> GetChangedRecords(string strStyle)
+        {
+            List<RecordForm> results = new List<RecordForm>();
+            // 遍历所有 MDI 子窗口
+            foreach (Form child in this.MdiChildren)
+            {
+                dynamic window = child;
+
+                try
+                {
+                    List<RecordForm> temp = window.GetChangedRecords(strStyle);
+                    results.AddRange(temp);
+                }
+                catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException ex)
+                {
+                    continue;
+                }
+            }
+
+            return results;
+        }
+
+#if NO
+        public void AskRecords(AskRecordsEventArgs e)
+        {
+            // 遍历所有 MDI 子窗口
+            foreach (Form child in this.MdiChildren)
+            {
+                dynamic window = child;
+
+                window.AskRecords(e);
+                if (e.Canceled)
+                    return;
+                if (string.IsNullOrEmpty(e.ErrorInfo) == false)
+                    return;
+            }
+        }
+#endif
 
         // 新开修改密码窗
         private void MenuItem_openChangePasswordForm_Click(object sender, EventArgs e)
@@ -1703,14 +1863,14 @@ Stack:
 
         private void MenuItem_openTestForm_Click(object sender, EventArgs e)
         {
-#if NO
-            TestForm form = new TestForm();
-            form.MdiParent = this;
-            form.MainForm = this;
-            form.Show();
-#endif
-            OpenWindow<TestForm>();
-
+            {
+                if (Control.ModifierKeys == Keys.Control
+                    && StringUtil.IsDevelopMode() == true)
+                    OpenWindow<TestingForm>();
+                else
+                    OpenWindow<TestForm>();
+            }
+            // OpenWindow<TestingForm>();
         }
 
         // 打开种次号窗
@@ -1937,7 +2097,7 @@ Stack:
             if (_acceptForm == null || _acceptForm.IsDisposed == true)
             {
                 _acceptForm = new AcceptForm();
-                _acceptForm.MainForm = this;
+                // _acceptForm.MainForm = this;
                 _acceptForm.FormClosed -= new FormClosedEventHandler(accept_FormClosed);
                 _acceptForm.FormClosed += new FormClosedEventHandler(accept_FormClosed);
 
@@ -2018,7 +2178,7 @@ Stack:
             }
         }
 
-        #endregion
+#endregion
 
         private void toolButton_stop_Click(object sender, EventArgs e)
         {
@@ -2235,12 +2395,12 @@ Stack:
                 dynamic o = form;
                 o.MdiParent = this;
 
-                // 2013/3/26
-                if (o.MainForm == null)
                 {
                     try
                     {
-                        o.MainForm = this;
+                        // 2017/4/25
+                        if (o.MainForm == null)
+                            o.MainForm = this;
                     }
                     catch
                     {
@@ -2272,6 +2432,7 @@ Stack:
         // 
         /// <summary>
         /// 得到特定类型的顶层 MDI 子窗口
+        /// 注：不算 Fixed 窗口
         /// </summary>
         /// <typeparam name="T">子窗口类型</typeparam>
         /// <returns>子窗口对象</returns>
@@ -2294,7 +2455,7 @@ Stack:
                 //      null    不是 MDI 子窗口o
                 //      其他      返回这个句柄对应的 Form 对象
                 child = IsChildHwnd(hwnd);
-                if (child != null)
+                if (child != null && IsFixedMyForm(child) == false)  // 2016/12/16 跳过固定于左侧的 MyForm
                 {
                     // if (child is T)
                     if (child.GetType().Equals(typeof(T)) == true)
@@ -2316,7 +2477,20 @@ Stack:
             return default(T);
         }
 
+        // 是否为固定于左侧的 MyForm?
+        static bool IsFixedMyForm(Form child)
+        {
+            if (child is MyForm)
+            {
+                if (((MyForm)child).Fixed)
+                    return true;
+            }
+
+            return false;
+        }
+
         // 判断一个窗口句柄，是否为 MDI 子窗口？
+        // 注：不处理 Visible == false 的窗口。因为取 Handle 会导致 Visible 变成 true
         // return:
         //      null    不是 MDI 子窗口o
         //      其他      返回这个句柄对应的 Form 对象
@@ -2324,13 +2498,14 @@ Stack:
         {
             foreach (Form child in this.MdiChildren)
             {
-                if (hwnd == child.Handle)
+                if (child.Visible == true && hwnd == child.Handle)
                     return child;
             }
 
             return null;
         }
 
+#if NO
         // 得到特定类型的顶层MDI窗口
         Form GetTopChildWindow(Type type)
         {
@@ -2371,8 +2546,58 @@ Stack:
             return null;
         }
 
-        // 得到顶层MDI窗口
+#endif
+
+        // 得到特定类型的顶层MDI窗口。注，会忽略 fixed 类型的窗口
+        Form GetTopChildWindow(Type type)
+        {
+            if (ActiveMdiChild == null)
+                return null;
+
+            // 得到顶层的MDI Child
+            IntPtr hwnd = this.ActiveMdiChild.Handle;
+
+            if (hwnd == IntPtr.Zero)
+                return null;
+
+            for (; ; )
+            {
+                if (hwnd == IntPtr.Zero)
+                    break;
+
+                Form child = null;
+                foreach (Form form in this.MdiChildren)
+                {
+                    if (form.Visible == true && hwnd == form.Handle)
+                    {
+                        child = form;
+                        goto FOUND;
+                    }
+                }
+
+                goto CONTINUE;
+                FOUND:
+
+                if (child.GetType().Equals(type) == true)
+                {
+                    if (child is MyForm)
+                    {
+                        if (((MyForm)child).Fixed)
+                            goto CONTINUE;
+                    }
+                    return child;
+                }
+
+                CONTINUE:
+                hwnd = API.GetWindow(hwnd, API.GW_HWNDNEXT);
+            }
+
+            return null;
+        }
+
+        // 得到顶层 MDI 窗口
         // 注： this.ActiveMdiChild 不一定在最顶层
+        // 注：不算 Fixed 窗口和 Visible == false 的窗口
         Form GetTopChildWindow()
         {
             if (this.MdiChildren.Length == 0)
@@ -2380,7 +2605,8 @@ Stack:
             List<IntPtr> handles = new List<IntPtr>();
             foreach (Form mdi in this.MdiChildren)
             {
-                handles.Add(mdi.Handle);
+                if (IsFixedMyForm(mdi) == false)    // 2016/12/16 跳过固定于左侧的 MyForm
+                    handles.Add(mdi.Handle);
             }
 
             IntPtr hwnd = this.ActiveMdiChild.Handle;
@@ -2395,7 +2621,7 @@ Stack:
 
             foreach (Form mdi in this.MdiChildren)
             {
-                if (mdi.Handle == top)
+                if (mdi.Visible == true && mdi.Handle == top)
                     return mdi;
             }
 
@@ -2529,32 +2755,40 @@ Stack:
                 }
             }
 #endif
-
             if (e.FirstTry == true)
             {
-                e.UserName = AppInfo.GetString(
-                    "default_account",
-                    "username",
-                    "");
-                e.Password = AppInfo.GetString(
-                    "default_account",
-                    "password",
-                    "");
-                e.Password = this.DecryptPasssword(e.Password);
+                string strPhoneNumber = "";
 
-                bool bIsReader =
-                    AppInfo.GetBoolean(
-                    "default_account",
-                    "isreader",
-                    false);
+                {
+                    e.UserName = AppInfo.GetString(
+                        "default_account",
+                        "username",
+                        "");
+                    e.Password = AppInfo.GetString(
+                        "default_account",
+                        "password",
+                        "");
+                    e.Password = this.DecryptPasssword(e.Password);
 
-                string strLocation = AppInfo.GetString(
-                "default_account",
-                "location",
-                "");
-                e.Parameters = "location=" + strLocation;
-                if (bIsReader == true)
-                    e.Parameters += ",type=reader";
+                    strPhoneNumber = AppInfo.GetString(
+        "default_account",
+        "phoneNumber",
+        "");
+
+                    bool bIsReader =
+                        AppInfo.GetBoolean(
+                        "default_account",
+                        "isreader",
+                        false);
+
+                    string strLocation = AppInfo.GetString(
+                    "default_account",
+                    "location",
+                    "");
+                    e.Parameters = "location=" + strLocation;
+                    if (bIsReader == true)
+                        e.Parameters += ",type=reader";
+                }
 
                 // 2014/9/13
                 e.Parameters += ",mac=" + StringUtil.MakePathList(SerialCodeForm.GetMacAddress(), "|");
@@ -2572,6 +2806,10 @@ Stack:
 
                 e.Parameters += ",client=dp2circulation|" + Program.ClientVersion;
 
+                // 以手机短信验证方式登录
+                if (string.IsNullOrEmpty(strPhoneNumber) == false)
+                    e.Parameters += ",phoneNumber=" + strPhoneNumber;
+
                 if (String.IsNullOrEmpty(e.UserName) == false)
                     return; // 立即返回, 以便作第一次 不出现 对话框的自动登录
             }
@@ -2584,18 +2822,23 @@ Stack:
             else
                 owner = this;
 
-            CirculationLoginDlg dlg = SetDefaultAccount(
-                e.LibraryServerUrl,
-                null,
-                e.ErrorInfo,
-                e.LoginFailCondition,
-                owner);
+            CirculationLoginDlg dlg = null;
+            this.Invoke((Action)(() =>
+{
+    dlg = SetDefaultAccount(
+        e.LibraryServerUrl,
+        null,
+        e.ErrorInfo,
+        e.LoginFailCondition,
+        owner);
+
+}
+));
             if (dlg == null)
             {
                 e.Cancel = true;
                 return;
             }
-
 
             e.UserName = dlg.UserName;
             e.Password = dlg.Password;
@@ -2622,6 +2865,13 @@ Stack:
 
             e.Parameters += ",client=dp2circulation|" + Program.ClientVersion;
 
+            if (string.IsNullOrEmpty(dlg.TempCode) == false)
+                e.Parameters += ",tempCode=" + dlg.TempCode;
+
+            // 以手机短信验证方式登录
+            if (string.IsNullOrEmpty(dlg.PhoneNumber) == false)
+                e.Parameters += ",phoneNumber=" + dlg.PhoneNumber;
+
             e.SavePasswordLong = dlg.SavePasswordLong;
             if (e.LibraryServerUrl != dlg.ServerUrl)
             {
@@ -2629,6 +2879,8 @@ Stack:
                 _expireVersionChecked = false;
             }
         }
+
+        bool _virusScanned = false;
 
         internal string _currentUserName = "";
         internal string _currentUserRights = "";
@@ -2654,6 +2906,20 @@ Stack:
                 }
             }
             _verified = true;
+
+            if (_virusScanned == false)
+            {
+                if (StringUtil.IsInList("clientscanvirus", channel.Rights) == true)
+                {
+                    if (Detect360() == true || DetectGuanjia() == true)
+                    {
+                        channel.Close();
+                        Program.PromptAndExit(this, "dp2Circulation 被木马软件干扰，无法启动。");
+                        throw new InterruptException("dp2Circulation 被木马软件干扰，无法启动。");
+                    }
+                }
+                _virusScanned = true;
+            }
 #endif
         }
 
@@ -2687,6 +2953,8 @@ Stack:
         {
             get
             {
+                if (this.AppInfo == null)
+                    return null;
                 return AppInfo.GetString(
                 "default_account",
                 "username",
@@ -2694,25 +2962,29 @@ Stack:
             }
         }
 
-        [Flags]
-        public enum GetChannelStyle
+        public LibraryChannel GetChannel(string strServerUrl = ".",
+    string strUserName = ".",
+    GetChannelStyle style = GetChannelStyle.GUI)
         {
-            None = 0x0, // 
-            GUI = 0x01, // Idle 里面做 Application.DoEvents()
+            return GetChannel(strServerUrl,
+                strUserName,
+                style,
+                null);
         }
 
         // parameters:
         //      style    风格。如果为 GUI，表示会自动添加 Idle 事件，并在其中执行 Application.DoEvents
-        public LibraryChannel GetChannel(string strServerUrl = ".",
-            string strUserName = ".",
-            GetChannelStyle style = GetChannelStyle.GUI)
+        public LibraryChannel GetChannel(string strServerUrl,   // = ".",
+            string strUserName, // = ".",
+            GetChannelStyle style,  // = GetChannelStyle.GUI,
+            string strClientIP/* = null*/)
         {
             if (EntityRegisterBase.IsDot(strServerUrl) == true)
                 strServerUrl = this.LibraryServerUrl;
             if (EntityRegisterBase.IsDot(strUserName) == true)
                 strUserName = this.DefaultUserName;
 
-            LibraryChannel channel = this._channelPool.GetChannel(strServerUrl, strUserName);
+            LibraryChannel channel = this._channelPool.GetChannel(strServerUrl, strUserName, null, strClientIP);
             if ((style & GetChannelStyle.GUI) != 0)
                 channel.Idle += channel_Idle;
             _channelList.Add(channel);
@@ -2833,7 +3105,7 @@ Stack:
                 // EndSearch();
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2924,7 +3196,7 @@ Stack:
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -3048,6 +3320,93 @@ Stack:
             strClassType = info.ClassType;
             strQufenhaoType = info.QufenhaoType;
             return nRet;
+        }
+
+        public class AccessNoInfo
+        {
+            public bool HasHeadLine { get; set; }
+            public string HeadLine { get; set; }
+            public string ClassLine { get; set; }
+            public string QufenhaoLine { get; set; }
+        }
+
+        // 解析索取号字符串
+        // return:
+        //      -1  error
+        //      0   排架体系定义没有找到。即便这样，result 中也返回了值，是按照两行方式切割的
+        //      1   成功
+        public int ParseAccessNo(
+            string strLocation,
+            string strAccessNo,
+            out AccessNoInfo result,
+            out string strError)
+        {
+            result = new AccessNoInfo();
+
+            ArrangementInfo info = null;
+            int nRet = GetArrangementInfo(strLocation,
+                out info,
+                out strError);
+            if (nRet == -1)
+                return -1;
+            if (nRet == 0)
+            {
+                // 依然按照两行方式进行切割
+                return ParseAccessNo((ArrangementInfo)null,
+                    strAccessNo,
+                    out result,
+                    out strError);
+            }
+
+            return ParseAccessNo(info,
+                strAccessNo,
+                out result,
+                out strError);
+        }
+
+        // parameters:
+        //      info    排架体系定义。如果 info 为 null，表示用两行方式进行解析
+        // return:
+        //      -1  error
+        //      0   排架体系定义没有找到
+        //      1   成功
+        public static int ParseAccessNo(
+            ArrangementInfo info,
+            string strAccessNo,
+            out AccessNoInfo result,
+            out string strError)
+        {
+            strError = "";
+            result = new AccessNoInfo();
+
+            strAccessNo = StringUtil.BuildLocationClassEntry(strAccessNo);
+            string[] lines = strAccessNo.Split(new char[] { '/' });
+
+            if (info != null
+                && (info.CallNumberStyle == "馆藏代码+索取类号+区分号"
+    || info.CallNumberStyle == "三行")
+                )
+            {
+                result.HasHeadLine = true;
+                if (lines.Length >= 1)
+                    result.HeadLine = lines[0];
+                if (lines.Length >= 2)
+                    result.ClassLine = lines[1];
+                if (lines.Length >= 3)
+                    result.QufenhaoLine = lines[2];
+            }
+            else
+            {
+                result.HeadLine = "";
+                if (lines.Length >= 1)
+                    result.ClassLine = lines[0];
+                if (lines.Length >= 2)
+                    result.QufenhaoLine = lines[1];
+            }
+
+            if (info == null)
+                return 0;
+            return 1;
         }
 
         // 注意排架体系定义中的 location 元素 name 值，可能含有通配符
@@ -3195,7 +3554,7 @@ Stack:
         }
 #endif
         List<LibraryChannel> _channelList = new List<LibraryChannel>();
-        void DoStop(object sender, StopEventArgs e)
+        public void DoStop(object sender, StopEventArgs e)
         {
             foreach (LibraryChannel channel in _channelList)
             {
@@ -3285,61 +3644,6 @@ Stack:
             return null;
         }
 
-        // 
-        // Exception:
-        //     可能会抛出Exception异常
-        /// <summary>
-        /// 根据from名列表字符串得到from style列表字符串
-        /// </summary>
-        /// <param name="strCaptions">检索途径名</param>
-        /// <returns>style列表字符串</returns>
-        public string GetBiblioFromStyle(string strCaptions)
-        {
-            if (this.BiblioDbFromInfos == null)
-            {
-                throw new Exception("this.DbFromInfos尚未初始化");
-                // return null;    // 2009/3/29 
-            }
-
-            Debug.Assert(this.BiblioDbFromInfos != null, "this.DbFromInfos尚未初始化");
-
-            string strResult = "";
-
-            string[] parts = strCaptions.Split(new char[] { ',' });
-            for (int k = 0; k < parts.Length; k++)
-            {
-                string strCaption = parts[k].Trim();
-
-                // 2009/9/23 
-                // TODO: 是否可以直接使用\t后面的部分呢？
-                // 规整一下caption字符串，切除后面可能有的\t部分
-                int nRet = strCaption.IndexOf("\t");
-                if (nRet != -1)
-                    strCaption = strCaption.Substring(0, nRet).Trim();
-
-                if (strCaption.ToLower() == "<all>"
-                    || strCaption == "<全部>"
-                    || String.IsNullOrEmpty(strCaption) == true)
-                    return "<all>";
-
-                for (int i = 0; i < this.BiblioDbFromInfos.Length; i++)
-                {
-                    BiblioDbFromInfo info = this.BiblioDbFromInfos[i];
-
-                    if (strCaption == info.Caption)
-                    {
-                        if (string.IsNullOrEmpty(strResult) == false)
-                            strResult += ",";
-                        // strResult += GetDisplayStyle(info.Style, true);   // 注意，去掉 _ 和 __ 开头的那些，应该还剩下至少一个 style
-                        strResult += GetDisplayStyle(info.Style, true, false);   // 注意，去掉 __ 开头的那些，应该还剩下至少一个 style。_ 开头的不要滤出
-                    }
-                }
-            }
-
-            return strResult;
-
-            // return null;
-        }
 
         // ComboBox版本
         /// <summary>
@@ -3379,117 +3683,6 @@ Stack:
                 comboBox_from.Text = strOldText;
         }
 
-        // TabComboBox版本
-        // 右边列出style名
-        /// <summary>
-        /// 填充书目库检索途径 TabComboBox 列表
-        /// 每一行左边是检索途径名，右边是 style 名
-        /// </summary>
-        /// <param name="comboBox_from">TabComboBox对象</param>
-        public void FillBiblioFromList(DigitalPlatform.CommonControl.TabComboBox comboBox_from)
-        {
-            comboBox_from.Items.Clear();
-
-            comboBox_from.Items.Add("<全部>");
-
-            if (this.BiblioDbFromInfos == null)
-                return;
-
-            Debug.Assert(this.BiblioDbFromInfos != null);
-
-            string strFirstItem = "";
-            // 装入检索途径
-            for (int i = 0; i < this.BiblioDbFromInfos.Length; i++)
-            {
-                BiblioDbFromInfo info = this.BiblioDbFromInfos[i];
-
-                comboBox_from.Items.Add(info.Caption + "\t" + GetDisplayStyle(info.Style));
-
-                if (i == 0)
-                    strFirstItem = info.Caption;
-            }
-
-            comboBox_from.Text = strFirstItem;
-        }
-
-        // 过滤掉 _ 开头的那些style子串
-        // parameters:
-        //      bRemove2    是否也要滤除 __ 前缀的
-        //                  当出现在检索途径列表里面的时候，为了避免误会，要出现 __ 前缀的；而发送检索请求到 dp2library 的时候，为了避免连带也引起匹配其他检索途径，要把 __ 前缀的 style 滤除
-        static string GetDisplayStyle(string strStyles,
-            bool bRemove2 = false)
-        {
-            string[] parts = strStyles.Split(new char[] { ',' });
-            List<string> results = new List<string>();
-            foreach (string part in parts)
-            {
-                string strText = part.Trim();
-                if (String.IsNullOrEmpty(strText) == true)
-                    continue;
-
-                if (bRemove2 == false)
-                {
-                    // 只滤除 _ 开头的
-                    if (StringUtil.HasHead(strText, "_") == true
-                        && StringUtil.HasHead(strText, "__") == false)
-                        continue;
-                }
-                else
-                {
-                    // 2013/12/30 _ 和 __ 开头的都被滤除
-                    if (StringUtil.HasHead(strText, "_") == true)
-                        continue;
-                }
-
-                results.Add(strText);
-            }
-
-            return StringUtil.MakePathList(results, ",");
-        }
-
-        // 过滤掉 _ 开头的那些style子串
-        // parameters:
-        //      bRemove2    是否滤除 __ 前缀的
-        //      bRemove1    是否滤除 _ 前缀的
-        static string GetDisplayStyle(string strStyles,
-            bool bRemove2,
-            bool bRemove1)
-        {
-            string[] parts = strStyles.Split(new char[] { ',' });
-            List<string> results = new List<string>();
-            foreach (string part in parts)
-            {
-                string strText = part.Trim();
-                if (String.IsNullOrEmpty(strText) == true)
-                    continue;
-
-                if (strText[0] == '_')
-                {
-                    if (bRemove1 == true)
-                    {
-                        if (strText.Length >= 2 && /*strText[0] == '_' &&*/ strText[1] != '_')
-                            continue;
-#if NO
-                        if (strText[0] == '_')
-                            continue;
-#endif
-                        if (strText.Length == 1)
-                            continue;
-                    }
-
-                    if (bRemove2 == true && strText.Length >= 2)
-                    {
-                        if (/*strText[0] == '_' && */ strText[1] == '_')
-                            continue;
-                    }
-                }
-
-
-                results.Add(strText);
-            }
-
-            return StringUtil.MakePathList(results, ",");
-        }
 
         // 
         /// <summary>
@@ -3631,11 +3824,11 @@ Stack:
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
-        #region EnsureXXXForm ...
+#region EnsureXXXForm ...
 
         /// <summary>
         /// 获得最顶层的 UtilityForm 窗口，如果没有，则新创建一个
@@ -3677,7 +3870,7 @@ Stack:
 
                 form = new HtmlPrintForm();
                 form.MdiParent = this;
-                form.MainForm = this;
+                // form.MainForm = this;
                 if (bMinimized == true)
                     form.WindowState = FormWindowState.Minimized;
                 form.Show();
@@ -3923,7 +4116,7 @@ Stack:
             return EnsureChildForm<BiblioStatisForm>();
         }
 
-        #endregion
+#endregion
 
         private void toolButton_borrow_Click(object sender, EventArgs e)
         {
@@ -4101,7 +4294,8 @@ Stack:
                 ItemSearchForm form = top as ItemSearchForm;
                 form.Activate();
                 List<string> barcodes = new List<string>();
-                barcodes.Add(this.toolStripTextBox_barcode.Text);
+                string strBarcode = GetUpperCase(this.toolStripTextBox_barcode.Text);
+                barcodes.Add(strBarcode);
 
                 form.ClearMessage();
                 string strError = "";
@@ -4129,7 +4323,9 @@ Stack:
         // 尽量占用当前已经打开的种册窗
         void LoadItemBarcode()
         {
-            if (this.toolStripTextBox_barcode.Text == "")
+            string strBarcode = GetUpperCase(this.toolStripTextBox_barcode.Text);
+
+            if (string.IsNullOrEmpty(strBarcode))
             {
                 MessageBox.Show(this, "尚未输入条码");
                 return;
@@ -4158,14 +4354,34 @@ Stack:
             //      -1  error
             //      0   not found
             //      1   found
-            form.LoadItemByBarcode(this.toolStripTextBox_barcode.Text, false);
+            form.LoadItemByBarcode(strBarcode, false);
+        }
+
+        public string GetUpperCase(string strText)
+        {
+            if (string.IsNullOrEmpty(strText) == true)
+                return strText;
+
+            // 除去首尾连续的空额 2016/12/15
+            strText = strText.Trim();
+
+            if (this.UpperInputBarcode == true)
+            {
+                if (strText.ToLower().StartsWith("@bibliorecpath:") == true)
+                    return strText; // 特殊地，不要转为大写
+                return strText.ToUpper();
+            }
+
+            return strText;
         }
 
         // 装入读者证条码号相关的记录
         // 尽量占用当前已经打开的读者窗
         void LoadReaderBarcode()
         {
-            if (this.toolStripTextBox_barcode.Text == "")
+            string strBarcode = GetUpperCase(this.toolStripTextBox_barcode.Text);
+
+            if (string.IsNullOrEmpty(strBarcode))
             {
                 MessageBox.Show(this, "尚未输入条码号");
                 return;
@@ -4188,7 +4404,7 @@ Stack:
             // 根据读者证条码号，装入读者记录
             // parameters:
             //      bForceLoad  在发生重条码的情况下是否强行装入第一条
-            form.LoadRecord(this.toolStripTextBox_barcode.Text,
+            form.LoadRecord(strBarcode,
                 false);
         }
 
@@ -4197,7 +4413,9 @@ Stack:
         {
             string strError = "";
 
-            if (this.toolStripTextBox_barcode.Text == "")
+            string strBarcode = GetUpperCase(this.toolStripTextBox_barcode.Text);
+
+            if (string.IsNullOrEmpty(strBarcode))
             {
                 strError = "尚未输入条码";
                 goto ERROR1;
@@ -4212,7 +4430,7 @@ Stack:
             //      2   是合法的册条码号
             int nRet = VerifyBarcode(
                 this.FocusLibraryCode,  // this._currentLibraryCodeList,    // this.Channel.LibraryCodeList,
-                this.toolStripTextBox_barcode.Text,
+                strBarcode,
                 out strError);
             if (nRet == -1)
                 goto ERROR1;
@@ -4236,7 +4454,7 @@ Stack:
             if (nRet == 2)
                 LoadItemBarcode();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -4391,7 +4609,7 @@ Stack:
                 this.ReturnChannel(channel);
                 // EndSearch();
             }
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -4500,7 +4718,7 @@ Stack:
                 // this.ReturnChannel(channel);
                 // EndSearch();
             }
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -4533,7 +4751,7 @@ Stack:
 
             /*
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
              * */
             EnableControls(false);
 
@@ -4626,6 +4844,95 @@ Stack:
             }
         }
 
+        // 观察一个特定分馆是否需要变换条码号?
+        public bool NeedTranformBarcode(string strLibraryCode)
+        {
+            string strError = "";
+            string strBarcode = "?transform";
+            // 变换条码号
+            // return:
+            //      -1  出错
+            //      0   没有发生改变
+            //      1   发生了改变
+            int nRet = TransformBarcode(
+                strLibraryCode,
+                ref strBarcode,
+                out strError);
+            if (nRet == 1)
+                return true;
+            return false;
+        }
+
+        // 变换条码号
+        // return:
+        //      -1  出错
+        //      0   没有发生改变
+        //      1   发生了改变
+        public int TransformBarcode(
+    string strLibraryCode,
+    ref string strBarcode,
+    out string strError)
+        {
+            strError = "";
+
+            if (StringUtil.HasHead(strBarcode, "PQR:") == true)
+            {
+                strError = "这是读者证号二维码";
+                return 0;
+            }
+
+            // 优先进行前端校验
+            if (this.ClientHost != null)
+            {
+                dynamic o = this.ClientHost;
+                try
+                {
+                    /*
+	public int TransformBarcode(
+                        string strLibraryCode,
+                        ref string strBarcode,
+                        out string strError)
+	{
+		strError = "";
+
+		if (strLibraryCode == "北京西马金润小学")
+		{
+            // 让宿主能知道这个分馆需要主动打开 transform 功能 
+            if (strBarcode == "?transform")
+                return 1;
+                
+            // 以前历史遗留的册条码号，要加上 XM 前缀才能和册记录吻合 
+			if (strBarcode.Length == 6 && strBarcode.StartsWith("23") == false)
+            {
+                strBarcode = "XM" + strBarcode;
+			    return 1;
+            }
+            return 0;
+		}
+
+		return 0;
+	}
+                     * * */
+                    return o.TransformBarcode(
+                        strLibraryCode,
+                        ref strBarcode,
+                        out strError);
+                }
+                catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException ex)
+                {
+                    // 源代码中没有定义这个函数
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    strError = "前端执行变换脚本抛出异常: " + ExceptionUtil.GetDebugText(ex);
+                    return -1;
+                }
+            }
+
+            return 0;
+        }
+
         public delegate void Delegate_enableControls(bool bEnable);
 
         // 形式校验条码号
@@ -4671,7 +4978,7 @@ Stack:
             // 优先进行前端校验
             if (this.ClientHost != null)
             {
-                bool bOldStyle = false;
+                bool bDetectOldStyle = false;
                 dynamic o = this.ClientHost;
                 try
                 {
@@ -4683,7 +4990,7 @@ Stack:
                 catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException ex)
                 {
                     // 继续向后进行服务器端条码校验
-                    bOldStyle = true;
+                    bDetectOldStyle = true;
                 }
                 catch (Exception ex)
                 {
@@ -4691,7 +4998,7 @@ Stack:
                     return -1;
                 }
 
-                if (bOldStyle == true)
+                if (bDetectOldStyle == true)
                 {
                     // 尝试以前的参数方式
                     try
@@ -4750,6 +5057,24 @@ Stack:
             }
         }
 
+        public void SetServerName(string strUrl, string strServerName)
+        {
+            string value = AppInfo.GetString("login",
+        "used_list",
+        "");
+
+            if (CirculationLoginDlg.SetServerName(ref value,
+                strUrl,
+                strServerName,
+                true) == true)
+            {
+                AppInfo.SetString("login",
+                    "used_list",
+                        value);
+            }
+        }
+
+        // TODO: 对于外部 URL 如何做到不记载到 dp2circulation.xml 中?
         // parameters:
         //      bLogin  是否在对话框后立即登录？如果为false，表示只是设置缺省帐户，并不直接登录
         CirculationLoginDlg SetDefaultAccount(
@@ -4828,6 +5153,20 @@ Stack:
                 "location",
                 "");
 
+            // 2016/11/11
+            if (dlg.SavePasswordShort == true || dlg.SavePasswordLong == true)
+            {
+                dlg.PhoneNumber = AppInfo.GetString(
+"default_account",
+"phoneNumber",
+"");
+                // 2017/4/11
+                dlg.TempCode = AppInfo.GetString(
+"default_account",
+"tempCode",
+"");
+            }
+
             this.AppInfo.LinkFormState(dlg,
                 "logindlg_state");
 
@@ -4835,6 +5174,19 @@ Stack:
                 && dlg.SavePasswordShort == false
                 && dlg.SavePasswordLong == false)
                 dlg.AutoShowShortSavePasswordTip = true;
+
+            if (fail_contidion == LoginFailCondition.RetryLogin)
+            {
+                dlg.ActivateTempCode();
+                dlg.RetryLogin = true;
+            }
+            if (fail_contidion == LoginFailCondition.TempCodeMismatch)
+            {
+                dlg.ActivateTempCode();
+                dlg.RetryLogin = true;  // 尝试再次登录
+            }
+            if (fail_contidion == LoginFailCondition.NeedSmsLogin)
+                dlg.ActivatePhoneNumber();
 
             dlg.ShowDialog(owner);
 
@@ -4882,24 +5234,34 @@ dlg.UsedList);
                 "location",
                 dlg.OperLocation);
 
-
             // 2006/12/30 
             AppInfo.SetString(
                 "config",
                 "circulation_server_url",
                 dlg.ServerUrl);
 
+            // 2016/11/11
+            AppInfo.SetString(
+    "default_account",
+    "phoneNumber",
+    dlg.PhoneNumber);
+
+            // 2017/4/11
+            AppInfo.SetString(
+"default_account",
+"tempCode",
+dlg.TempCode);
             return dlg;
         }
 
         void AutoStartDp2libraryXE()
         {
-            string strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V2/dp2Library XE");
+            string strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V3/dp2Library XE V3");
             if (File.Exists(strShortcutFilePath) == false)
             {
                 // 安装和启动
                 DialogResult result = MessageBox.Show(this,
-"dp2libraryXE 在本机尚未安装。\r\ndp2Circulation (内务)即将访问 dp2LibraryXE 单机版服务器，需要安装它才能正常使用。\r\n\r\n是否立即从 dp2003.com 下载安装?",
+"dp2libraryXE V3 在本机尚未安装。\r\ndp2Circulation V3 (内务)即将访问 dp2LibraryXE V3 单机版服务器，需要安装它才能正常使用。\r\n\r\n是否立即从 dp2003.com 下载安装?",
 "dp2Circulation",
 MessageBoxButtons.YesNo,
 MessageBoxIcon.Question,
@@ -5373,7 +5735,7 @@ out strError);
             if (this.QuickPinyin != null)
                 return 0;
 
-        REDO:
+            REDO:
 
             try
             {
@@ -5424,7 +5786,7 @@ out strError);
             if (this.QuickCutter != null)
                 return 0;
 
-        REDO:
+            REDO:
 
             try
             {
@@ -5475,7 +5837,7 @@ out strError);
             if (this.QuickSjhm != null)
                 return 0;
 
-        REDO:
+            REDO:
 
             try
             {
@@ -5526,20 +5888,22 @@ out strError);
             if (this.IsbnSplitter != null)
                 return 0;
 
-        REDO:
+            string strFileName = Path.Combine(this.DataDir, "rangemessage.xml");
+
+            REDO:
 
             try
             {
-                this.IsbnSplitter = new IsbnSplitter(this.DataDir + "\\rangemessage.xml");  // "\\isbn.xml"
+                this.IsbnSplitter = new IsbnSplitter(strFileName);  // "\\isbn.xml"
             }
             catch (FileNotFoundException ex)
             {
-                strError = "装载本地 isbn 规则文件 rangemessage.xml 发生错误 :" + ex.Message;
+                strError = "装载本地 isbn 规则文件 " + strFileName + " 发生错误 :" + ex.Message;
 
                 if (bAutoDownload == true)
                 {
                     string strError1 = "";
-                    int nRet = this.DownloadDataFile("rangemessage.xml",    // "isbn.xml"
+                    int nRet = this.DownloadDataFile(Path.GetFileName(strFileName),    // "isbn.xml"
                         out strError1);
                     if (nRet == -1)
                     {
@@ -5831,7 +6195,7 @@ out strError);
         // 
         /// <summary>
         /// GCAT通用汉语著者号码表 WebService URL
-        /// 缺省为 http://dp2003.com/gcatserver/
+        /// 缺省为 http://dp2003.com/dp2library/
         /// </summary>
         public string GcatServerUrl
         {
@@ -5839,13 +6203,13 @@ out strError);
             {
                 return this.AppInfo.GetString("config",
                     "gcat_server_url",
-                    "http://dp2003.com/gcatserver/");
+                    "http://dp2003.com/dp2library/");
             }
         }
 
         /// <summary>
         /// 拼音服务器 URL。
-        /// 缺省为 http://dp2003.com/gcatserver/
+        /// 缺省为 http://dp2003.com/dp2library/
         /// </summary>
         public string PinyinServerUrl
         {
@@ -5853,7 +6217,7 @@ out strError);
             {
                 return this.AppInfo.GetString("config",
                     "pinyin_server_url",
-                    "http://dp2003.com/gcatserver/");
+                    "http://dp2003.com/dp2library/");
             }
         }
 
@@ -5920,7 +6284,7 @@ out strError);
             string strFilePath = "";
             int nRedoCount = 0;
             string strDir = PathUtil.MergePath(this.DataDir, strDirName);
-            PathUtil.CreateDirIfNeed(strDir);
+            PathUtil.TryCreateDir(strDir);
             for (int i = 0; ; i++)
             {
                 strFilePath = PathUtil.MergePath(strDir, strFilenamePrefix + (i + 1).ToString());
@@ -6031,7 +6395,7 @@ out strError);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6186,7 +6550,7 @@ out strError);
             if (m_propertyViewer.Text == strTitle)
                 return;
 
-            m_propertyViewer.MainForm = this;  // 必须是第一句
+            // m_propertyViewer.MainForm = this;  // 必须是第一句
 
             if (string.IsNullOrEmpty(strTitle) == true
                 && string.IsNullOrEmpty(strHtml) == true
@@ -6900,7 +7264,7 @@ out strError);
         {
             get
             {
-                // string strDir = PathUtil.MergePath(this.MainForm.DataDir, "fingerprintcache");
+                // string strDir = PathUtil.MergePath(Program.MainForm.DataDir, "fingerprintcache");
                 return PathUtil.MergePath(this.UserDir, "fingerprintcache");   // 2013/6/16
             }
         }
@@ -6948,6 +7312,26 @@ out strError);
             }
         }
 
+        // 保存封面扫描的原始图像
+        public bool SaveOriginCoverImage
+        {
+            get
+            {
+                return this.AppInfo.GetBoolean(
+                    "global",
+                    "save_orign_cover_image",
+                    false);
+            }
+            set
+            {
+                this.AppInfo.SetBoolean(
+                    "global",
+                    "save_orign_cover_image",
+                    value);
+            }
+        }
+
+
         // 初始化指纹缓存
         private void MenuItem_initFingerprintCache_Click(object sender, EventArgs e)
         {
@@ -6956,17 +7340,16 @@ out strError);
             form.MdiParent = this;
             form.Show();
 
-            string strError = "";
             // return:
-            //      -2  remoting服务器连接失败。驱动程序尚未启动
+            //      -2  remoting服务器连接失败。指纹接口程序尚未启动
             //      -1  出错
-            //      0   成功
-            int nRet = form.InitFingerprintCache(false, out strError);
-            if (nRet == -1 || nRet == -2)
+            //      >=0   成功
+            int nRet = form.InitFingerprintCache(false, out string strError);
+            if (nRet < 0)
                 goto ERROR1;
             form.Close();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             form.Close();
         }
@@ -6989,18 +7372,18 @@ out strError);
 
             // TODO: 显示正在初始化，不要关闭窗口
             // return:
-            //      -2  remoting服务器连接失败。驱动程序尚未启动
+            //      -2  remoting服务器连接失败。指纹接口程序尚未启动
             //      -1  出错
-            //      0   成功
+            //      >=0   成功
             int nRet = form.InitFingerprintCache(true, out strError);
-            if (nRet == -1 || nRet == -2)
+            if (nRet < 0)
             {
                 strError = "初始化指纹缓存失败: " + strError;
                 goto ERROR1;
             }
             form.Close();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             form.Close();
         }
@@ -7019,7 +7402,6 @@ out strError);
             }
         }
 
-        // 
         /// <summary>
         /// 指纹阅读器 URL
         /// </summary>
@@ -7030,6 +7412,19 @@ out strError);
                 return this.AppInfo.GetString("fingerprint",
                     "fingerPrintReaderUrl",
                     "");  // 常用值 "ipc://FingerprintChannel/FingerprintServer"
+            }
+        }
+
+        /// <summary>
+        /// 人脸识别接口 URL
+        /// </summary>
+        public string FaceReaderUrl
+        {
+            get
+            {
+                return this.AppInfo.GetString("face",
+                    "faceReaderUrl",
+                    "");  // 常用值 "ipc://FaceChannel/FaceServer"
             }
         }
 
@@ -7073,6 +7468,27 @@ out strError);
                     "fingerprint",
                     "password",
                     strPassword);
+            }
+        }
+
+        public bool UpperInputBarcode
+        {
+            get
+            {
+                if (this.AppInfo == null)
+                    return true;
+                return this.AppInfo.GetBoolean(
+    "global",
+    "upper_input_barcode",
+    true);
+            }
+            set
+            {
+                if (this.AppInfo != null)
+                    this.AppInfo.SetBoolean(
+        "global",
+        "upper_input_barcode",
+        value);
             }
         }
 
@@ -7123,14 +7539,50 @@ out strError);
             }
         }
 
+        /*
+操作类型 crashReport -- 异常报告 
+主题 dp2circulation 
+发送者 xxx
+媒体类型 text 
+内容 发生未捕获的异常: 
+Type: System.InvalidCastException
+Message: 无法将类型为“System.__ComObject”的 COM 对象强制转换为接口类型“System.Speech.Internal.SapiInterop.ISpDataKey”。此操作失败的原因是对 IID 为“{14056581-E16C-11D2-BB90-00C04F8EE6C0}”的接口的 COM 组件调用 QueryInterface 因以下错误而失败: 不支持此接口 (异常来自 HRESULT:0x80004002 (E_NOINTERFACE))。
+Stack:
+在 System.Windows.Forms.Control.MarshaledInvoke(Control caller, Delegate method, Object[] args, Boolean synchronous)
+在 System.Windows.Forms.Control.Invoke(Delegate method, Object[] args)
+在 dp2Circulation.QuickChargingForm.DisplayTask(String strAction, ChargingTask task)
+在 dp2Circulation.TaskList.Return(ChargingTask task)
+在 dp2Circulation.TaskList.Worker()
+在 DigitalPlatform.ThreadBase.ThreadMain()
+在 System.Threading.ThreadHelper.ThreadStart_Context(Object state)
+在 System.Threading.ExecutionContext.RunInternal(ExecutionContext executionContext, ContextCallback callback, Object state, Boolean preserveSyncCtx)
+在 System.Threading.ExecutionContext.Run(ExecutionContext executionContext, ContextCallback callback, Object state, Boolean preserveSyncCtx)
+在 System.Threading.ExecutionContext.Run(ExecutionContext executionContext, ContextCallback callback, Object state)
+在 System.Threading.ThreadHelper.ThreadStart()
+
+
+dp2Circulation 版本: dp2Circulation, Version=2.30.6509.21065, Culture=neutral, PublicKeyToken=null
+操作系统：Microsoft Windows NT 6.1.7601 Service Pack 1
+本机 MAC 地址: xxx 
+操作时间 2017/11/13 16:16:00 (Mon, 13 Nov 2017 16:16:00 +0800) 
+前端地址 xxx 经由 http://dp2003.com/dp2library 
+
+         * */
         /// <summary>
         /// 朗读
         /// </summary>
         /// <param name="strText">要朗读的文本</param>
         public void Speak(string strText)
         {
-            this.m_speech.SpeakAsyncCancelAll();
-            this.m_speech.SpeakAsync(strText);
+            try
+            {
+                this.m_speech.SpeakAsyncCancelAll();
+                this.m_speech.SpeakAsync(strText);
+            }
+            catch (InvalidCastException ex)
+            {
+                // 如何显示出错信息?
+            }
             // MessageBox.Show(this, strText);
         }
 
@@ -7200,6 +7652,12 @@ out strError);
 
         private void MenuItem_importExport_Click(object sender, EventArgs e)
         {
+            if (StringUtil.CompareVersion(this.ServerVersion, "2.111") < 0)
+            {
+                MessageBox.Show(this, "dp2library 2.111 及以上版本才能使用 从书目转储文件导入窗");
+                return;
+            }
+
             OpenWindow<ImportExportForm>();
         }
 
@@ -7264,7 +7722,7 @@ Keys keyData)
             OpenWindow<MessageForm>();
         }
 
-        #region 序列号机制
+#region 序列号机制
 
         bool _testMode = false;
 
@@ -7305,11 +7763,11 @@ Keys keyData)
             }
 
             if (this.TestMode == true)
-                this.Text = "dp2Circulation V2 -- 内务 [评估模式]";
+                this.Text = "dp2Circulation V3 -- 内务 [评估模式]";
             else if (this.CommunityMode == true)
-                this.Text = "dp2Circulation V2 -- 内务 [社区版]";
+                this.Text = "dp2Circulation V3 -- 内务 [社区版]";
             else
-                this.Text = "dp2Circulation V2 -- 内务 [专业版]";
+                this.Text = "dp2Circulation V3 -- 内务 [专业版]";
         }
 
 #if SN
@@ -7368,7 +7826,7 @@ Keys keyData)
             {
             }
 
-        REDO_VERIFY:
+            REDO_VERIFY:
 
             if (strSerialCode == "test")
             {
@@ -7404,7 +7862,7 @@ Keys keyData)
             //string strSha1 = Cryptography.GetSHA1(StringUtil.SortParams(strLocalString) + "_reply");
 
             if (CheckFunction(GetEnvironmentString(""), strRequirFuncList) == false ||
-                // strSha1 != GetCheckCode(strSerialCode)
+                    // strSha1 != GetCheckCode(strSerialCode)
                     MatchLocalString(strSerialCode) == false
                     || String.IsNullOrEmpty(strSerialCode) == true)
             {
@@ -7549,7 +8007,7 @@ Keys keyData)
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.OriginCode = strOriginCode;
 
-        REDO:
+            REDO:
             dlg.ShowDialog(this);
             if (dlg.DialogResult != DialogResult.OK)
                 return 0;
@@ -7583,7 +8041,7 @@ Keys keyData)
 
 #endif
 
-        #endregion
+#endregion
 
         private void MenuItem_resetSerialCode_Click(object sender, EventArgs e)
         {
@@ -7602,7 +8060,7 @@ Keys keyData)
             string strRequirFuncList = "";  // 因为这里是设置通用的序列号，不具体针对哪个功能，所以对设置后，序列号的功能不做检查。只有等到用到具体功能的时候，才能发现序列号是否包含具体功能的 function = ... 参数
 
             string strSerialCode = "";
-        REDO_VERIFY:
+            REDO_VERIFY:
 
             if (strSerialCode == "test")
             {
@@ -7632,7 +8090,7 @@ Keys keyData)
             //string strSha1 = Cryptography.GetSHA1(StringUtil.SortParams(strLocalString) + "_reply");
 
             if (CheckFunction(GetEnvironmentString(""), strRequirFuncList) == false ||
-                // strSha1 != GetCheckCode(strSerialCode) 
+                    // strSha1 != GetCheckCode(strSerialCode) 
                     MatchLocalString(strSerialCode) == false
                     || String.IsNullOrEmpty(strSerialCode) == true)
             {
@@ -7664,7 +8122,7 @@ Keys keyData)
                 goto REDO_VERIFY;
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
 #endif
         }
@@ -7690,7 +8148,7 @@ Keys keyData)
             return Path.Combine(this.UserTempDir, "~" + strPrefix + Guid.NewGuid().ToString());
         }
 
-        #region servers.xml
+#region servers.xml
 
         // HnbUrl.HnbUrl
 
@@ -7983,7 +8441,7 @@ Keys keyData)
             return this._currentUserRights;
         }
 
-        #endregion // servers.xml
+#endregion // servers.xml
 
         private void MainForm_Resize(object sender, EventArgs e)
         {
@@ -8018,7 +8476,7 @@ Keys keyData)
 #endif
         }
 
-        #region 消息过滤
+#region 消息过滤
 
 #if NO
         public event MessageFilterEventHandler MessageFilter = null;
@@ -8033,11 +8491,11 @@ Keys keyData)
                 // Blocks all the messages relating to the left mouse button. 
                 if (m.Msg >= 513 && m.Msg <= 515)
                 {
-                    if (this.MainForm.MessageFilter != null)
+                    if (Program.MainForm.MessageFilter != null)
                     {
                         MessageFilterEventArgs e = new MessageFilterEventArgs();
                         e.Message = m;
-                        this.MainForm.MessageFilter(this, e);
+                        Program.MainForm.MessageFilter(this, e);
                         m = e.Message;
                         return e.ReturnValue;
                     }
@@ -8048,7 +8506,7 @@ Keys keyData)
 
 #endif
 
-        #endregion
+#endregion
 
         /// <summary>
         /// 获得当前 dp2library 服务器相关的本地配置目录路径。这是在用户目录中用 URL 映射出来的子目录名
@@ -8059,7 +8517,7 @@ Keys keyData)
             {
                 string strServerUrl = ReportForm.GetValidPathString(this.LibraryServerUrl.Replace("/", "_"));
                 string strDirectory = Path.Combine(this.UserDir, "servers\\" + strServerUrl);
-                PathUtil.CreateDirIfNeed(strDirectory);
+                PathUtil.TryCreateDir(strDirectory);
                 return strDirectory;
             }
         }
@@ -8084,19 +8542,91 @@ Keys keyData)
             OpenWindow<ReservationListForm>();
         }
 
+        // 不会抛出异常的版本
+        public static void TryWriteErrorLog(string strText)
+        {
+            try
+            {
+                WriteErrorLog(strText);
+            }
+            catch (Exception ex)
+            {
+                Program.WriteWindowsLog("因为原本要写入日志文件的操作发生异常， 所以不得不改为写入 Windows 日志(见后一条)。异常信息如下：'" + ExceptionUtil.GetDebugText(ex) + "'", EventLogEntryType.Error);
+                Program.WriteWindowsLog(strText, EventLogEntryType.Error);
+            }
+        }
+
+        static ILog _log = null;
+
+        public static ILog Log
+        {
+            get
+            {
+                return _log;
+            }
+        }
+
+        // 写入错误日志文件
+        public static void WriteErrorLog(string strText)
+        {
+            WriteLog("error", strText);
+        }
+
+        public static void WriteInfoLog(string strText)
+        {
+            WriteLog("info", strText);
+        }
+
+        // 写入错误日志文件
+        // parameters:
+        //      level   info/error
+        // Exception:
+        //      可能会抛出异常
+        public static void WriteLog(string level, string strText)
+        {
+            // Console.WriteLine(strText);
+
+            if (_log == null) // 先前写入实例的日志文件发生过错误，所以改为写入 Windows 日志。会加上实例名前缀字符串
+                Program.WriteWindowsLog(strText, EventLogEntryType.Error);
+            else
+            {
+                // 注意，这里不捕获异常
+                if (level == "info")
+                    _log.Info(strText);
+                else
+                    _log.Error(strText);
+            }
+        }
+
+        // 写入 Windows 日志
+        public static void WriteWindowsLog(string strText)
+        {
+            Program.WriteWindowsLog(strText, EventLogEntryType.Error);
+        }
+
+#if NO
+        private static readonly Object _syncRoot_errorLog = new Object(); // 2018/6/26
+
         // 写入日志文件。每天创建一个单独的日志文件
+        // Exception:
+        //      可能会抛出异常。
+        //      System.UnauthorizedAccessException 对路径的访问被拒绝。
         public void WriteErrorLog(string strText)
         {
             if (string.IsNullOrEmpty(this.UserLogDir) == true)
                 throw new ArgumentException("this.UserLogDir 不应为空");
 
+            // Exception:
+            //      可能会抛出异常。
+            //      System.UnauthorizedAccessException 对路径的访问被拒绝。
             FileUtil.WriteErrorLog(
-                this.UserLogDir,
+                _syncRoot_errorLog,// 多线程同时写入错误日志的时候，可能会造成冲突
                 this.UserLogDir,
                 strText,
                 "log_",
                 ".txt");
         }
+#endif
 
         // 打包错误日志
         private void menuItem_packageErrorLog_Click(object sender, EventArgs e)
@@ -8117,7 +8647,7 @@ Keys keyData)
             try
             {
                 string strTempDir = Path.Combine(this.UserTempDir, "~zip_events");
-                PathUtil.CreateDirIfNeed(strTempDir);
+                PathUtil.TryCreateDir(strTempDir);
 
                 string strZipFileName = Path.Combine(strTempDir, "dp2circulation_eventlog.zip");
 
@@ -8171,7 +8701,7 @@ Keys keyData)
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -8239,14 +8769,14 @@ Keys keyData)
                 Process.Start(strUrl);
 #endif
 
-                string strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V2/dp2内务 V2");
+                string strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V3/dp2内务 V3");
                 if (File.Exists(strShortcutFilePath) == false)
                 {
                     return 0;
                 }
                 else
                 {
-                    Process.Start(strShortcutFilePath);
+                    ProcessStart(strShortcutFilePath);  // Process.Start
                     return 1;
                 }
             }
@@ -8254,6 +8784,31 @@ Keys keyData)
             {
                 MessageBox.Show(this, "dp2circulation 启动失败" + ex.Message);
                 return -1;
+            }
+        }
+
+        static bool ProcessStart(string filename, string arguments = "")
+        {
+            ProcessStartInfo startinfo = new ProcessStartInfo();
+            startinfo.FileName = filename;
+            startinfo.Arguments = arguments;
+            {
+                startinfo.UseShellExecute = true;   // 看看这样启动是否还会抛出异常
+                // startinfo.CreateNoWindow = true;
+            }
+
+            Process process = new Process();
+            process.StartInfo = startinfo;
+            process.EnableRaisingEvents = true;
+
+            try
+            {
+                process.Start();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
@@ -8303,7 +8858,7 @@ Keys keyData)
             {
                 bNew = true;
                 m_commentViewer = new CommentViewerForm();
-                m_commentViewer.MainForm = this;  // 必须是第一句
+                // m_commentViewer.MainForm = this;  // 必须是第一句
 
                 m_commentViewer.FormClosed -= new FormClosedEventHandler(marc_viewer_FormClosed);
                 m_commentViewer.FormClosed += new FormClosedEventHandler(marc_viewer_FormClosed);
@@ -8347,7 +8902,7 @@ Keys keyData)
         {
             if (m_commentViewer != null)
             {
-                // this.MainForm.AppInfo.UnlinkFormState(m_commentViewer);
+                // Program.MainForm.AppInfo.UnlinkFormState(m_commentViewer);
                 this.m_commentViewer = null;
             }
         }
@@ -8383,6 +8938,416 @@ Keys keyData)
             this.ServerUID = Guid.NewGuid().ToString();
         }
 
+        private void MenuItem_batchOrder_Click(object sender, EventArgs e)
+        {
+#if NO
+            if (StringUtil.CompareVersion(this.ServerVersion, "2.47") < 0)
+            {
+                MessageBox.Show(this, "dp2library 版本 2.47 和以上才能使用 批订购窗");
+                return;
+            }
+#endif
+            OpenWindow<BatchOrderForm>();
+        }
+
+        public delegate void ProcessOrderRecord(
+    string strBiblioRecPath,
+    string strOrderRecPath,
+    string strDistributeString,
+    Dictionary<string, string> content_table
+    );
+
+        // 从订购去向 Excel 文件导入
+        private void MenuItem_importFromOrderDistributeExcelFile_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            int nIgnoreCount = 0;   // 被忽略导入的订购记录数。包含在 nOrderCount 中
+            int nOrderCount = 0;    // 处理过的订购记录数
+            int nNewOrderCount = 0; // 新创建的订购记录数。包含在 nOrderCount 中
+            bool bHideMessageBox = false;
+            DialogResult result = DialogResult.Yes;
+
+            Program.MainForm.OperHistory.AppendHtml("<div class='debug begin'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
++ " 开始从 Excel 文件导入</div>");
+
+            LibraryChannel channel = this.GetChannel();
+            Stop.OnStop += new StopEventHandler(this.DoStop);
+            Stop.Initial("正在导入 Excel 文件 ...");
+            Stop.BeginLoop();
+            try
+            {
+                // return:
+                //      -1  导入过程出错，并且本函数已经 MessageBox 报错了
+                //      0   放弃导入
+                //      1   导入完成
+                int nImportResult = Order.DistributeExcelFile.ImportFromOrderDistributeExcelFile(
+                    (strBiblioRecPath, strOrderRecPath, strDistributeString, order_content_table, orderRecPathCell, copyCell) =>
+                    {
+                        Order.DistributeExcelFile.WarningRecPath("===", null);
+                        Order.DistributeExcelFile.WarningRecPath("订购记录 " + strOrderRecPath, null);
+
+                        string strOldXml = "";
+                        byte[] timestamp = null;
+                        if (string.IsNullOrEmpty(strOrderRecPath) == false)
+                        {
+                            long lRet = channel.GetRecord(Stop,
+                                strOrderRecPath,
+                                out timestamp,
+                                out strOldXml,
+                                out strError);
+                            if (lRet == -1)
+                                throw new Exception(strError);
+                        }
+                        else
+                            strOldXml = "<root />";
+
+                        XmlDocument dom = new XmlDocument();
+                        dom.LoadXml(strOldXml);
+
+                        // 清除空元素
+                        DomUtil.RemoveEmptyElements(dom.DocumentElement);
+                        strOldXml = dom.DocumentElement.OuterXml;   // strOldXml 中的内容形态规范化一下。避免含有 prolog 影响比较
+
+                        // 检查 strOldXml 中的 state 是否已经变得不适合导入？比如 state 已经变为“已订购”
+                        string strState = DomUtil.GetElementText(dom.DocumentElement, "state");
+                        if (string.IsNullOrEmpty(strState) == false)
+                        {
+                            strError = string.Format("订购记录 {0} 因状态为 '{1}'，无法被来自 Excel 文件中的内容覆盖修改", strOrderRecPath, strState);
+
+                            if (bHideMessageBox == false)
+                                result = MessageDialog.Show(this,
+                                    strError + "\r\n\r\n是否继续处理其它记录?",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxDefaultButton.Button1,
+                    "不再显示本对话框",
+                    ref bHideMessageBox,
+                    new string[] { "跳过并继续", "中断处理" });
+
+                            if (result == DialogResult.No)
+                                throw new Exception("中断处理");
+                            return;
+                        }
+
+                        foreach (string key in order_content_table.Keys)
+                        {
+                            if (key == "recpath" || key == "state")
+                                continue;
+                            // copy 字段内容在此先兑现修改了
+                            // TODO: 是否要检查元素名的合法性?
+                            DomUtil.SetElementText(dom.DocumentElement, key, order_content_table[key]);
+                        }
+
+
+                        LocationCollection locations = new LocationCollection();
+                        int nRet = locations.Build(strDistributeString, out strError);
+                        if (nRet == -1)
+                            throw new Exception(strError);
+
+                        bool bCopyChanged = false;
+
+                        DomUtil.SetElementText(dom.DocumentElement, "distribute", strDistributeString);
+
+                        // 如果存在 copyItems， 用 copyItems 值替换 copy 中的 3*5 的 5 部分
+                        if (order_content_table.ContainsKey("copyItems"))
+                        {
+                            string strCopyItems = DomUtil.GetElementText(dom.DocumentElement, "copyItems");
+                            if (string.IsNullOrEmpty(strCopyItems) == true)
+                                strCopyItems = "1";
+
+                            {
+                                string old_value = DomUtil.GetElementText(dom.DocumentElement, "copy");
+                                string new_value = ChangeCopyStringItemsPart(old_value, strCopyItems);
+                                if (old_value != new_value)
+                                {
+                                    DomUtil.SetElementText(dom.DocumentElement, "copy", new_value);
+                                    bCopyChanged = true;
+                                }
+                            }
+
+                            DomUtil.DeleteElement(dom.DocumentElement, "copyItems");
+                        }
+
+                        // 注: copyNumber 元素不用考虑，因为这个值会被馆藏字符串计算后的个数覆盖
+                        if (order_content_table.ContainsKey("copyNumber"))
+                            DomUtil.DeleteElement(dom.DocumentElement, "copyNumber");
+
+                        {
+                            // 注意复本数除了纯数字以外，还有 3*5 形态。此外还有订购复本和验收复本共存的情况(order[accept])。 需要重新合成字符串
+                            string strOldCopyString = DomUtil.GetElementText(dom.DocumentElement, "copy");
+                            string strNewCopyString = ChangeCopyStringCopyPart(strOldCopyString, locations.Count.ToString());
+                            if (strOldCopyString != strNewCopyString)
+                            {
+                                DomUtil.SetElementText(dom.DocumentElement, "copy", strNewCopyString);
+                                bCopyChanged = true;
+                            }
+                        }
+
+                        if (string.IsNullOrEmpty(strOrderRecPath))
+                        {
+                            // strOrderRecPath = this.GetOrderDbName(Global.GetDbName(strBiblioRecPath)) + "/?";    // 拟新创建的订购记录路径为空，API 也能从书目记录路径中自动推导出来
+                            strOldXml = "";
+                        }
+
+                        string strNewXml = dom.DocumentElement.OuterXml;
+                        // 检查新旧记录是否发生了实质性修改
+                        if (strOldXml == strNewXml)
+                        {
+                            nIgnoreCount++;
+                            Order.DistributeExcelFile.Warning("订购记录没有发生实质性修改，忽略导入");
+                            goto CONTINUE;
+                        }
+
+                        // return:
+                        //      -2  码洋和订购价货币单位不同，无法进行校验。
+                        //      -1  校验过程出错
+                        //      0   校验发现三者关系不正确
+                        //      1   校验三者关系正确
+                        nRet = BiblioSearchForm.VerifyThreeFields(dom, out strError);
+                        if (nRet == 0 || nRet == -1)
+                            throw new Exception("(订购记录 '" + strOrderRecPath + "') " + strError);
+
+                        nRet = SaveItemRecord(channel,
+        strBiblioRecPath,
+"order",
+strOrderRecPath,
+strOldXml,
+strNewXml,
+"",
+timestamp,
+out string strOutputOrderRecPath,
+out byte[] baNewTimestamp,
+out strError);
+                        if (nRet == -1)
+                            throw new Exception(strError);
+
+                        Order.DistributeExcelFile.WarningGreen("保存订购记录如下：");
+                        Order.DistributeExcelFile.WarningRecPath(strOutputOrderRecPath, DomUtil.GetIndentXml(DomUtil.RemoveEmptyElements(strNewXml)));
+
+                        if (string.IsNullOrEmpty(strOrderRecPath) == true || strOrderRecPath.IndexOf("?") != -1)
+                        {
+                            orderRecPathCell.SetValue<string>(strOutputOrderRecPath);
+                            nNewOrderCount++;
+                        }
+                        if (bCopyChanged && copyCell != null)
+                            copyCell.SetValue<string>(DomUtil.GetElementText(dom.DocumentElement, "copy"));
+
+                        CONTINUE:
+                        nOrderCount++;
+
+                        // TODO: 显示进度，或可以用 旋转木马进度条，或者只用文字提示进度
+                    });
+
+                // 提示完成和统计信息
+                if (nImportResult == 1)
+                {
+                    string strText = string.Format("导入完成。\r\n\r\n共处理订购记录 {0} 条，修改 {1} 条。其中新创建订购记录 {2} 条，其余的是根据 Excel 文件内容覆盖修改订购库中的已有订购记录",
+                        nOrderCount, nOrderCount - nIgnoreCount, nNewOrderCount);
+                    Order.DistributeExcelFile.WarningRecPath(strText, null);
+                    MessageDialog.Show(this, strText);
+                }
+            }
+            finally
+            {
+                Stop.EndLoop();
+                Stop.OnStop -= new StopEventHandler(this.DoStop);
+                Stop.Initial("");
+
+                this.ReturnChannel(channel);
+
+                Program.MainForm.OperHistory.AppendHtml("<div class='debug end'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
+    + " 结束从 Excel 文件导入</div>");
+
+            }
+
+        }
+
+        // 修改复本字符串中，订购复本数部分的套数数字
+        // 12[13] 的 12; 或者 3*5[4*5] 的 3
+        // return:
+        //      返回修改后的值
+        static string ChangeCopyStringCopyPart(string strText, string strCopy)
+        {
+            // 分离 "old[new]" 内的两个值
+            dp2StringUtil.ParseOldNewValue(strText,
+                out string strOldCopy,
+                out string strNewCopy);
+
+#if NO
+            // 对 strOldCopy 进一步分解
+            // string strLeft = OrderDesignControl.GetCopyFromCopyString(strOldCopy);
+            // string strRight = OrderDesignControl.GetRightFromCopyString(strOldCopy);
+#endif
+
+            strOldCopy = dp2StringUtil.ModifyCopy(strOldCopy, strCopy);
+
+            return dp2StringUtil.LinkOldNewValue(strOldCopy, strNewCopy);
+        }
+
+        // 修改复本字符串中，订购复本数部分的每套册数
+        // 12[13] 的 1(暗含); 或者 3*5[4*5] 的 5
+        // return:
+        //      返回修改后的值
+        static string ChangeCopyStringItemsPart(string strText, string strItems)
+        {
+            // 分离 "old[new]" 内的两个值
+            dp2StringUtil.ParseOldNewValue(strText,
+                out string strOldCopy,
+                out string strNewCopy);
+
+            strOldCopy = dp2StringUtil.ModifyRightCopy(strOldCopy, strItems);
+
+            return dp2StringUtil.LinkOldNewValue(strOldCopy, strNewCopy);
+        }
+
+        // TODO: 移入通道函数库
+        public int SaveItemRecord(
+    LibraryChannel channel,
+    string strBiblioRecPath,
+    string strDbType,
+    string strRecPath,
+    string strOldXml,
+    string strNewXml,
+    string strStyle,
+    byte[] baTimestamp,
+    out string strOutputRecPath,
+    out byte[] baNewTimestamp,
+    out string strError)
+        {
+            strError = "";
+            baNewTimestamp = null;
+            strOutputRecPath = "";
+
+            List<EntityInfo> entityArray = new List<EntityInfo>();
+
+            {
+                EntityInfo item_info = new EntityInfo();
+
+                item_info.OldRecPath = strRecPath;
+
+                if (string.IsNullOrEmpty(strRecPath) == false
+                    && strRecPath.IndexOf("?") == -1)
+                {
+                    if (StringUtil.IsInList("force", strStyle))
+                        item_info.Action = "forcechange";
+                    else
+                        item_info.Action = "change";
+
+                    strOutputRecPath = strRecPath;
+                }
+                else
+                    item_info.Action = "new";
+
+                item_info.NewRecPath = strRecPath;
+
+                item_info.NewRecord = strNewXml;
+                item_info.NewTimestamp = null;
+
+                item_info.OldRecord = strOldXml;
+                item_info.OldTimestamp = baTimestamp;
+
+                entityArray.Add(item_info);
+            }
+
+            // 复制到目标
+            EntityInfo[] entities = null;
+            entities = new EntityInfo[entityArray.Count];
+            for (int i = 0; i < entityArray.Count; i++)
+            {
+                entities[i] = entityArray[i];
+            }
+
+            EntityInfo[] errorinfos = null;
+
+            long lRet = 0;
+
+            if (strDbType == "item")
+                lRet = channel.SetEntities(
+                     null,   // this.BiblioStatisForm.stop,
+                     strBiblioRecPath,
+                     entities,
+                     out errorinfos,
+                     out strError);
+            else if (strDbType == "order")
+                lRet = channel.SetOrders(
+                     null,   // this.BiblioStatisForm.stop,
+                     strBiblioRecPath,
+                     entities,
+                     out errorinfos,
+                     out strError);
+            else if (strDbType == "issue")
+                lRet = channel.SetIssues(
+                     null,   // this.BiblioStatisForm.stop,
+                     strBiblioRecPath,
+                     entities,
+                     out errorinfos,
+                     out strError);
+            else if (strDbType == "comment")
+                lRet = channel.SetComments(
+                     null,   // this.BiblioStatisForm.stop,
+                     strBiblioRecPath,
+                     entities,
+                     out errorinfos,
+                     out strError);
+            else
+            {
+                strError = "未知的数据库类型 '" + strDbType + "'";
+                return -1;
+            }
+            if (lRet == -1)
+                return -1;
+
+            // string strWarning = ""; // 警告信息
+
+            if (errorinfos == null)
+                return 0;
+
+            strError = "";
+            {
+                int i = 0;
+                foreach (EntityInfo errorinfo in errorinfos)
+                {
+                    if (i == 0)
+                    {
+                        baNewTimestamp = errorinfo.NewTimestamp;
+                        strOutputRecPath = errorinfo.NewRecPath;
+                    }
+
+                    // 正常信息处理
+                    if (errorinfo.ErrorCode == ErrorCodeValue.NoError)
+                        continue;
+
+                    strError += errorinfo.RefID + "在提交保存过程中发生错误 -- " + errorinfo.ErrorInfo + "\r\n";
+
+                    i++;
+                }
+            }
+
+            //if (baNewTimestamp != null) // 2016/9/3
+            //    info.Timestamp = baNewTimestamp;    // 2013/10/17
+
+            if (String.IsNullOrEmpty(strError) == false)
+                return -1;
+
+            return 0;
+        }
+
+        // 从 MARC 文件导入
+        private void MenuItem_importFromMarc_Click(object sender, EventArgs e)
+        {
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "3.6") >= 0)
+                OpenWindow<ImportMarcForm>();
+            else
+                MessageBox.Show(this, "本功能只能和 dp2library 3.6 及以上版本配套使用");
+        }
+
+        private void MenuItem_openAuthoritySearchForm_Click(object sender, EventArgs e)
+        {
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "3.6") >= 0)
+                OpenWindow<AuthoritySearchForm>();
+            else
+                MessageBox.Show(this, "本功能只能和 dp2library 3.6 及以上版本配套使用");
+        }
     }
 
     /// <summary>
@@ -8474,6 +9439,12 @@ Keys keyData)
         /// 是否参与流通
         /// </summary>
         public bool InCirculation = true;  // 是否参与流通 2009/10/23 
+
+        // 2018/9/25
+        /// <summary>
+        /// 用途
+        /// </summary>
+        public string Usage { get; set; }
     }
 
     // 
@@ -8629,6 +9600,10 @@ Keys keyData)
         /// 私有字体集合
         /// </summary>
         public static PrivateFontCollection PrivateFonts = new PrivateFontCollection();
+
+        // 2017/2/27 注：私有字体用一般的 new Font(strFontName 方法无法正确创建字体，要用特定的 FontFamily 创建才行
+        //public static FontFamily BarcodeFontFamily = null;
+        //public static FontFamily OcrBFontFamily = null;
     }
 
     /// <summary>
@@ -8637,5 +9612,50 @@ Keys keyData)
     [System.Runtime.CompilerServices.CompilerGenerated]
     class NamespaceDoc
     {
+    }
+
+#if NO
+    /// <summary>
+    /// 询问记录的事件
+    /// </summary>
+    /// <param name="sender">发送者</param>
+    /// <param name="e">事件参数</param>
+    public delegate void AskRecordsEventHandle(object sender,
+    AskRecordsEventArgs e);
+
+    /// <summary>
+    /// 询问记录的参数
+    /// </summary>
+    public class AskRecordsEventArgs : EventArgs
+    {
+        // [in]
+        // recpath --> condition --> action
+        public List<RecordAction> Actions { get; set; }
+
+        // [out]
+        public bool Canceled { get; set; }
+        // [out]
+        public string ErrorInfo { get; set; }
+    }
+
+    public class RecordAction
+    {
+        public string RecPath { get; set; }
+        public string Condition { get; set; }   // editing/changed
+        public string Action { get; set; }      // close
+    }
+
+#endif
+
+    public class RecordForm
+    {
+        public string RecPath { get; set; }
+        public Form Form { get; set; }
+
+        public RecordForm(string recpath, Form form)
+        {
+            RecPath = recpath;
+            Form = form;
+        }
     }
 }

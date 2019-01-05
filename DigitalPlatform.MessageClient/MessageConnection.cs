@@ -1,4 +1,6 @@
-﻿using System;
+﻿// #define TIMER
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,7 +34,9 @@ namespace DigitalPlatform.MessageClient
             set;
         }
 
+#if TIMER
         System.Timers.Timer _timer = new System.Timers.Timer();
+#endif
 
         bool _exiting = false;  // 是否处在正在退出过程
 
@@ -63,8 +67,10 @@ namespace DigitalPlatform.MessageClient
 
         public virtual void Initial()
         {
+#if TIMER
             _timer.Interval = 1000 * 30;
             _timer.Elapsed += _timer_Elapsed;
+#endif
 
             if (string.IsNullOrEmpty(this.dp2MServerUrl) == false)
             {
@@ -110,7 +116,9 @@ namespace DigitalPlatform.MessageClient
 
         public virtual void Destroy()
         {
+#if TIMER
             _timer.Stop();
+#endif
             _exiting = true;
             CloseConnection();
         }
@@ -140,7 +148,7 @@ namespace DigitalPlatform.MessageClient
 
         #endregion
 
-        StreamWriter _writer = null;
+        // StreamWriter _writer = null;
 
         // 连接 server
         // 要求调用前设置好 this.ServerUrl this.UserName this.Password this.Parameters
@@ -236,8 +244,10 @@ namespace DigitalPlatform.MessageClient
                             AddErrorLine(GetExceptionText(antecendent.Exception));
                             return;
                         }
+#if TIMER
                         AddInfoLine("停止 Timer");
                         _timer.Stop();
+#endif
                         AddInfoLine("成功连接到 " + this.dp2MServerUrl);
                         // Login();
                         TriggerConnectionStateChange("Connected");
@@ -292,8 +302,10 @@ namespace DigitalPlatform.MessageClient
 
             if (_exiting == false)
             {
+#if TIMER
                 AddInfoLine("开启 Timer");
                 _timer.Start();
+#endif
             }
 
             TriggerConnectionStateChange("Closed");
@@ -878,7 +890,7 @@ errorInfo);
             }
         }
 
-        public GetUserResult GetUsers(string userName, int start, int count)
+        public Task<GetUserResult> GetUsers(string userName, int start, int count)
         {
 #if NO
             var task = HubProxy.Invoke<GetUserResult>("GetUsers",
@@ -891,10 +903,10 @@ errorInfo);
             return HubProxy.Invoke<GetUserResult>("GetUsers",
                 userName,
                 start,
-                count).Result;
+                count);
         }
 
-        public MessageResult SetUsers(string action, List<User> users)
+        public Task<MessageResult> SetUsers(string action, List<User> users)
         {
 #if NO
             var task = HubProxy.Invoke<MessageResult>("SetUsers",
@@ -905,7 +917,7 @@ errorInfo);
 #endif
             return HubProxy.Invoke<MessageResult>("SetUsers",
                 action,
-                users).Result;
+                users);
         }
 
 #if NO
@@ -1180,9 +1192,60 @@ request).Result;
         public string binding { get; set; } // 绑定信息
     }
 
+    // 2016/10/23
+    public class LoginInfo
+    {
+        public string UserName { get; set; }    // 用户名。指 dp2library 的用户名。如果 Type 为 "Patron"，表示这是一个读者。2016/10/21
+        public string UserType { get; set; }    // 用户类型。patron 表示读者，其他表示工作人员
+        public string Password { get; set; }    // 密码。如果为 null，表示用代理方式登录
+        public string Style { get; set; }       // 登录方式
+
+        public LoginInfo()
+        {
+
+        }
+
+        public LoginInfo(string userName, bool isPatron)
+        {
+            this.UserName = userName;
+            if (isPatron)
+                this.UserType = "patron";
+        }
+
+        public LoginInfo(string userName,
+            bool isPatron,
+            string password,
+            string style)
+        {
+            this.UserName = userName;
+            if (isPatron)
+                this.UserType = "patron";
+            this.Password = password;
+            this.Style = style;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder text = new StringBuilder();
+            if (string.IsNullOrEmpty(this.UserName) == false)
+                text.Append("UserName=" + this.UserName + ";");
+            if (string.IsNullOrEmpty(this.UserType) == false)
+                text.Append("UserType=" + this.UserType + ";");
+            if (string.IsNullOrEmpty(this.Password) == false)
+                text.Append("Password=" + this.Password + ";");
+            if (string.IsNullOrEmpty(this.Style) == false)
+                text.Append("Style=" + this.Style + ";");
+            return text.ToString();
+        }
+    }
+
+
     public class SearchRequest
     {
         public string TaskID { get; set; }    // 本次检索的任务 ID。由于一个 Connection 可以用于同时进行若干检索操作，本参数用于区分不同的检索操作
+
+        public LoginInfo LoginInfo { get; set; }    // 登录信息 2016/10/22
+
         public string Operation { get; set; }   // 操作名。
         public string DbNameList { get; set; }  // 数据库名列表。一般为 "<全部>"
         public string QueryWord { get; set; }   // 检索词。若为 !getResult 表示不检索、从已有结果集中获取记录
@@ -1196,6 +1259,7 @@ request).Result;
         public string ServerPushEncoding { get; set; }
 
         public SearchRequest(string taskID,
+            LoginInfo loginInfo,
             string operation,
             string dbNameList,
             string queryWord,
@@ -1209,6 +1273,7 @@ request).Result;
             string serverPushEncoding = "")
         {
             this.TaskID = taskID;
+            this.LoginInfo = loginInfo;
             this.Operation = operation;
             this.DbNameList = dbNameList;
             this.QueryWord = queryWord;

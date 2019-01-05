@@ -9,6 +9,7 @@ using System.Threading;
 using System.Diagnostics;
 
 using DigitalPlatform.GUI;
+using DigitalPlatform.Text;
 
 namespace DigitalPlatform.CommonControl
 {
@@ -132,7 +133,7 @@ namespace DigitalPlatform.CommonControl
                     this.BackColor = this.m_savedBackColor;
                  * */
 
-                base.Enabled = Enabled;
+                base.Enabled = value;   //  Enabled; BUG!!! 2017/3/5 消除
 
                 this.Invalidate();
                 this.Update();
@@ -201,29 +202,29 @@ namespace DigitalPlatform.CommonControl
 
         void OnTextBoxHeightChanged()
         {
-            if (this.m_nInHeightChanging > 0)
-                return;
+            try
+            {
+                if (this.m_nInHeightChanging > 0)
+                    return;
 
-            int nDelta = this.m_oldTextBoxLocation.Y;
+                int nDelta = this.m_oldTextBoxLocation.Y;
 
-            this.m_nInHeightChanging++;
-            this.Height = this.textBox_text.Height
-                + 2 * nDelta /*+ this.KernelMargin.Vertical*/ + this.Padding.Vertical
-                + BorderSize.Height * 2;
-            this.m_nInHeightChanging--;
+                this.m_nInHeightChanging++;
+                this.Height = this.textBox_text.Height
+                    + 2 * nDelta /*+ this.KernelMargin.Vertical*/ + this.Padding.Vertical
+                    + BorderSize.Height * 2;
+                this.m_nInHeightChanging--;
 
-            /*
-            nDelta = this.button_dropDownList.Location.Y;
-            int nCenterY = this.Height / 2;
-            this.button_dropDownList.Location = new Point(this.ClientRectangle.Width - this.button_dropDownList.Width - this.Margin.Right + this.Padding.Right,
-                nCenterY - this.button_dropDownList.Height / 2);
-             * */
+                this.textBox_text.Location = new Point(/*this.KernelMargin.Left + */this.Padding.Left + this.m_oldTextBoxLocation.X,
+                    /*this.KernelMargin.Top + */this.Padding.Top + this.m_oldTextBoxLocation.Y);
+                this.textBox_text.Width = this.Width /*- this.KernelMargin.Horizontal*/ - this.Padding.Horizontal - this.RectButton.Width - BorderSize.Width * 2 - 1;
 
-            this.textBox_text.Location = new Point(/*this.KernelMargin.Left + */this.Padding.Left + this.m_oldTextBoxLocation.X,
-                /*this.KernelMargin.Top + */this.Padding.Top + this.m_oldTextBoxLocation.Y);
-            this.textBox_text.Width = this.Width /*- this.KernelMargin.Horizontal*/ - this.Padding.Horizontal - this.RectButton.Width - BorderSize.Width * 2 - 1;
+                this.Invalidate();
+            }
+            catch
+            {
 
-            this.Invalidate();
+            }
         }
 
         Rectangle RectButton
@@ -564,5 +565,42 @@ namespace DigitalPlatform.CommonControl
             this.Margin = margin;
             this.Padding = Padding;
         }
+
+        // 处理“所有”事项和其他事项的排斥关系
+        public static void ProcessItemChecked(ItemCheckedEventArgs e, string strList)
+        {
+            ListView list = e.Item.ListView;
+
+            if (StringUtil.IsInList(e.Item.Text.ToLower(), strList))
+            {
+                if (e.Item.Checked == true)
+                {
+                    // 如果当前勾选了“全部”，则清除其余全部事项的勾选
+                    foreach (ListViewItem item in list.Items)
+                    {
+                        if (StringUtil.IsInList(item.Text.ToLower(), strList))
+                            continue;
+                        if (item.Checked != false)
+                            item.Checked = false;
+                    }
+                }
+            }
+            else
+            {
+                if (e.Item.Checked == true)
+                {
+                    // 如果勾选的不是“全部”，则要清除“全部”上可能的勾选
+                    foreach (ListViewItem item in list.Items)
+                    {
+                        if (StringUtil.IsInList(item.Text.ToLower(), strList))
+                        {
+                            if (item.Checked != false)
+                                item.Checked = false;
+                        }
+                    }
+                }
+            }
+        }
+
     }
 }

@@ -93,7 +93,7 @@ namespace dp2Circulation
 
             // *** dp2library 各个 instance
             string strInstanceDir = Path.Combine(strTempDir, "log");
-            PathUtil.CreateDirIfNeed(strInstanceDir);
+            PathUtil.TryCreateDir(strInstanceDir);
 
             foreach (string date in dates)
             {
@@ -135,6 +135,11 @@ namespace dp2Circulation
                 // bool bRangeSetted = false;
                 using (ZipFile zip = new ZipFile(Encoding.UTF8))
                 {
+                    // http://stackoverflow.com/questions/15337186/dotnetzip-badreadexception-on-extract
+                    // https://dotnetzip.codeplex.com/workitem/14087
+                    // uncommenting the following line can be used as a work-around
+                    zip.ParallelDeflateThreshold = -1;
+
                     foreach (string filename in filenames)
                     {
 #if NO
@@ -255,6 +260,7 @@ namespace dp2Circulation
 
             // 系统进程
             {
+#if NO
                 System.Diagnostics.Process[] process_list = System.Diagnostics.Process.GetProcesses();
                 text.Append("--- System process:\r\n");
                 int i = 0;
@@ -272,6 +278,9 @@ namespace dp2Circulation
                     text.Append((i + 1).ToString() + ") " + ModuleName + "\r\n");
                     i++;
                 }
+#endif
+                text.Append("--- System process:\r\n" + StringUtil.MakePathList(ProcessUtil.GetProcessNameList(), "\r\n") + "\r\n");
+
             }
 
             return text.ToString();

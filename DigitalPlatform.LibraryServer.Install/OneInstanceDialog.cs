@@ -1,10 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using System.IO;
 using System.Diagnostics;
@@ -13,7 +8,6 @@ using System.Collections;
 using DigitalPlatform.Install;
 using DigitalPlatform.GUI;
 using DigitalPlatform.IO;
-using DigitalPlatform;
 using DigitalPlatform.Text;
 
 namespace DigitalPlatform.LibraryServer
@@ -443,7 +437,7 @@ namespace DigitalPlatform.LibraryServer
 
         // 准备可选的缺省绑定内容
         int PrepareDefaultBindings(string strTail,
-            out string [] default_urls,
+            out string[] default_urls,
             out string strError)
         {
             default_urls = null;
@@ -558,9 +552,9 @@ namespace DigitalPlatform.LibraryServer
             }
 
             // TODO: 要找到一个没有被使用过的tcp端口号
-            string strTail =  this.InstanceName + (String.IsNullOrEmpty(this.InstanceName) == false ? "/" : "");
+            string strTail = this.InstanceName + (String.IsNullOrEmpty(this.InstanceName) == false ? "/" : "");
 
-            string [] default_urls = null;
+            string[] default_urls = null;
             nRet = PrepareDefaultBindings(strTail,
             out default_urls,
             out strError);
@@ -582,7 +576,7 @@ namespace DigitalPlatform.LibraryServer
             if (this.IsNew && String.IsNullOrEmpty(this.textBox_bindings.Text) == true)
                 dlg.Urls = default_urls;
             else
-                dlg.Urls = this.textBox_bindings.Text.Replace("\r\n", ";").Split(new char[] {';'});
+                dlg.Urls = this.textBox_bindings.Text.Replace("\r\n", ";").Split(new char[] { ';' });
             dlg.DefaultUrls = default_urls;
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog(this);
@@ -591,7 +585,7 @@ namespace DigitalPlatform.LibraryServer
 
             this.textBox_bindings.Text = string.Join("\r\n", dlg.Urls);
             return;
-            ERROR1:
+        ERROR1:
             MessageBox.Show(this, strError);
             return;
         }
@@ -688,7 +682,7 @@ namespace DigitalPlatform.LibraryServer
                 return;
 
             // 新建时
-            if (IsNew == true 
+            if (IsNew == true
                 && String.IsNullOrEmpty(this.textBox_dataDir.Text) == false
                 && this.LoadedDataDir != this.textBox_dataDir.Text)
             {
@@ -804,7 +798,7 @@ MessageBoxDefaultButton.Button1);
                     // 修改目录名
 
                     DialogResult result = MessageBox.Show(ForegroundWindow.Instance,
-"要将已经存在的数据目录 '" + this.LoadedDataDir + "' 更名为 '"+this.textBox_dataDir.Text+"' 么?\r\n\r\n(如果选择“否”，则安装程序在稍后将新创建一个数据目录，并复制进初始内容)",
+"要将已经存在的数据目录 '" + this.LoadedDataDir + "' 更名为 '" + this.textBox_dataDir.Text + "' 么?\r\n\r\n(如果选择“否”，则安装程序在稍后将新创建一个数据目录，并复制进初始内容)",
 "安装 dp2Library",
 MessageBoxButtons.YesNo,
 MessageBoxIcon.Question,
@@ -824,7 +818,7 @@ MessageBoxDefaultButton.Button1);
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show(this, "将已经存在的数据目录 '" + this.LoadedDataDir + "' 更名为 '"+this.textBox_dataDir.Text+"' 时发生错误: " + ex.Message);
+                        MessageBox.Show(this, "将已经存在的数据目录 '" + this.LoadedDataDir + "' 更名为 '" + this.textBox_dataDir.Text + "' 时发生错误: " + ex.Message);
                     }
 
                 }
@@ -832,19 +826,6 @@ MessageBoxDefaultButton.Button1);
                 return;
             }
 
-        }
-
-        // 证书
-        private void button_certificate_Click(object sender, EventArgs e)
-        {
-            CertificateDialog dlg = new CertificateDialog();
-
-            dlg.SN = LineInfo.CertificateSN;
-            dlg.StartPosition = FormStartPosition.CenterScreen;
-            if (dlg.ShowDialog(this) == System.Windows.Forms.DialogResult.Cancel)
-                return;
-
-            LineInfo.CertificateSN = dlg.SN;
         }
 
         // 将本地字符串匹配序列号
@@ -878,59 +859,6 @@ MessageBoxDefaultButton.Button1);
             return false;
         }
 
-        private void button_setSerialNumber_Click(object sender, EventArgs e)
-        {
-            string strError = "";
-            int nRet = 0;
-
-            // 2014/11/15
-            string strFirstMac = "";
-            List<string> macs = SerialCodeForm.GetMacAddress();
-            if (macs.Count != 0)
-            {
-                strFirstMac = macs[0];
-            }
-
-            // Debug.Assert(false, "");
-            string strSerialCode = this.LineInfo.SerialNumber;
-            REDO_INPUT:
-            // 出现设置序列号对话框
-            nRet = ResetSerialCode(
-                this,
-                "为实例 '" + this.InstanceName + "' 设置序列号",
-                true,
-                ref strSerialCode,
-                GetEnvironmentString(strFirstMac, strSerialCode, this.InstanceName));
-            if (nRet == 0)
-            {
-                strError = "放弃";
-                goto ERROR1;
-            }
-            if (string.IsNullOrEmpty(strSerialCode) == true
-                || strSerialCode == "community")
-            {
-                // MessageBox.Show(this, "序列号为空，将按照最多 5 个前端方式运行");
-                this.LineInfo.SerialNumber = strSerialCode;
-                return;
-            }
-
-            //string strLocalString = GetEnvironmentString(strSerialCode, this.InstanceName);
-            //string strSha1 = Cryptography.GetSHA1(StringUtil.SortParams(strLocalString) + "_reply");
-            if (String.IsNullOrEmpty(strSerialCode) == true
-                || MatchLocalString(strSerialCode, this.InstanceName) == false)
-            //    if (strSha1 != SerialCodeForm.GetCheckCode(strSerialCode) || String.IsNullOrEmpty(strSerialCode) == true)
-            {
-                if (String.IsNullOrEmpty(strSerialCode) == false)
-                    MessageBox.Show(this, "序列号无效。请重新输入");
-                goto REDO_INPUT;
-            }
-
-            this.LineInfo.SerialNumber = strSerialCode;
-            return;
-        ERROR1:
-            MessageBox.Show(this, strError);
-        }
-
         // 出现对话框重新设置序列号
         // return:
         //      0   Cancel
@@ -946,7 +874,7 @@ MessageBoxDefaultButton.Button1);
             string strMAC = (string)ext_table["mac"];
             if (string.IsNullOrEmpty(strMAC) == true)
                 strOriginCode = "!error";
-            else 
+            else
                 strOriginCode = Cryptography.Encrypt(strOriginCode,
                 CopyrightKey);
             SerialCodeForm dlg = new SerialCodeForm();
@@ -1017,5 +945,327 @@ MessageBoxDefaultButton.Button1);
         }
 
         static string CopyrightKey = "dp2library_sn_key";
+
+        int ConfigMq(bool bAdd,
+            out string strError)
+        {
+            strError = "";
+
+            string strDataDir = this.textBox_dataDir.Text;
+            string strInstanceName = this.textBox_instanceName.Text;
+
+            if (string.IsNullOrEmpty(strDataDir))
+            {
+                strError = "尚未指定数据目录";
+                return -1;
+            }
+
+            string strLibraryXmlFileName = Path.Combine(strDataDir, "library.xml");
+            if (File.Exists(strLibraryXmlFileName) == false)
+            {
+                strError = "配置文件 '" + strLibraryXmlFileName + "' 不存在，无法进行进一步配置";
+                return -1;
+            }
+
+            return InstallHelper.SetupMessageQueue(
+                strLibraryXmlFileName,
+                strInstanceName,
+                bAdd,
+                out strError);
+#if NO
+            XmlDocument dom = new XmlDocument();
+            dom.Load(strLibraryXmlFileName);
+
+            bool bChanged = false;
+
+            // message 元素 defaultQueue 属性
+            {
+                XmlElement message = dom.DocumentElement.SelectSingleNode("message") as XmlElement;
+                if (message == null)
+                {
+                    message = dom.CreateElement("message");
+                    dom.DocumentElement.AppendChild(message);
+                    bChanged = true;
+                }
+
+                string strOldValue = message.GetAttribute("defaultQueue");
+                if (string.IsNullOrEmpty(strOldValue) == true)
+                {
+                    string strNewValue = ".\\private$\\dp2library";
+                    if (string.IsNullOrEmpty(strInstanceName) == false)
+                        strNewValue += "_" + strInstanceName;
+                    message.SetAttribute("defaultQueue", strNewValue);
+                    bChanged = true;
+                }
+            }
+
+            // arrived 元素的 notifyTypes 属性
+            {
+                XmlElement arrived = dom.DocumentElement.SelectSingleNode("arrived") as XmlElement;
+                if (arrived == null)
+                {
+                    arrived = dom.CreateElement("arrived");
+                    dom.DocumentElement.AppendChild(arrived);
+                    bChanged = true;
+                }
+
+                string strOldValue = arrived.GetAttribute("notifyTypes");
+                if (string.IsNullOrEmpty(strOldValue) == true)
+                {
+                    string strNewValue = "dpmail,mail,mq";
+                    arrived.SetAttribute("notifyTypes", strNewValue);
+                    bChanged = true;
+                }
+                else
+                {
+                    // 增加 mq
+                    string strNewValue = strOldValue;
+                    StringUtil.SetInList(ref strNewValue, "mq", true);
+                    if (strNewValue != strOldValue)
+                    {
+                        arrived.SetAttribute("notifyTypes", strNewValue);
+                        bChanged = true;
+                    }
+                }
+            }
+
+            // monitors/readersMonitor 元素的 types 元素
+            {
+                XmlElement readersMonitor = dom.DocumentElement.SelectSingleNode("monitors/readersMonitor") as XmlElement;
+                if (readersMonitor != null)
+                {
+                    string strOldValue = readersMonitor.GetAttribute("types");
+                    if (string.IsNullOrEmpty(strOldValue) == true)
+                    {
+                        string strNewValue = "mq";
+                        readersMonitor.SetAttribute("types", strNewValue);
+                        bChanged = true;
+                    }
+                    else
+                    {
+                        // 增加 mq
+                        string strNewValue = strOldValue;
+                        StringUtil.SetInList(ref strNewValue, "mq", true);
+                        if (strNewValue != strOldValue)
+                        {
+                            readersMonitor.SetAttribute("types", strNewValue);
+                            bChanged = true;
+                        }
+                    }
+                }
+            }
+
+            // circulation 元素的 notifyTypes 属性
+            {
+                XmlElement circulation = dom.DocumentElement.SelectSingleNode("circulation") as XmlElement;
+                if (circulation == null)
+                {
+                    circulation = dom.CreateElement("circulation");
+                    dom.DocumentElement.AppendChild(circulation);
+                    bChanged = true;
+                }
+
+                string strOldValue = circulation.GetAttribute("notifyTypes");
+                if (string.IsNullOrEmpty(strOldValue) == true)
+                {
+                    string strNewValue = "mq";
+                    circulation.SetAttribute("notifyTypes", strNewValue);
+                    bChanged = true;
+                }
+                else
+                {
+                    // 增加 mq
+                    string strNewValue = strOldValue;
+                    StringUtil.SetInList(ref strNewValue, "mq", true);
+                    if (strNewValue != strOldValue)
+                    {
+                        circulation.SetAttribute("notifyTypes", strNewValue);
+                        bChanged = true;
+                    }
+                }
+            }
+
+            if (bChanged == true)
+            {
+                // 提前备份一个原来文件，避免保存中途出错造成 0 bytes 的文件
+                string strBackupFileName = Path.Combine(strDataDir, "library.xml.config.save");
+                File.Copy(strLibraryXmlFileName, strBackupFileName, true);
+
+                dom.Save(strLibraryXmlFileName);
+                return 1;   // 发生了修改
+            }
+
+            return 0;   // 没有发生修改
+#endif
+        }
+
+        int ConfigMongoDB(bool bAdd,
+    out string strError)
+        {
+            strError = "";
+
+            string strDataDir = this.textBox_dataDir.Text;
+            string strInstanceName = this.textBox_instanceName.Text;
+
+            if (string.IsNullOrEmpty(strDataDir))
+            {
+                strError = "尚未指定数据目录";
+                return -1;
+            }
+
+            string strLibraryXmlFileName = Path.Combine(strDataDir, "library.xml");
+            if (File.Exists(strLibraryXmlFileName) == false)
+            {
+                strError = "配置文件 '" + strLibraryXmlFileName + "' 不存在，无法进行进一步配置";
+                return -1;
+            }
+
+            return InstallHelper.SetupMongoDB(
+                strLibraryXmlFileName,
+                strInstanceName,
+                bAdd,
+                out strError);
+        }
+
+        // 证书
+        private void toolStripButton_certificate_Click(object sender, EventArgs e)
+        {
+            CertificateDialog dlg = new CertificateDialog();
+            dlg.Font = this.Font;
+            dlg.SN = LineInfo.CertificateSN;
+            dlg.StartPosition = FormStartPosition.CenterScreen;
+            if (dlg.ShowDialog(this) == System.Windows.Forms.DialogResult.Cancel)
+                return;
+
+            LineInfo.CertificateSN = dlg.SN;
+        }
+
+        // 序列号
+        private void toolStripButton_setSerialNumber_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+            int nRet = 0;
+
+            // 2014/11/15
+            string strFirstMac = "";
+            List<string> macs = SerialCodeForm.GetMacAddress();
+            if (macs.Count != 0)
+            {
+                strFirstMac = macs[0];
+            }
+
+            // Debug.Assert(false, "");
+            string strSerialCode = this.LineInfo.SerialNumber;
+        REDO_INPUT:
+            // 出现设置序列号对话框
+            nRet = ResetSerialCode(
+                this,
+                "为实例 '" + this.InstanceName + "' 设置序列号",
+                true,
+                ref strSerialCode,
+                GetEnvironmentString(strFirstMac, strSerialCode, this.InstanceName));
+            if (nRet == 0)
+            {
+                strError = "放弃";
+                goto ERROR1;
+            }
+            if (string.IsNullOrEmpty(strSerialCode) == true
+                || strSerialCode == "community"
+                || strSerialCode == "*")
+            {
+                // MessageBox.Show(this, "序列号为空，将按照最多 5 个前端方式运行");
+                this.LineInfo.SerialNumber = strSerialCode;
+                return;
+            }
+
+            //string strLocalString = GetEnvironmentString(strSerialCode, this.InstanceName);
+            //string strSha1 = Cryptography.GetSHA1(StringUtil.SortParams(strLocalString) + "_reply");
+            if (String.IsNullOrEmpty(strSerialCode) == true
+                || MatchLocalString(strSerialCode, this.InstanceName) == false)
+            //    if (strSha1 != SerialCodeForm.GetCheckCode(strSerialCode) || String.IsNullOrEmpty(strSerialCode) == true)
+            {
+                if (String.IsNullOrEmpty(strSerialCode) == false)
+                    MessageBox.Show(this, "序列号无效。请重新输入");
+                goto REDO_INPUT;
+            }
+
+            this.LineInfo.SerialNumber = strSerialCode;
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 为 library.xml 配置 MSMQ 相关参数
+        private void ToolStripMenuItem_configMq_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            int nRet = ConfigMq(
+                Control.ModifierKeys == Keys.Control ? false : true,
+                out strError);
+            if (nRet == -1)
+                goto ERROR1;
+
+            // 重新启动一次 dp2library? 没有必要，因为整个实例对话框进入以前，dp2library 已经暂停了。对话框退出后会重新启动。
+
+            MessageBox.Show(this, "配置成功");
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 为 library.xml 自动配置 MongoDB 参数
+        private void ToolStripMenuItem_configMongoDB_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            int nRet = ConfigMongoDB(
+                Control.ModifierKeys == Keys.Control ? false : true,
+                out strError);
+            if (nRet == -1)
+                goto ERROR1;
+
+            // 重新启动一次 dp2library? 没有必要，因为整个实例对话框进入以前，dp2library 已经暂停了。对话框退出后会重新启动。
+
+            MessageBox.Show(this, "配置成功");
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 为 library.xml 配置服务器同步参数
+        private void ToolStripMenuItem_configServerReplication_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            string strDataDir = this.textBox_dataDir.Text;
+            string strInstanceName = this.textBox_instanceName.Text;
+
+            if (string.IsNullOrEmpty(strDataDir))
+            {
+                strError = "尚未指定数据目录";
+                goto ERROR1;
+            }
+
+            string strLibraryXmlFileName = Path.Combine(strDataDir, "library.xml");
+            if (File.Exists(strLibraryXmlFileName) == false)
+            {
+                strError = "配置文件 '" + strLibraryXmlFileName + "' 不存在，无法进行进一步配置";
+                goto ERROR1;
+            }
+
+            LibraryXmlDialog dlg = new LibraryXmlDialog();
+            GuiUtil.SetControlFont(dlg, this.Font);
+            dlg.Text = "服务器同步参数";
+            dlg.LibraryXmlFileName = strLibraryXmlFileName;
+            dlg.ShowDialog(this);
+
+            if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
+                return;
+
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
     }
 }

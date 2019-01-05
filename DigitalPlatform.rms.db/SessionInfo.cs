@@ -3,7 +3,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Diagnostics;
 using System.IO;
@@ -11,7 +10,6 @@ using System.IO;
 using DigitalPlatform.ResultSet;
 using DigitalPlatform.Text;
 using DigitalPlatform.Range;
-using DigitalPlatform.IO;
 
 namespace DigitalPlatform.rms
 {
@@ -21,7 +19,7 @@ namespace DigitalPlatform.rms
         public const int QUOTA_SIZE = (int)((double)(1024 * 1024) * (double)0.8);   // 经过试验 0.5 基本可行 因为字符数换算为 byte 数，中文的缘故
         public const int PACKAGE_UNIT_SIZE = 100;
         //定义一个最大数量 ,应该是用尺寸，这里暂时用数组个数计算
-        public const int MaxRecordsCountPerApi = 200;
+        public const int MaxRecordsCountPerApi = 1000;   // 原来是 200，2016/12/18 修改为 1000
 
 #if USE_TEMPDIR
         private string m_strTempDir = "";	// 临时文件目录 2011/1/19
@@ -44,7 +42,6 @@ namespace DigitalPlatform.rms
                 m_nInSearching = value;
             }
         }
-
 
         public int BeginSearch()
         {
@@ -379,8 +376,10 @@ namespace DigitalPlatform.rms
                 nLength += GetLength(record.Keys);
                 nLength += PACKAGE_UNIT_SIZE;  // 估计 20 个 bytes 的额外消耗
             }
+
             if (record.Cols != null)
                 nLength += GetLength(record.Cols);
+
             if (record.RecordBody != null)
                 nLength += GetLength(record.RecordBody);
 
@@ -419,6 +418,13 @@ namespace DigitalPlatform.rms
                 return -1;
             }
 
+            // 2017/8/23
+            if (resultSet.Count == 0 && lLength > 0)
+            {
+                strError = "结果集为空，无法取出任何记录";
+                return -1;
+            }
+
             long lTotalPackageLength = 0;   // 累计计算要输出的XML记录占据的空间
 
             long lOutputLength;
@@ -427,7 +433,7 @@ namespace DigitalPlatform.rms
             // return:
             //		-1  出错
             //		0   成功
-            int nRet = ConvertUtil.GetRealLength((int)lStart,
+            int nRet = ConvertUtil.GetRealLengthNew((int)lStart,    // 2017/9/3 从 GetRealLength() 改为 GetRealLengthNew()
                 (int)lLength,
                 (int)resultSet.Count,
                 SessionInfo.MaxRecordsCountPerApi,//nMaxCount,
@@ -479,6 +485,7 @@ namespace DigitalPlatform.rms
                     dpRecord = resultSet.GetNextRecord(
                         ref lPos);
                 }
+
                 if (dpRecord == null)
                     break;
 
@@ -502,7 +509,6 @@ namespace DigitalPlatform.rms
 #endif
                     goto CONTINUE;
                 }
-
 
                 DbPath path = new DbPath(dpRecord.ID);
                 Database db = this.app.Dbs.GetDatabaseSafety(path.Name);
@@ -616,7 +622,9 @@ out strError);
                             path.ID10,
                             strXml,
                             0,
-                            out cols);
+                            out cols,
+                            out strError);
+#if NO
                         // 2013/1/14
                         if (nRet == -1)
                         {
@@ -625,6 +633,17 @@ out strError);
                             else
                                 strError = "GetCols() error";
                             return -1;
+                        }
+#endif
+                        if (nRet == -1)
+                            return -1;
+                        if (nRet == 0)
+                        {
+                            record.RecordBody = new RecordBody();
+                            if (record.RecordBody.Result == null)
+                                record.RecordBody.Result = new Result();
+                            record.RecordBody.Result.ErrorCode = ErrorCodeValue.NotFound;
+                            record.RecordBody.Result.ErrorString = strError;
                         }
                         record.Cols = cols;
 
@@ -656,7 +675,9 @@ out strError);
                             path.ID10,
                             strXml,
                             0,
-                            out cols);
+                            out cols,
+                            out strError);
+#if NO
                         // 2013/1/14
                         if (nRet == -1)
                         {
@@ -665,6 +686,25 @@ out strError);
                             else
                                 strError = "GetCols() error";
                             return -1;
+                        }
+#endif
+                        if (nRet == -1)
+                        {
+                            // return -1;
+                            // 2018/10/10
+                            record.RecordBody = new RecordBody();
+                            if (record.RecordBody.Result == null)
+                                record.RecordBody.Result = new Result();
+                            record.RecordBody.Result.ErrorCode = ErrorCodeValue.CommonError;
+                            record.RecordBody.Result.ErrorString = strError;
+                        }
+                        else if (nRet == 0)
+                        {
+                            record.RecordBody = new RecordBody();
+                            if (record.RecordBody.Result == null)
+                                record.RecordBody.Result = new Result();
+                            record.RecordBody.Result.ErrorCode = ErrorCodeValue.NotFound;
+                            record.RecordBody.Result.ErrorString = strError;
                         }
                         record.Cols = cols;
                         // lTotalPackageLength += nRet;
@@ -862,7 +902,9 @@ out strError);
                                 dbpath.ID10,
                                 "",
                                 0,
-                                out cols);
+                                out cols,
+                                out strError);
+#if NO
                             // 2013/1/14
                             if (nRet == -1)
                             {
@@ -872,7 +914,14 @@ out strError);
                                     strError = "GetCols() error";
                                 return -1;
                             }
-
+#endif
+                            if (nRet == 0)
+                            {
+                                if (richRecord.Result == null)
+                                    richRecord.Result = new Result();
+                                richRecord.Result.ErrorCode = ErrorCodeValue.NotFound;
+                                richRecord.Result.ErrorString = strError;
+                            }
                             richRecord.Cols = cols;
                         }
 
@@ -1103,12 +1152,18 @@ out strError);
                         return -1;
                     }
                     string[] cols;
+                    // return:
+                    //      -1  出错
+                    //      0   记录没有找到
+                    //      其他  cols 中包含的字符总数
                     nRet = info.Database.GetCols(
                         strFormat,
                         info.RecordID10,    // path.ID10,
                         "",
                         0,
-                        out cols);
+                        out cols,
+                        out strError);
+#if NO
                     if (nRet == -1)
                     {
                         if (cols != null && cols.Length > 0)
@@ -1116,6 +1171,17 @@ out strError);
                         else
                             strError = "GetCols() error";
                         return -1;
+                    }
+#endif
+                    if (nRet == -1)
+                        return -1;
+                    if (nRet == 0)
+                    {
+                        record.RecordBody = new RecordBody();
+                        if (record.RecordBody.Result == null)
+                            record.RecordBody.Result = new Result();
+                        record.RecordBody.Result.ErrorCode = ErrorCodeValue.NotFound;
+                        record.RecordBody.Result.ErrorString = "1 " + strError;
                     }
                     record.Cols = cols;
                 }
@@ -1150,7 +1216,7 @@ out strError);
                         Result result = new Result();
                         result.Value = -1;
                         result.ErrorCode = KernelApplication.Ret2ErrorCode((int)lRet);
-                        result.ErrorString = strError;
+                        result.ErrorString = "2 " + strError;
                         record.RecordBody.Result = result;
                         // return (int)lRet;
                     }
@@ -1173,6 +1239,7 @@ out strError);
                     //		>=0 资源总长度
                     long lRet = info.Database.GetObject(info.RecordID,
                         info.ObjectID,
+                        null,
                         0,
                         0,
                         -1,
@@ -1192,7 +1259,7 @@ out strError);
                         Result result = new Result();
                         result.Value = -1;
                         result.ErrorCode = KernelApplication.Ret2ErrorCode((int)lRet);
-                        result.ErrorString = strError;
+                        result.ErrorString = "3 " + strError;
                         record.RecordBody.Result = result;
                         // return (int)lRet;
                     }

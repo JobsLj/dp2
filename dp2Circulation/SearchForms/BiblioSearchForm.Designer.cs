@@ -1,4 +1,4 @@
-namespace dp2Circulation
+Ôªønamespace dp2Circulation
 {
     partial class BiblioSearchForm
     {
@@ -13,6 +13,8 @@ namespace dp2Circulation
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
+            this.DisposeFreeControls();
+
             if (disposing && (components != null))
             {
                 components.Dispose();
@@ -33,7 +35,7 @@ namespace dp2Circulation
             this.label2 = new System.Windows.Forms.Label();
             this.textBox_queryWord = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
-            this.label3 = new System.Windows.Forms.Label();
+            this.label_biblioDbName = new System.Windows.Forms.Label();
             this.contextMenuStrip_biblioDb = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.MenuItem_viewBiblioDbProperty = new System.Windows.Forms.ToolStripMenuItem();
             this.tableLayoutPanel_query = new System.Windows.Forms.TableLayoutPanel();
@@ -72,6 +74,7 @@ namespace dp2Circulation
             this.listView_records = new DigitalPlatform.GUI.ListViewNF();
             this.columnHeader_path = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader_1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.ToolStripMenuItem_filterRecords = new System.Windows.Forms.ToolStripMenuItem();
             this.contextMenuStrip_biblioDb.SuspendLayout();
             this.tableLayoutPanel_query.SuspendLayout();
             this.toolStrip_search.SuspendLayout();
@@ -89,12 +92,12 @@ namespace dp2Circulation
             // 
             this.label2.AutoSize = true;
             this.label2.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.label2.Location = new System.Drawing.Point(4, 59);
-            this.label2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            this.label2.Location = new System.Drawing.Point(6, 77);
+            this.label2.Margin = new System.Windows.Forms.Padding(6, 0, 6, 0);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(77, 30);
+            this.label2.Size = new System.Drawing.Size(116, 41);
             this.label2.TabIndex = 5;
-            this.label2.Text = "ºÏÀ˜Õææ∂(&F):";
+            this.label2.Text = "Ê£ÄÁ¥¢ÈÄîÂæÑ(&F):";
             this.label2.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // textBox_queryWord
@@ -102,10 +105,10 @@ namespace dp2Circulation
             this.textBox_queryWord.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.textBox_queryWord.Dock = System.Windows.Forms.DockStyle.Fill;
             this.textBox_queryWord.ImeMode = System.Windows.Forms.ImeMode.NoControl;
-            this.textBox_queryWord.Location = new System.Drawing.Point(89, 4);
-            this.textBox_queryWord.Margin = new System.Windows.Forms.Padding(4);
+            this.textBox_queryWord.Location = new System.Drawing.Point(134, 6);
+            this.textBox_queryWord.Margin = new System.Windows.Forms.Padding(6);
             this.textBox_queryWord.Name = "textBox_queryWord";
-            this.textBox_queryWord.Size = new System.Drawing.Size(187, 21);
+            this.textBox_queryWord.Size = new System.Drawing.Size(254, 28);
             this.textBox_queryWord.TabIndex = 1;
             this.textBox_queryWord.TextChanged += new System.EventHandler(this.textBox_queryWord_TextChanged);
             this.textBox_queryWord.Enter += new System.EventHandler(this.textBox_queryWord_Enter);
@@ -116,25 +119,26 @@ namespace dp2Circulation
             this.label1.AutoSize = true;
             this.label1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.label1.ImageAlign = System.Drawing.ContentAlignment.TopLeft;
-            this.label1.Location = new System.Drawing.Point(4, 0);
-            this.label1.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            this.label1.Location = new System.Drawing.Point(6, 0);
+            this.label1.Margin = new System.Windows.Forms.Padding(6, 0, 6, 0);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(77, 29);
+            this.label1.Size = new System.Drawing.Size(116, 40);
             this.label1.TabIndex = 0;
-            this.label1.Text = "ºÏÀ˜¥ (&W):";
+            this.label1.Text = "Ê£ÄÁ¥¢ËØç(&W):";
             this.label1.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
-            // label3
+            // label_biblioDbName
             // 
-            this.label3.AutoSize = true;
-            this.label3.ContextMenuStrip = this.contextMenuStrip_biblioDb;
-            this.label3.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.label3.Location = new System.Drawing.Point(3, 29);
-            this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(79, 30);
-            this.label3.TabIndex = 3;
-            this.label3.Text = " Èƒøø‚(&D):";
-            this.label3.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.label_biblioDbName.AutoSize = true;
+            this.label_biblioDbName.ContextMenuStrip = this.contextMenuStrip_biblioDb;
+            this.label_biblioDbName.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.label_biblioDbName.Location = new System.Drawing.Point(4, 40);
+            this.label_biblioDbName.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            this.label_biblioDbName.Name = "label_biblioDbName";
+            this.label_biblioDbName.Size = new System.Drawing.Size(120, 37);
+            this.label_biblioDbName.TabIndex = 3;
+            this.label_biblioDbName.Text = "‰π¶ÁõÆÂ∫ì(&D):";
+            this.label_biblioDbName.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // contextMenuStrip_biblioDb
             // 
@@ -142,13 +146,13 @@ namespace dp2Circulation
             this.contextMenuStrip_biblioDb.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.MenuItem_viewBiblioDbProperty});
             this.contextMenuStrip_biblioDb.Name = "contextMenuStrip_biblioDb";
-            this.contextMenuStrip_biblioDb.Size = new System.Drawing.Size(185, 26);
+            this.contextMenuStrip_biblioDb.Size = new System.Drawing.Size(242, 32);
             // 
             // MenuItem_viewBiblioDbProperty
             // 
             this.MenuItem_viewBiblioDbProperty.Name = "MenuItem_viewBiblioDbProperty";
-            this.MenuItem_viewBiblioDbProperty.Size = new System.Drawing.Size(184, 22);
-            this.MenuItem_viewBiblioDbProperty.Text = "π€≤Ï Èƒøø‚ Ù–‘(&P)...";
+            this.MenuItem_viewBiblioDbProperty.Size = new System.Drawing.Size(241, 28);
+            this.MenuItem_viewBiblioDbProperty.Text = "ËßÇÂØü‰π¶ÁõÆÂ∫ìÂ±ûÊÄß(&P)...";
             this.MenuItem_viewBiblioDbProperty.Click += new System.EventHandler(this.MenuItem_viewBiblioDbProperty_Click);
             // 
             // tableLayoutPanel_query
@@ -161,7 +165,7 @@ namespace dp2Circulation
             this.tableLayoutPanel_query.Controls.Add(this.label4, 0, 4);
             this.tableLayoutPanel_query.Controls.Add(this.label2, 0, 2);
             this.tableLayoutPanel_query.Controls.Add(this.textBox_queryWord, 1, 0);
-            this.tableLayoutPanel_query.Controls.Add(this.label3, 0, 1);
+            this.tableLayoutPanel_query.Controls.Add(this.label_biblioDbName, 0, 1);
             this.tableLayoutPanel_query.Controls.Add(this.label1, 0, 0);
             this.tableLayoutPanel_query.Controls.Add(this.comboBox_from, 1, 2);
             this.tableLayoutPanel_query.Controls.Add(this.label_matchStyle, 0, 3);
@@ -171,9 +175,9 @@ namespace dp2Circulation
             this.tableLayoutPanel_query.Controls.Add(this.button_search, 2, 1);
             this.tableLayoutPanel_query.Controls.Add(this.comboBox_location, 1, 4);
             this.tableLayoutPanel_query.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tableLayoutPanel_query.Location = new System.Drawing.Point(3, 3);
+            this.tableLayoutPanel_query.Location = new System.Drawing.Point(4, 4);
             this.tableLayoutPanel_query.Margin = new System.Windows.Forms.Padding(0);
-            this.tableLayoutPanel_query.MaximumSize = new System.Drawing.Size(400, 0);
+            this.tableLayoutPanel_query.MaximumSize = new System.Drawing.Size(600, 0);
             this.tableLayoutPanel_query.Name = "tableLayoutPanel_query";
             this.tableLayoutPanel_query.RowCount = 6;
             this.tableLayoutPanel_query.RowStyles.Add(new System.Windows.Forms.RowStyle());
@@ -182,19 +186,19 @@ namespace dp2Circulation
             this.tableLayoutPanel_query.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel_query.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel_query.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.tableLayoutPanel_query.Size = new System.Drawing.Size(400, 134);
+            this.tableLayoutPanel_query.Size = new System.Drawing.Size(600, 209);
             this.tableLayoutPanel_query.TabIndex = 8;
             // 
             // label4
             // 
             this.label4.AutoSize = true;
             this.label4.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.label4.Location = new System.Drawing.Point(4, 117);
-            this.label4.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            this.label4.Location = new System.Drawing.Point(6, 156);
+            this.label4.Margin = new System.Windows.Forms.Padding(6, 0, 6, 0);
             this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(77, 28);
+            this.label4.Size = new System.Drawing.Size(116, 38);
             this.label4.TabIndex = 15;
-            this.label4.Text = "π›≤ÿµÿ(&L):";
+            this.label4.Text = "È¶ÜËóèÂú∞(&L):";
             this.label4.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // comboBox_from
@@ -205,10 +209,10 @@ namespace dp2Circulation
             this.comboBox_from.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_from.FormattingEnabled = true;
             this.comboBox_from.IntegralHeight = false;
-            this.comboBox_from.Location = new System.Drawing.Point(89, 63);
-            this.comboBox_from.Margin = new System.Windows.Forms.Padding(4);
+            this.comboBox_from.Location = new System.Drawing.Point(134, 83);
+            this.comboBox_from.Margin = new System.Windows.Forms.Padding(6);
             this.comboBox_from.Name = "comboBox_from";
-            this.comboBox_from.Size = new System.Drawing.Size(187, 22);
+            this.comboBox_from.Size = new System.Drawing.Size(254, 29);
             this.comboBox_from.TabIndex = 6;
             this.comboBox_from.SizeChanged += new System.EventHandler(this.comboBox_from_SizeChanged);
             // 
@@ -216,12 +220,12 @@ namespace dp2Circulation
             // 
             this.label_matchStyle.AutoSize = true;
             this.label_matchStyle.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.label_matchStyle.Location = new System.Drawing.Point(4, 89);
-            this.label_matchStyle.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            this.label_matchStyle.Location = new System.Drawing.Point(6, 118);
+            this.label_matchStyle.Margin = new System.Windows.Forms.Padding(6, 0, 6, 0);
             this.label_matchStyle.Name = "label_matchStyle";
-            this.label_matchStyle.Size = new System.Drawing.Size(77, 28);
+            this.label_matchStyle.Size = new System.Drawing.Size(116, 38);
             this.label_matchStyle.TabIndex = 7;
-            this.label_matchStyle.Text = "∆•≈‰∑Ω Ω(&M):";
+            this.label_matchStyle.Text = "ÂåπÈÖçÊñπÂºè(&M):";
             this.label_matchStyle.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // comboBox_matchStyle
@@ -230,17 +234,17 @@ namespace dp2Circulation
             this.comboBox_matchStyle.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_matchStyle.FormattingEnabled = true;
             this.comboBox_matchStyle.Items.AddRange(new object[] {
-            "«∞∑Ω“ª÷¬",
-            "÷–º‰“ª÷¬",
-            "∫Û∑Ω“ª÷¬",
-            "æ´»∑“ª÷¬",
-            "ø’÷µ"});
-            this.comboBox_matchStyle.Location = new System.Drawing.Point(89, 93);
-            this.comboBox_matchStyle.Margin = new System.Windows.Forms.Padding(4);
+            "ÂâçÊñπ‰∏ÄËá¥",
+            "‰∏≠Èó¥‰∏ÄËá¥",
+            "ÂêéÊñπ‰∏ÄËá¥",
+            "Á≤æÁ°Æ‰∏ÄËá¥",
+            "Á©∫ÂÄº"});
+            this.comboBox_matchStyle.Location = new System.Drawing.Point(134, 124);
+            this.comboBox_matchStyle.Margin = new System.Windows.Forms.Padding(6);
             this.comboBox_matchStyle.Name = "comboBox_matchStyle";
-            this.comboBox_matchStyle.Size = new System.Drawing.Size(187, 20);
+            this.comboBox_matchStyle.Size = new System.Drawing.Size(254, 26);
             this.comboBox_matchStyle.TabIndex = 8;
-            this.comboBox_matchStyle.Text = "«∞∑Ω“ª÷¬";
+            this.comboBox_matchStyle.Text = "ÂâçÊñπ‰∏ÄËá¥";
             this.comboBox_matchStyle.SizeChanged += new System.EventHandler(this.comboBox_matchStyle_SizeChanged);
             this.comboBox_matchStyle.TextChanged += new System.EventHandler(this.comboBox_matchStyle_TextChanged);
             // 
@@ -249,11 +253,11 @@ namespace dp2Circulation
             this.checkedComboBox_biblioDbNames.BackColor = System.Drawing.SystemColors.Window;
             this.checkedComboBox_biblioDbNames.Dock = System.Windows.Forms.DockStyle.Fill;
             this.checkedComboBox_biblioDbNames.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.checkedComboBox_biblioDbNames.Location = new System.Drawing.Point(89, 33);
+            this.checkedComboBox_biblioDbNames.Location = new System.Drawing.Point(132, 44);
             this.checkedComboBox_biblioDbNames.Margin = new System.Windows.Forms.Padding(4);
             this.checkedComboBox_biblioDbNames.Name = "checkedComboBox_biblioDbNames";
             this.checkedComboBox_biblioDbNames.Padding = new System.Windows.Forms.Padding(4);
-            this.checkedComboBox_biblioDbNames.Size = new System.Drawing.Size(187, 22);
+            this.checkedComboBox_biblioDbNames.Size = new System.Drawing.Size(258, 29);
             this.checkedComboBox_biblioDbNames.TabIndex = 9;
             this.checkedComboBox_biblioDbNames.DropDown += new System.EventHandler(this.checkedComboBox_biblioDbNames_DropDown);
             this.checkedComboBox_biblioDbNames.ItemChecked += new System.Windows.Forms.ItemCheckedEventHandler(this.checkedComboBox_biblioDbNames_ItemChecked);
@@ -264,6 +268,7 @@ namespace dp2Circulation
             this.toolStrip_search.Dock = System.Windows.Forms.DockStyle.Fill;
             this.toolStrip_search.Font = new System.Drawing.Font("Microsoft YaHei UI", 9F);
             this.toolStrip_search.GripStyle = System.Windows.Forms.ToolStripGripStyle.Hidden;
+            this.toolStrip_search.ImageScalingSize = new System.Drawing.Size(24, 24);
             this.toolStrip_search.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripButton_search,
             this.toolStripDropDownButton_searchKeys,
@@ -272,12 +277,13 @@ namespace dp2Circulation
             this.toolStripSeparator1,
             this.toolStripButton_prevQuery,
             this.toolStripButton_nextQuery});
-            this.toolStrip_search.Location = new System.Drawing.Point(280, 0);
+            this.toolStrip_search.Location = new System.Drawing.Point(394, 0);
             this.toolStrip_search.Name = "toolStrip_search";
+            this.toolStrip_search.Padding = new System.Windows.Forms.Padding(0, 0, 2, 0);
             this.toolStrip_search.RenderMode = System.Windows.Forms.ToolStripRenderMode.System;
-            this.toolStrip_search.Size = new System.Drawing.Size(120, 29);
+            this.toolStrip_search.Size = new System.Drawing.Size(206, 40);
             this.toolStrip_search.TabIndex = 13;
-            this.toolStrip_search.Text = "ºÏÀ˜";
+            this.toolStrip_search.Text = "Ê£ÄÁ¥¢";
             // 
             // toolStripButton_search
             // 
@@ -285,8 +291,8 @@ namespace dp2Circulation
             this.toolStripButton_search.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton_search.Image")));
             this.toolStripButton_search.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripButton_search.Name = "toolStripButton_search";
-            this.toolStripButton_search.Size = new System.Drawing.Size(23, 26);
-            this.toolStripButton_search.Text = "ºÏÀ˜";
+            this.toolStripButton_search.Size = new System.Drawing.Size(28, 37);
+            this.toolStripButton_search.Text = "Ê£ÄÁ¥¢";
             this.toolStripButton_search.Click += new System.EventHandler(this.toolStripButton_search_Click);
             // 
             // toolStripDropDownButton_searchKeys
@@ -297,53 +303,54 @@ namespace dp2Circulation
             this.toolStripMenuItem_searchKeyID,
             this.toolStripMenuItem_searchKeys,
             this.toolStripSeparator4,
-            this.ToolStripMenuItem_searchShareBiblio});
+            this.ToolStripMenuItem_searchShareBiblio,
+            this.ToolStripMenuItem_filterRecords});
             this.toolStripDropDownButton_searchKeys.Image = ((System.Drawing.Image)(resources.GetObject("toolStripDropDownButton_searchKeys.Image")));
             this.toolStripDropDownButton_searchKeys.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
             this.toolStripDropDownButton_searchKeys.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripDropDownButton_searchKeys.Name = "toolStripDropDownButton_searchKeys";
-            this.toolStripDropDownButton_searchKeys.Size = new System.Drawing.Size(13, 26);
-            this.toolStripDropDownButton_searchKeys.Text = "∏¸∂‡√¸¡Ó...";
+            this.toolStripDropDownButton_searchKeys.Size = new System.Drawing.Size(18, 37);
+            this.toolStripDropDownButton_searchKeys.Text = "Êõ¥Â§öÂëΩ‰ª§...";
             // 
             // ToolStripMenuItem_continueLoad
             // 
             this.ToolStripMenuItem_continueLoad.Enabled = false;
             this.ToolStripMenuItem_continueLoad.Name = "ToolStripMenuItem_continueLoad";
-            this.ToolStripMenuItem_continueLoad.Size = new System.Drawing.Size(160, 22);
-            this.ToolStripMenuItem_continueLoad.Text = "ºÃ–¯◊∞»Î";
-            this.ToolStripMenuItem_continueLoad.ToolTipText = "ºÃ–¯◊∞»Î÷–∂œ ±…–Œ¥◊∞»Îµƒƒ«–©‰Ø¿¿––";
+            this.ToolStripMenuItem_continueLoad.Size = new System.Drawing.Size(252, 30);
+            this.ToolStripMenuItem_continueLoad.Text = "ÁªßÁª≠Ë£ÖÂÖ•";
+            this.ToolStripMenuItem_continueLoad.ToolTipText = "ÁªßÁª≠Ë£ÖÂÖ•‰∏≠Êñ≠Êó∂Â∞öÊú™Ë£ÖÂÖ•ÁöÑÈÇ£‰∫õÊµèËßàË°å";
             this.ToolStripMenuItem_continueLoad.Click += new System.EventHandler(this.ToolStripMenuItem_continueLoad_Click);
             // 
             // toolStripMenuItem_searchKeyID
             // 
             this.toolStripMenuItem_searchKeyID.Name = "toolStripMenuItem_searchKeyID";
-            this.toolStripMenuItem_searchKeyID.Size = new System.Drawing.Size(160, 22);
-            this.toolStripMenuItem_searchKeyID.Text = "¥¯ºÏÀ˜µ„µƒºÏÀ˜";
+            this.toolStripMenuItem_searchKeyID.Size = new System.Drawing.Size(252, 30);
+            this.toolStripMenuItem_searchKeyID.Text = "Â∏¶Ê£ÄÁ¥¢ÁÇπÁöÑÊ£ÄÁ¥¢";
             this.toolStripMenuItem_searchKeyID.Click += new System.EventHandler(this.toolStripMenuItem_searchKeyID_Click);
             // 
             // toolStripMenuItem_searchKeys
             // 
             this.toolStripMenuItem_searchKeys.Name = "toolStripMenuItem_searchKeys";
-            this.toolStripMenuItem_searchKeys.Size = new System.Drawing.Size(160, 22);
-            this.toolStripMenuItem_searchKeys.Text = "ΩˆªÒµ√ºÏÀ˜µ„";
+            this.toolStripMenuItem_searchKeys.Size = new System.Drawing.Size(252, 30);
+            this.toolStripMenuItem_searchKeys.Text = "‰ªÖËé∑ÂæóÊ£ÄÁ¥¢ÁÇπ";
             this.toolStripMenuItem_searchKeys.Click += new System.EventHandler(this.toolStripMenuItem_searchKeys_Click);
             // 
             // toolStripSeparator4
             // 
             this.toolStripSeparator4.Name = "toolStripSeparator4";
-            this.toolStripSeparator4.Size = new System.Drawing.Size(157, 6);
+            this.toolStripSeparator4.Size = new System.Drawing.Size(249, 6);
             // 
             // ToolStripMenuItem_searchShareBiblio
             // 
             this.ToolStripMenuItem_searchShareBiblio.Name = "ToolStripMenuItem_searchShareBiblio";
-            this.ToolStripMenuItem_searchShareBiblio.Size = new System.Drawing.Size(160, 22);
-            this.ToolStripMenuItem_searchShareBiblio.Text = " π”√π≤œÌÕ¯¬Á";
+            this.ToolStripMenuItem_searchShareBiblio.Size = new System.Drawing.Size(252, 30);
+            this.ToolStripMenuItem_searchShareBiblio.Text = "‰ΩøÁî®ÂÖ±‰∫´ÁΩëÁªú";
             this.ToolStripMenuItem_searchShareBiblio.Click += new System.EventHandler(this.ToolStripMenuItem_searchShareBiblio_Click);
             // 
             // toolStripSeparator3
             // 
             this.toolStripSeparator3.Name = "toolStripSeparator3";
-            this.toolStripSeparator3.Size = new System.Drawing.Size(6, 29);
+            this.toolStripSeparator3.Size = new System.Drawing.Size(6, 40);
             // 
             // toolStripDropDownButton_inputTimeString
             // 
@@ -357,48 +364,48 @@ namespace dp2Circulation
             this.toolStripDropDownButton_inputTimeString.Image = ((System.Drawing.Image)(resources.GetObject("toolStripDropDownButton_inputTimeString.Image")));
             this.toolStripDropDownButton_inputTimeString.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripDropDownButton_inputTimeString.Name = "toolStripDropDownButton_inputTimeString";
-            this.toolStripDropDownButton_inputTimeString.Size = new System.Drawing.Size(29, 26);
-            this.toolStripDropDownButton_inputTimeString.Text = "∫Õ ±º‰”–πÿµƒπ¶ƒ‹";
+            this.toolStripDropDownButton_inputTimeString.Size = new System.Drawing.Size(42, 37);
+            this.toolStripDropDownButton_inputTimeString.Text = "ÂíåÊó∂Èó¥ÊúâÂÖ≥ÁöÑÂäüËÉΩ";
             // 
             // ToolStripMenuItem_rfc1123Single
             // 
             this.ToolStripMenuItem_rfc1123Single.Name = "ToolStripMenuItem_rfc1123Single";
-            this.ToolStripMenuItem_rfc1123Single.Size = new System.Drawing.Size(195, 22);
-            this.ToolStripMenuItem_rfc1123Single.Text = "RFC1123 ±º‰÷µ...";
+            this.ToolStripMenuItem_rfc1123Single.Size = new System.Drawing.Size(272, 30);
+            this.ToolStripMenuItem_rfc1123Single.Text = "RFC1123Êó∂Èó¥ÂÄº...";
             this.ToolStripMenuItem_rfc1123Single.Visible = false;
             this.ToolStripMenuItem_rfc1123Single.Click += new System.EventHandler(this.ToolStripMenuItem_rfc1123Single_Click);
             // 
             // ToolStripMenuItem_uSingle
             // 
             this.ToolStripMenuItem_uSingle.Name = "ToolStripMenuItem_uSingle";
-            this.ToolStripMenuItem_uSingle.Size = new System.Drawing.Size(195, 22);
-            this.ToolStripMenuItem_uSingle.Text = "u ±º‰÷µ...";
+            this.ToolStripMenuItem_uSingle.Size = new System.Drawing.Size(272, 30);
+            this.ToolStripMenuItem_uSingle.Text = "uÊó∂Èó¥ÂÄº...";
             this.ToolStripMenuItem_uSingle.Click += new System.EventHandler(this.ToolStripMenuItem_uSingle_Click);
             // 
             // toolStripSeparator2
             // 
             this.toolStripSeparator2.Name = "toolStripSeparator2";
-            this.toolStripSeparator2.Size = new System.Drawing.Size(192, 6);
+            this.toolStripSeparator2.Size = new System.Drawing.Size(269, 6);
             // 
             // ToolStripMenuItem_rfc1123Range
             // 
             this.ToolStripMenuItem_rfc1123Range.Name = "ToolStripMenuItem_rfc1123Range";
-            this.ToolStripMenuItem_rfc1123Range.Size = new System.Drawing.Size(195, 22);
-            this.ToolStripMenuItem_rfc1123Range.Text = "RFC1123 ±º‰÷µ∑∂Œß...";
+            this.ToolStripMenuItem_rfc1123Range.Size = new System.Drawing.Size(272, 30);
+            this.ToolStripMenuItem_rfc1123Range.Text = "RFC1123Êó∂Èó¥ÂÄºËåÉÂõ¥...";
             this.ToolStripMenuItem_rfc1123Range.Visible = false;
             this.ToolStripMenuItem_rfc1123Range.Click += new System.EventHandler(this.ToolStripMenuItem_rfc1123Range_Click);
             // 
             // ToolStripMenuItem_uRange
             // 
             this.ToolStripMenuItem_uRange.Name = "ToolStripMenuItem_uRange";
-            this.ToolStripMenuItem_uRange.Size = new System.Drawing.Size(195, 22);
-            this.ToolStripMenuItem_uRange.Text = "u ±º‰÷µ∑∂Œß...";
+            this.ToolStripMenuItem_uRange.Size = new System.Drawing.Size(272, 30);
+            this.ToolStripMenuItem_uRange.Text = "uÊó∂Èó¥ÂÄºËåÉÂõ¥...";
             this.ToolStripMenuItem_uRange.Click += new System.EventHandler(this.ToolStripMenuItem_uRange_Click);
             // 
             // toolStripSeparator1
             // 
             this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 29);
+            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 40);
             this.toolStripSeparator1.Visible = false;
             // 
             // toolStripButton_prevQuery
@@ -408,8 +415,8 @@ namespace dp2Circulation
             this.toolStripButton_prevQuery.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton_prevQuery.Image")));
             this.toolStripButton_prevQuery.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripButton_prevQuery.Name = "toolStripButton_prevQuery";
-            this.toolStripButton_prevQuery.Size = new System.Drawing.Size(23, 26);
-            this.toolStripButton_prevQuery.Text = "∫ÛÕÀ";
+            this.toolStripButton_prevQuery.Size = new System.Drawing.Size(28, 37);
+            this.toolStripButton_prevQuery.Text = "ÂêéÈÄÄ";
             this.toolStripButton_prevQuery.Click += new System.EventHandler(this.toolStripButton_prevQuery_Click);
             // 
             // toolStripButton_nextQuery
@@ -419,18 +426,18 @@ namespace dp2Circulation
             this.toolStripButton_nextQuery.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton_nextQuery.Image")));
             this.toolStripButton_nextQuery.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripButton_nextQuery.Name = "toolStripButton_nextQuery";
-            this.toolStripButton_nextQuery.Size = new System.Drawing.Size(23, 26);
-            this.toolStripButton_nextQuery.Text = "«∞Ω¯";
+            this.toolStripButton_nextQuery.Size = new System.Drawing.Size(28, 37);
+            this.toolStripButton_nextQuery.Text = "ÂâçËøõ";
             this.toolStripButton_nextQuery.Click += new System.EventHandler(this.toolStripButton_nextQuery_Click);
             // 
             // button_search
             // 
-            this.button_search.Location = new System.Drawing.Point(283, 31);
-            this.button_search.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.button_search.Location = new System.Drawing.Point(398, 43);
+            this.button_search.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             this.button_search.Name = "button_search";
             this.button_search.Size = new System.Drawing.Size(0, 0);
             this.button_search.TabIndex = 14;
-            this.button_search.Text = "ºÏÀ˜(&S)";
+            this.button_search.Text = "Ê£ÄÁ¥¢(&S)";
             this.button_search.UseVisualStyleBackColor = true;
             this.button_search.Click += new System.EventHandler(this.button_search_Click);
             // 
@@ -439,10 +446,10 @@ namespace dp2Circulation
             this.comboBox_location.Dock = System.Windows.Forms.DockStyle.Fill;
             this.comboBox_location.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_location.FormattingEnabled = true;
-            this.comboBox_location.Location = new System.Drawing.Point(89, 121);
-            this.comboBox_location.Margin = new System.Windows.Forms.Padding(4);
+            this.comboBox_location.Location = new System.Drawing.Point(134, 162);
+            this.comboBox_location.Margin = new System.Windows.Forms.Padding(6);
             this.comboBox_location.Name = "comboBox_location";
-            this.comboBox_location.Size = new System.Drawing.Size(187, 20);
+            this.comboBox_location.Size = new System.Drawing.Size(254, 26);
             this.comboBox_location.TabIndex = 16;
             // 
             // tableLayoutPanel_main
@@ -453,29 +460,30 @@ namespace dp2Circulation
             this.tableLayoutPanel_main.Controls.Add(this.splitContainer_main, 0, 0);
             this.tableLayoutPanel_main.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanel_main.Location = new System.Drawing.Point(0, 0);
-            this.tableLayoutPanel_main.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.tableLayoutPanel_main.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             this.tableLayoutPanel_main.Name = "tableLayoutPanel_main";
-            this.tableLayoutPanel_main.Padding = new System.Windows.Forms.Padding(0, 12, 0, 12);
+            this.tableLayoutPanel_main.Padding = new System.Windows.Forms.Padding(0, 18, 0, 18);
             this.tableLayoutPanel_main.RowCount = 2;
             this.tableLayoutPanel_main.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanel_main.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.tableLayoutPanel_main.Size = new System.Drawing.Size(489, 370);
+            this.tableLayoutPanel_main.Size = new System.Drawing.Size(734, 555);
             this.tableLayoutPanel_main.TabIndex = 0;
             // 
             // label_message
             // 
             this.label_message.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.label_message.Location = new System.Drawing.Point(0, 336);
-            this.label_message.Margin = new System.Windows.Forms.Padding(0, 2, 0, 0);
+            this.label_message.Location = new System.Drawing.Point(0, 504);
+            this.label_message.Margin = new System.Windows.Forms.Padding(0, 3, 0, 0);
             this.label_message.Name = "label_message";
-            this.label_message.Size = new System.Drawing.Size(489, 22);
+            this.label_message.Size = new System.Drawing.Size(734, 33);
             this.label_message.TabIndex = 1;
             // 
             // splitContainer_main
             // 
             this.splitContainer_main.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.splitContainer_main.Location = new System.Drawing.Point(3, 15);
+            this.splitContainer_main.Location = new System.Drawing.Point(4, 22);
+            this.splitContainer_main.Margin = new System.Windows.Forms.Padding(4);
             this.splitContainer_main.Name = "splitContainer_main";
             this.splitContainer_main.Orientation = System.Windows.Forms.Orientation.Horizontal;
             // 
@@ -486,9 +494,9 @@ namespace dp2Circulation
             // splitContainer_main.Panel2
             // 
             this.splitContainer_main.Panel2.Controls.Add(this.listView_records);
-            this.splitContainer_main.Size = new System.Drawing.Size(483, 316);
-            this.splitContainer_main.SplitterDistance = 166;
-            this.splitContainer_main.SplitterWidth = 8;
+            this.splitContainer_main.Size = new System.Drawing.Size(726, 475);
+            this.splitContainer_main.SplitterDistance = 249;
+            this.splitContainer_main.SplitterWidth = 12;
             this.splitContainer_main.TabIndex = 2;
             // 
             // tabControl_query
@@ -497,43 +505,46 @@ namespace dp2Circulation
             this.tabControl_query.Controls.Add(this.tabPage_logic);
             this.tabControl_query.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tabControl_query.Location = new System.Drawing.Point(0, 0);
+            this.tabControl_query.Margin = new System.Windows.Forms.Padding(4);
             this.tabControl_query.Name = "tabControl_query";
             this.tabControl_query.SelectedIndex = 0;
-            this.tabControl_query.Size = new System.Drawing.Size(483, 166);
+            this.tabControl_query.Size = new System.Drawing.Size(726, 249);
             this.tabControl_query.TabIndex = 1;
             // 
             // tabPage_simple
             // 
             this.tabPage_simple.AutoScroll = true;
             this.tabPage_simple.Controls.Add(this.tableLayoutPanel_query);
-            this.tabPage_simple.Location = new System.Drawing.Point(4, 22);
+            this.tabPage_simple.Location = new System.Drawing.Point(4, 28);
+            this.tabPage_simple.Margin = new System.Windows.Forms.Padding(4);
             this.tabPage_simple.Name = "tabPage_simple";
-            this.tabPage_simple.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage_simple.Size = new System.Drawing.Size(475, 140);
+            this.tabPage_simple.Padding = new System.Windows.Forms.Padding(4);
+            this.tabPage_simple.Size = new System.Drawing.Size(718, 217);
             this.tabPage_simple.TabIndex = 0;
-            this.tabPage_simple.Text = "ºÚµ•";
+            this.tabPage_simple.Text = "ÁÆÄÂçï";
             this.tabPage_simple.UseVisualStyleBackColor = true;
             // 
             // tabPage_logic
             // 
             this.tabPage_logic.AutoScroll = true;
             this.tabPage_logic.Controls.Add(this.dp2QueryControl1);
-            this.tabPage_logic.Location = new System.Drawing.Point(4, 22);
+            this.tabPage_logic.Location = new System.Drawing.Point(4, 28);
+            this.tabPage_logic.Margin = new System.Windows.Forms.Padding(4);
             this.tabPage_logic.Name = "tabPage_logic";
-            this.tabPage_logic.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage_logic.Size = new System.Drawing.Size(475, 140);
+            this.tabPage_logic.Padding = new System.Windows.Forms.Padding(4);
+            this.tabPage_logic.Size = new System.Drawing.Size(718, 217);
             this.tabPage_logic.TabIndex = 1;
-            this.tabPage_logic.Text = "¬ﬂº≠";
+            this.tabPage_logic.Text = "ÈÄªËæë";
             this.tabPage_logic.UseVisualStyleBackColor = true;
             // 
             // dp2QueryControl1
             // 
             this.dp2QueryControl1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.dp2QueryControl1.Location = new System.Drawing.Point(3, 3);
-            this.dp2QueryControl1.Margin = new System.Windows.Forms.Padding(6);
+            this.dp2QueryControl1.Location = new System.Drawing.Point(4, 4);
+            this.dp2QueryControl1.Margin = new System.Windows.Forms.Padding(9);
             this.dp2QueryControl1.Name = "dp2QueryControl1";
             this.dp2QueryControl1.PanelMode = DigitalPlatform.CommonControl.PanelMode.None;
-            this.dp2QueryControl1.Size = new System.Drawing.Size(469, 134);
+            this.dp2QueryControl1.Size = new System.Drawing.Size(710, 209);
             this.dp2QueryControl1.TabIndex = 0;
             this.dp2QueryControl1.GetList += new DigitalPlatform.CommonControl.GetListEventHandler(this.dp2QueryControl1_GetList);
             this.dp2QueryControl1.ViewXml += new System.EventHandler(this.dp2QueryControl1_ViewXml);
@@ -552,7 +563,7 @@ namespace dp2Circulation
             this.listView_records.Location = new System.Drawing.Point(0, 0);
             this.listView_records.Margin = new System.Windows.Forms.Padding(0);
             this.listView_records.Name = "listView_records";
-            this.listView_records.Size = new System.Drawing.Size(483, 142);
+            this.listView_records.Size = new System.Drawing.Size(726, 214);
             this.listView_records.TabIndex = 0;
             this.listView_records.UseCompatibleStateImageBehavior = false;
             this.listView_records.View = System.Windows.Forms.View.Details;
@@ -564,7 +575,7 @@ namespace dp2Circulation
             // 
             // columnHeader_path
             // 
-            this.columnHeader_path.Text = "¬∑æ∂";
+            this.columnHeader_path.Text = "Ë∑ØÂæÑ";
             this.columnHeader_path.Width = 100;
             // 
             // columnHeader_1
@@ -572,21 +583,29 @@ namespace dp2Circulation
             this.columnHeader_1.Text = "1";
             this.columnHeader_1.Width = 300;
             // 
+            // ToolStripMenuItem_filterRecords
+            // 
+            this.ToolStripMenuItem_filterRecords.Name = "ToolStripMenuItem_filterRecords";
+            this.ToolStripMenuItem_filterRecords.Size = new System.Drawing.Size(252, 30);
+            this.ToolStripMenuItem_filterRecords.Text = "Êô∫ËÉΩÁ≠õÈÄâ ...";
+            this.ToolStripMenuItem_filterRecords.Click += new System.EventHandler(this.ToolStripMenuItem_filterRecords_Click);
+            // 
             // BiblioSearchForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 18F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(489, 370);
+            this.ClientSize = new System.Drawing.Size(734, 555);
             this.Controls.Add(this.tableLayoutPanel_main);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             this.Name = "BiblioSearchForm";
             this.ShowInTaskbar = false;
-            this.Text = " Èƒø≤È—Ø";
+            this.Text = "‰π¶ÁõÆÊü•ËØ¢";
             this.Activated += new System.EventHandler(this.BiblioSearchForm_Activated);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.BiblioSearchForm_FormClosing);
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.BiblioSearchForm_FormClosed);
             this.Load += new System.EventHandler(this.BiblioSearchForm_Load);
+            this.VisibleChanged += new System.EventHandler(this.BiblioSearchForm_VisibleChanged);
             this.contextMenuStrip_biblioDb.ResumeLayout(false);
             this.tableLayoutPanel_query.ResumeLayout(false);
             this.tableLayoutPanel_query.PerformLayout();
@@ -614,7 +633,7 @@ namespace dp2Circulation
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.TextBox textBox_queryWord;
         private System.Windows.Forms.Label label1;
-        private System.Windows.Forms.Label label3;
+        private System.Windows.Forms.Label label_biblioDbName;
         private System.Windows.Forms.ContextMenuStrip contextMenuStrip_biblioDb;
         private System.Windows.Forms.ToolStripMenuItem MenuItem_viewBiblioDbProperty;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanel_query;
@@ -649,5 +668,6 @@ namespace dp2Circulation
         private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_searchShareBiblio;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.ComboBox comboBox_location;
+        private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_filterRecords;
     }
 }

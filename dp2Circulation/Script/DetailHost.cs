@@ -18,7 +18,6 @@ using DigitalPlatform.Script;
 using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 
-using DigitalPlatform.GcatClient;
 using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
 
@@ -206,15 +205,18 @@ namespace dp2Circulation
 
         #endregion
 
+        // 引用
         /// <summary>
         /// 种册窗
         /// </summary>
         public EntityForm DetailForm = null;
 
+#if OLD_CODE
         /// <summary>
         /// GCAT 通讯通道
         /// </summary>
         DigitalPlatform.GcatClient.Channel GcatChannel = null;
+#endif
 
         /// <summary>
         /// 构造函数
@@ -228,8 +230,14 @@ namespace dp2Circulation
 
         public void Dispose()
         {
+#if OLD_CODE
             if (this.GcatChannel != null)
                 this.GcatChannel.Dispose();
+#endif
+
+            // 2017/4/23
+            if (this.DetailForm != null)
+                this.DetailForm = null;
         }
 
         /// <summary>
@@ -294,7 +302,8 @@ namespace dp2Circulation
                         //      0   not found
                         //      1   found
                         nRet = MacroUtil.GetFromLocalMacroTable(
-                            PathUtil.MergePath(this.DetailForm.MainForm.DataDir, "marceditor_macrotable.xml"),
+                            // PathUtil.MergePath(Program.MainForm.DataDir, "marceditor_macrotable.xml"),
+                            PathUtil.MergePath(Program.MainForm.UserDir, "marceditor_macrotable.xml"),
                 "catalog_batchno",
                 false,
                 out strValue,
@@ -377,9 +386,9 @@ namespace dp2Circulation
             HtmlViewerForm dlg = new HtmlViewerForm();
             dlg.Text = "荐购者信息";
             dlg.HtmlString = strHtml;
-            this.DetailForm.MainForm.AppInfo.LinkFormState(dlg, "AfterCreateItems_dialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "AfterCreateItems_dialog_state");
             dlg.ShowDialog(this.DetailForm);
-            this.DetailForm.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             return;
         ERROR1:
@@ -618,10 +627,10 @@ namespace dp2Circulation
                                     //      -1  出错
                                     //      0   用户希望中断
                                     //      1   正常
-                                    if (string.IsNullOrEmpty(this.DetailForm.MainForm.PinyinServerUrl) == true
-                                       || this.DetailForm.MainForm.ForceUseLocalPinyinFunc == true)
+                                    if (string.IsNullOrEmpty(Program.MainForm.PinyinServerUrl) == true
+                                       || Program.MainForm.ForceUseLocalPinyinFunc == true)
                                     {
-                                        nRet = this.DetailForm.MainForm.HanziTextToPinyin(
+                                        nRet = Program.MainForm.HanziTextToPinyin(
                                             this.DetailForm,
                                             true,	// 本地，快速
                                             strHanzi,
@@ -638,7 +647,7 @@ namespace dp2Circulation
                                         //      0   用户希望中断
                                         //      1   正常
                                         //      2   结果字符串中有没有找到拼音的汉字
-                                        nRet = this.DetailForm.MainForm.SmartHanziTextToPinyin(
+                                        nRet = Program.MainForm.SmartHanziTextToPinyin(
                                             this.DetailForm,
                                             strHanzi,
                                             style,
@@ -647,7 +656,7 @@ namespace dp2Circulation
                                             out strError);
                                     }
 #endif
-                                    nRet = this.DetailForm.MainForm.GetPinyin(
+                                    nRet = Program.MainForm.GetPinyin(
                                         this.DetailForm,
                                         strHanzi,
                                         style,
@@ -681,10 +690,10 @@ namespace dp2Circulation
                                     strContent = strPrefix + strPinyin;
                                 else if (string.IsNullOrEmpty(strSubfieldPrefix) == false)
                                     strContent = strSubfieldPrefix + strPinyin;
-                                    /*
-                                else if (string.IsNullOrEmpty(strFieldPrefix) == false)
-                                    strContent = strFieldPrefix + strPinyin;
-                                     * */
+                                /*
+                            else if (string.IsNullOrEmpty(strFieldPrefix) == false)
+                                strContent = strFieldPrefix + strPinyin;
+                                 * */
 
                                 nRet = MarcUtil.InsertSubfield(
                                     ref strField,
@@ -707,7 +716,7 @@ namespace dp2Circulation
                 this.DetailForm.MarcEditor.Focus();
             }
             return 0;
-        ERROR1:
+            ERROR1:
             if (string.IsNullOrEmpty(strError) == false)
             {
                 if (strError[0] != ' ')
@@ -896,7 +905,7 @@ namespace dp2Circulation
                 this.DetailForm.MarcEditor.Focus();
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this.DetailForm, strError);
         }
         /*
@@ -1024,8 +1033,10 @@ namespace dp2Circulation
 
         void DoGcatStop(object sender, StopEventArgs e)
         {
+#if OLD_CODE
             if (this.GcatChannel != null)
                 this.GcatChannel.Abort();
+#endif
         }
 
         bool bMarcEditorFocued = false;
@@ -1046,7 +1057,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.DetailForm.Update();
-            this.DetailForm.MainForm.Update();
+            Program.MainForm.Update();
         }
 
         /// <summary>
@@ -1179,17 +1190,17 @@ namespace dp2Circulation
             strError = "";
             strAuthorNumber = "";
 
-            int nRet = this.DetailForm.MainForm.LoadQuickCutter(true, out strError);
+            int nRet = Program.MainForm.LoadQuickCutter(true, out strError);
             if (nRet == -1)
                 return -1;
 
             string strText = "";
             string strNumber = "";
-        // return:
-        //      -1  error
-        //      0   not found
-        //      1   found
-            nRet = this.DetailForm.MainForm.QuickCutter.GetEntry(strAuthor,
+            // return:
+            //      -1  error
+            //      0   not found
+            //      1   found
+            nRet = Program.MainForm.QuickCutter.GetEntry(strAuthor,
                 out strText,
                 out strNumber,
                 out strError);
@@ -1239,7 +1250,7 @@ namespace dp2Circulation
             //      -1  出错
             //      0   用户希望中断
             //      1   正常
-            nRet = this.DetailForm.MainForm.HanziTextToSjhm(
+            nRet = Program.MainForm.HanziTextToSjhm(
                 true,
                 strResult,
                 out sjhms,
@@ -1292,6 +1303,7 @@ namespace dp2Circulation
 
         // 获得著者号
         // return:
+        //      -4  著者字符串没有检索命中
         //      -1  error
         //      0   canceled
         //      1   succeed
@@ -1312,8 +1324,9 @@ namespace dp2Circulation
             strAuthorNumber = "";
 
             if (String.IsNullOrEmpty(strGcatWebServiceUrl) == true)
-                strGcatWebServiceUrl = "http://dp2003.com/gcatserver/";  //  "http://dp2003.com/dp2libraryws/gcat.asmx";
+                strGcatWebServiceUrl = "http://dp2003.com/dp2library/";  // "http://dp2003.com/gcatserver/"    //  "http://dp2003.com/dp2libraryws/gcat.asmx";
 
+#if OLD_CODE
             if (strGcatWebServiceUrl.IndexOf(".asmx") != -1)
             {
 
@@ -1354,18 +1367,18 @@ namespace dp2Circulation
                     EndGcatLoop();
                 }
             }
-            else
+            else if (strGcatWebServiceUrl.Contains("gcat"))
             {
                 // 新的WebService
 
-                string strID = this.DetailForm.MainForm.AppInfo.GetString("DetailHost", "gcat_id", "");
-                bool bSaveID = this.DetailForm.MainForm.AppInfo.GetBoolean("DetailHost", "gcat_saveid", false);
+                string strID = Program.MainForm.AppInfo.GetString("DetailHost", "gcat_id", "");
+                bool bSaveID = Program.MainForm.AppInfo.GetBoolean("DetailHost", "gcat_saveid", false);
 
-                Hashtable question_table = (Hashtable)this.DetailForm.MainForm.ParamTable["question_table"];
+                Hashtable question_table = (Hashtable)Program.MainForm.ParamTable["question_table"];
                 if (question_table == null)
                     question_table = new Hashtable();
 
-            REDO_GETNUMBER:
+                REDO_GETNUMBER:
                 string strDebugInfo = "";
 
                 BeginGcatLoop("正在获取 '" + strAuthor + "' 的著者号，从 " + strGcatWebServiceUrl + " ...");
@@ -1396,7 +1409,7 @@ namespace dp2Circulation
                     if (nRet == -2)
                     {
                         IdLoginDialog login_dlg = new IdLoginDialog();
-                        GuiUtil.SetControlFont(login_dlg, this.DetailForm.MainForm.DefaultFont, false);
+                        GuiUtil.SetControlFont(login_dlg, Program.MainForm.DefaultFont, false);
                         login_dlg.Text = "获得著者号 -- "
                             + ((string.IsNullOrEmpty(strID) == true) ? "请输入ID" : strError);
                         login_dlg.ID = strID;
@@ -1411,19 +1424,64 @@ namespace dp2Circulation
                         bSaveID = login_dlg.SaveID;
                         if (login_dlg.SaveID == true)
                         {
-                            this.DetailForm.MainForm.AppInfo.SetString("DetailHost", "gcat_id", strID);
+                            Program.MainForm.AppInfo.SetString("DetailHost", "gcat_id", strID);
                         }
                         else
                         {
-                            this.DetailForm.MainForm.AppInfo.SetString("DetailHost", "gcat_id", "");
+                            Program.MainForm.AppInfo.SetString("DetailHost", "gcat_id", "");
                         }
-                        this.DetailForm.MainForm.AppInfo.SetBoolean("DetailHost", "gcat_saveid", bSaveID);
+                        Program.MainForm.AppInfo.SetBoolean("DetailHost", "gcat_saveid", bSaveID);
                         goto REDO_GETNUMBER;
                     }
 
-                    this.DetailForm.MainForm.ParamTable["question_table"] = question_table;
+                    Program.MainForm.ParamTable["question_table"] = question_table;
 
                     return nRet;
+                }
+                finally
+                {
+                    EndGcatLoop();
+                }
+            }
+            else 
+#endif
+            // dp2library 服务器
+            {
+                Hashtable question_table = (Hashtable)Program.MainForm.ParamTable["question_table"];
+                if (question_table == null)
+                    question_table = new Hashtable();
+
+                string strDebugInfo = "";
+
+                BeginGcatLoop("正在获取 '" + strAuthor + "' 的著者号，从 " + strGcatWebServiceUrl + " ...");
+                try
+                {
+                    // return:
+                    //      -4  著者字符串没有检索命中
+                    //      -2  strID验证失败
+                    //      -1  error
+                    //      0   canceled
+                    //      1   succeed
+                    long nRet = BiblioItemsHost.GetAuthorNumber(
+                        ref question_table,
+                        this.DetailForm.Progress,
+                        this.DetailForm,
+                        strGcatWebServiceUrl,
+                        strAuthor,
+                        "",
+                        true,	// bSelectPinyin
+                        true,	// bSelectEntry
+                        true,	// bOutputDebugInfo
+                        out strAuthorNumber,
+                        out strDebugInfo,
+                        out strError);
+                    if (nRet == -1)
+                    {
+                        strError = "取 著者 '" + strAuthor + "' 之号码时出错 : " + strError;
+                        return -1;
+                    }
+                    Program.MainForm.ParamTable["question_table"] = question_table;
+                    return (int)nRet;
                 }
                 finally
                 {
@@ -1611,7 +1669,7 @@ namespace dp2Circulation
                     strFieldName = "694";
                     strSubfieldName = "a";
                 }
-                else if (strClassType == "其它")
+                else if (strClassType == "其它" || strClassType == "红泥巴")
                 {
                     strFieldName = "686";
                     strSubfieldName = "a";
@@ -1669,7 +1727,7 @@ namespace dp2Circulation
                     strFieldName = "095";
                     strSubfieldName = "a";
                 }
-                else if (strClassType == "其它")
+                else if (strClassType == "其它" || strClassType == "红泥巴")
                 {
                     strFieldName = "084";
                     strSubfieldName = "a";
@@ -1742,7 +1800,7 @@ namespace dp2Circulation
 
 
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this.DetailForm.MainForm.GetArrangementInfo(strLocation,
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
                     out info,
                     out strError);
                 if (nRet == 0)
@@ -1760,6 +1818,15 @@ namespace dp2Circulation
                     edit.entityEditControl_editing.AccessNo);
 
                 strItemRecPath = edit.entityEditControl_editing.RecPath;
+
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(strItemRecPath))
+                {
+                    strItemRecPath = "@refID:" + edit.entityEditControl_editing.RefID;
+                    // TODO: 不应为空
+                }
+#endif
 
                 callnumber_items = edit.Items.GetCallNumberItems();
             }
@@ -1793,7 +1860,7 @@ namespace dp2Circulation
                 }*/
 
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this.DetailForm.MainForm.GetArrangementInfo(strLocation,
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
                     out info,
                     out strError);
                 if (nRet == 0)
@@ -1810,7 +1877,14 @@ namespace dp2Circulation
                     book_item.AccessNo);
 
                 strItemRecPath = book_item.RecPath;
-
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(strItemRecPath))
+                {
+                    strItemRecPath = "@refID:" + book_item.RefID;
+                    // TODO: 不应为空
+                }
+#endif
                 callnumber_items = control.Items.GetCallNumberItems();
             }
             else if (sender is BindingForm)
@@ -1822,7 +1896,7 @@ namespace dp2Circulation
                 strLocation = StringUtil.GetPureLocationString(strLocation);  // 2009/3/29 
 
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this.DetailForm.MainForm.GetArrangementInfo(strLocation,
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
                     out info,
                     out strError);
                 if (nRet == 0)
@@ -1841,11 +1915,19 @@ namespace dp2Circulation
 
                 strItemRecPath = binding.EntityEditControl.RecPath;
 
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(strItemRecPath))
+                {
+                    strItemRecPath = "@refID:" + binding.EntityEditControl.RefID;
+                    // TODO: 不应为空
+                }
+#endif
                 callnumber_items = binding.GetCallNumberItems();    // ???
             }
             else
             {
-                strError = "sender必须是EntityEditForm或EntityControl或BindingForm类型(当前为"+sender.GetType().ToString()+")";
+                strError = "sender必须是EntityEditForm或EntityControl或BindingForm类型(当前为" + sender.GetType().ToString() + ")";
                 goto ERROR1;
             }
 
@@ -1879,8 +1961,8 @@ namespace dp2Circulation
 
             CallNumberForm dlg = new CallNumberForm();
 
-            // dlg.MdiParent = this.DetailForm.MainForm;   // 打开为MDI子窗口
-            dlg.MainForm = this.DetailForm.MainForm;
+            // dlg.MdiParent = Program.MainForm;   // 打开为MDI子窗口
+            dlg.MainForm = Program.MainForm;
             // dlg.TopMost = true;  // 打开为无模式对话框
             dlg.MyselfItemRecPath = strItemRecPath;
             dlg.MyselfParentRecPath = this.DetailForm.BiblioRecPath;
@@ -1896,11 +1978,11 @@ namespace dp2Circulation
             dlg.FormClosed -= new FormClosedEventHandler(dlg_FormClosed);
             dlg.FormClosed += new FormClosedEventHandler(dlg_FormClosed);
 
-            this.DetailForm.MainForm.AppInfo.LinkFormState(dlg, "callnumber_floating_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "callnumber_floating_state");
             dlg.Show();
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this.DetailForm, strError);
         }
 
@@ -1908,7 +1990,7 @@ namespace dp2Circulation
         {
             if (sender != null)
             {
-                // this.DetailForm.MainForm.AppInfo.UnlinkFormState(sender as Form);
+                // Program.MainForm.AppInfo.UnlinkFormState(sender as Form);
             }
         }
 #if NO
@@ -2097,7 +2179,7 @@ namespace dp2Circulation
             //      -1  出错
             //      0   用户希望中断
             //      1   正常
-            nRet = this.DetailForm.MainForm.HanziTextToSjhm(
+            nRet = Program.MainForm.HanziTextToSjhm(
                 true,
                 strResult,
                 out sjhms,
@@ -2187,6 +2269,7 @@ namespace dp2Circulation
         }
 
 
+        // 注意：此函数和 BiblioItemsHost.cs 中的同名函数重复内容。请尽量保持同步修改
         // 获得种次号以外的其他区分号，主要是著者号
         // return:
         //      -1  error
@@ -2317,7 +2400,7 @@ namespace dp2Circulation
                             if (string.IsNullOrEmpty(strWarning) == false)
                                 strWarning += "; ";
                             strWarning += author.Author;
-                        } 
+                        }
                     }
 
                     if (string.IsNullOrEmpty(strErrorText) == false)
@@ -2355,14 +2438,21 @@ namespace dp2Circulation
                 string type = one.Type;
                 string strAuthor = one.Author;
                 Debug.Assert(String.IsNullOrEmpty(strAuthor) == false, "");
+                REDO:
 
                 if (type == "GCAT")
                 {
+                    string strPinyin = "";
+                    List<string> two = StringUtil.ParseTwoPart(strAuthor, "|");
+                    strAuthor = two[0];
+                    strPinyin = two[1];
+
                     // 获得著者号
-                    string strGcatWebServiceUrl = this.DetailForm.MainForm.GcatServerUrl;   // "http://dp2003.com/dp2libraryws/gcat.asmx";
+                    string strGcatWebServiceUrl = Program.MainForm.GcatServerUrl;   // "http://dp2003.com/dp2libraryws/gcat.asmx";
 
                     // 获得著者号
                     // return:
+                    //      -4  著者字符串没有检索命中
                     //      -1  error
                     //      0   canceled
                     //      1   succeed
@@ -2379,6 +2469,45 @@ namespace dp2Circulation
                         if (string.IsNullOrEmpty(strError) == true)
                             strError = "放弃从 GCAT 取号";
                         return 0;
+                    }
+
+                    if (nRet == -4)
+                    {
+                        string strHanzi = strAuthor;
+                        string strLastError = strError;
+                        // 临时取汉字的拼音
+                        if (string.IsNullOrEmpty(strPinyin))
+                        {
+                            strPinyin = strAuthor;
+                            // 取拼音
+                            nRet = HanziToPinyin(ref strPinyin,
+                                out strError);
+                            if (nRet == -1)
+                                goto ERROR1;
+                        }
+                        if (string.IsNullOrEmpty(strPinyin))
+                            goto ERROR1;
+                        string strMessage = "字符串 '" + strHanzi + "' 取汉语著者号码时出现意外状况: " + strLastError + "\r\n\r\n后面软件会自动尝试用卡特表方式为拼音字符串 '" + strPinyin + "' 取号。";
+                        strAuthor = strPinyin;
+                        type = "Cutter-Sanborn Three-Figure";
+                        // MessageBox.Show(this.DetailForm, strMessage);
+
+                        object o = Program.MainForm.ParamTable["gcat_warning"];
+                        bool bTemp = (o == null ? false : (bool)o);
+                        if (bTemp == false)
+                        {
+                            MessageDialog.Show(this.DetailForm,
+                                "汉语著者号码缺字",
+                                strMessage,
+                                "下次不再出现此对话框",
+                                ref bTemp);
+                            Program.MainForm.ParamTable["gcat_warning"] = bTemp;
+                        }
+
+                        // 尝试把信息发给 dp2003.com
+                        Program.MainForm.ReportError("dp2circulation 创建索取号", "(安静汇报)" + strMessage);
+
+                        goto REDO;
                     }
 
                     return 1;
@@ -2455,7 +2584,7 @@ namespace dp2Circulation
                 }
             }
             //return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -2481,20 +2610,16 @@ namespace dp2Circulation
             strAuthor = "";
             fLevel = 2;
 
+            string strPinyin = "";
+
             string strMarcSyntax = this.DetailForm.GetCurrentMarcSyntax();
 
             if (strQufenhaoType == "GCAT")
             {
                 if (strMarcSyntax == "unimarc")
                 {
+
 #if NO
-                    List<string> locations = new List<string>();
-                    locations.Add("701a");
-                    locations.Add("711a");
-                    locations.Add("702a");
-                    locations.Add("712a");
-                    strAuthor = GetFirstSubfield(locations);
-#endif
                     List<string> results = null;
                     // 700、710、720
                     results = GetSubfields("700", "a", "@[^A].");    // 指示符
@@ -2559,6 +2684,28 @@ namespace dp2Circulation
                 FOUND:
                     Debug.Assert(results.Count > 0, "");
                     strAuthor = results[0];
+#endif
+                    MarcRecord record = new MarcRecord(this.DetailForm.MarcEditor.Marc);
+
+                    // 获得一个著者字符串和对应的拼音
+                    // return:
+                    //      -1  出错
+                    //      0   没有找到
+                    //      1   找到
+                    int nRet = GetAuthorAndPinyin(record,
+            out strAuthor,
+            out strPinyin,
+            out strError);
+                    if (nRet == -1)
+                        return -1;
+                    if (nRet == 0)
+                    {
+                        strError = "MARC记录中 700/710/720/701/711/702/712/200 中均未发现包含汉字的 $a 子字段内容，无法获得著者字符串";
+                        return 0;
+                    }
+
+                    if (string.IsNullOrEmpty(strPinyin) == false)
+                        strAuthor += "|" + strPinyin;
                 }
                 else if (strMarcSyntax == "usmarc")
                 {
@@ -2660,7 +2807,7 @@ namespace dp2Circulation
                     strError = "MARC记录中 700/710/720/701/711/702/712/200 中均未发现包含汉字的 $a 子字段内容，无法获得著者字符串";
                     fLevel = 0;
                     return 0;
-                FOUND:
+                    FOUND:
                     Debug.Assert(results.Count > 0, "");
                     strAuthor = results[0];
                 }
@@ -2753,7 +2900,7 @@ namespace dp2Circulation
                     strError = "MARC记录中 700/710/720/701/711/702/712/200 中均未发现不含汉字的 $a 子字段内容，无法获得西文著者字符串";
                     fLevel = 0;
                     return 0;
-                FOUND:
+                    FOUND:
                     Debug.Assert(results.Count > 0, "");
                     strAuthor = results[0];
                 }
@@ -2904,10 +3051,11 @@ namespace dp2Circulation
             return -1;
         }
 
-        #if SHITOUTANG
+#if SHITOUTANG
 
         #region 石头汤著者号
 
+        // TODO: 可以考虑用 MarcQuery 的 MarcNodeList.FirstContent
         static string FirstContent(MarcNodeList nodes)
         {
             if (nodes.count == 0)
@@ -2940,7 +3088,7 @@ namespace dp2Circulation
                 return "";
 
             if (strText[0] == '(' || strText[0] == '（')
-                throw new ArgumentException("拼音字符串 '"+strText+"' 中具有括号，不符合规范要求", "strText");
+                throw new ArgumentException("拼音字符串 '" + strText + "' 中具有括号，不符合规范要求", "strText");
 
             string[] parts = strText.Split(new char[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (string s in parts)
@@ -2991,10 +3139,10 @@ namespace dp2Circulation
             //      -1  出错
             //      0   用户希望中断
             //      1   正常
-            if (string.IsNullOrEmpty(this.DetailForm.MainForm.PinyinServerUrl) == true
-               || this.DetailForm.MainForm.ForceUseLocalPinyinFunc == true)
+            if (string.IsNullOrEmpty(Program.MainForm.PinyinServerUrl) == true
+               || Program.MainForm.ForceUseLocalPinyinFunc == true)
             {
-                nRet = this.DetailForm.MainForm.HanziTextToPinyin(
+                nRet = Program.MainForm.HanziTextToPinyin(
                     this.DetailForm,
                     true,	// 本地，快速
                     strText,
@@ -3011,7 +3159,7 @@ namespace dp2Circulation
                 //      0   用户希望中断
                 //      1   正常
                 //      2   结果字符串中有没有找到拼音的汉字
-                nRet = this.DetailForm.MainForm.SmartHanziTextToPinyin(
+                nRet = Program.MainForm.SmartHanziTextToPinyin(
                     this.DetailForm,
                     strText,
                     PinyinStyle.None,
@@ -3020,7 +3168,7 @@ namespace dp2Circulation
                     out strError);
             }
 #endif
-            nRet = this.DetailForm.MainForm.GetPinyin(
+            nRet = Program.MainForm.GetPinyin(
                 this.DetailForm,
                 strText,
                 PinyinStyle.None,
@@ -3097,6 +3245,64 @@ namespace dp2Circulation
             return strValue;
         }
 #endif
+
+        // 2017/3/1
+        // 获得一个著者字符串和对应的拼音
+        // return:
+        //      -1  出错
+        //      0   没有找到
+        //      1   找到
+        public static int GetAuthorAndPinyin(MarcRecord record,
+            out string strAuthor,
+            out string strPinyin,
+            out string strError)
+        {
+            strError = "";
+            strAuthor = "";
+            strPinyin = "";
+
+            MarcNodeList fields = record.select("field[@name='700' or @name='701' or @name='702' or @name='710' or @name='711' or @name='712']");
+            fields.add(record.select("field[@name='200']")); // 必须两次分别 select。因为 200 一般在 MARC 记录中会先出现
+            foreach (MarcNode field in fields)
+            {
+                if ((field.Name == "700" || field.Name == "701" || field.Name == "702")
+                    && field.Indicator1 == 'A')
+                    continue;
+
+                string a = FirstContent(field.select("subfield[@name='a']"));
+                if (string.IsNullOrEmpty(a))
+                    continue;
+
+                if (ContainHanzi(a) == false)
+                    continue;
+
+                // 看看是否有 $9
+                string sub_9 = FirstContent(field.select("subfield[@name='9']"));
+
+                // 2018/11/19
+                // 如果没有 $9，则尝试找 $A
+                if (string.IsNullOrEmpty(sub_9))
+                    sub_9 = field.select("subfield[@name='A']").FirstContent;
+#if NO
+                if (string.IsNullOrEmpty(sub_9) == false)
+                {
+                    strPinyin = a;
+                    nRet = HanziToPinyin(ref a,
+                        out strError);
+                    if (nRet == -1)
+                        return -1;
+                }
+                else
+                    strPinyin = sub_9;
+#endif
+                strPinyin = sub_9;
+
+                strAuthor = a;
+                return 1;
+            }
+
+            return 0;
+        }
 
         // 从选定的字段中获得石头汤著者字符串
         // TODO: 题名字符串不看 $b
@@ -3180,7 +3386,7 @@ namespace dp2Circulation
                         // 没有 $9
                         if (ContainHanzi(a) == true)
                         {
-                            strError = "字段 "+field.Name+" 里面有 $a 而没有 $9，请先创建 $9 子字段";
+                            strError = "字段 " + field.Name + " 里面有 $a 而没有 $9，请先创建 $9 子字段";
                             return -1;
                         }
                     }
@@ -3248,7 +3454,7 @@ namespace dp2Circulation
             return 0;   // 没有找到
         }
 
-#endregion
+        #endregion
 
 #endif
 
@@ -3417,7 +3623,7 @@ namespace dp2Circulation
                 string strQufenhaoType = "";
 
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this.DetailForm.MainForm.GetCallNumberInfo(strLocation,
+                nRet = Program.MainForm.GetCallNumberInfo(strLocation,
                     out strArrangeGroupName,
                     out strZhongcihaoDbname,
                     out strClassType,
@@ -3528,6 +3734,13 @@ chi	中文	如果是中文，则为空。
             return 1;
         }
 #endif
+        // 去掉索取号中的回车换行和其他禁止出现的特殊字符
+        public static string RemoveSpecialChars(string strText)
+        {
+            if (string.IsNullOrEmpty(strText))
+                return strText;
+            return strText.Replace("\r", "").Replace("\n", "");
+        }
 
         // 创建一个索取号
         // return:
@@ -3570,23 +3783,30 @@ chi	中文	如果是中文，则为空。
 
             ArrangementInfo info = null;
 
+            Delegate_setText func_setText = null;
+            Delegate_enableControls func_enableControls = null;
+
             if (sender is EntityEditForm)
             {
                 edit = (EntityEditForm)sender;
+
+                func_setText = (text) =>
+                {
+                    edit.entityEditControl_editing.AccessNo = text;
+                };
+                func_enableControls = (enable) =>
+                    {
+                        edit.Enabled = enable;
+                        edit.Update();
+                    };
 
                 // 取得馆藏地点
                 strLocation = edit.entityEditControl_editing.LocationString;
                 strLocation = StringUtil.GetPureLocationString(strLocation);  // 2009/3/29 
 
-                /*
-                if (String.IsNullOrEmpty(strLocation) == true)
-                {
-                    strError = "请先输入馆藏地点。否则无法创建索取号";
-                    goto ERROR1;
-                }*/
-
+#if NO
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this.DetailForm.MainForm.GetArrangementInfo(strLocation,
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
                     out info,
                     out strError);
                 if (nRet == 0)
@@ -3601,18 +3821,35 @@ chi	中文	如果是中文，则为空。
                 strClass = GetClassPart(
                     info.CallNumberStyle,
                     edit.entityEditControl_editing.AccessNo);
+#endif
+                strClass = edit.entityEditControl_editing.AccessNo;
 
                 strItemRecPath = edit.entityEditControl_editing.RecPath;
-
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(strItemRecPath))
+                {
+                    strItemRecPath = "@refID:" + edit.entityEditControl_editing.RefID;
+                    // TODO: 不应为空
+                }
+#endif
                 // callnumber_items = edit.BookItems.GetCallNumberItems();
                 callnumber_items = edit.GetCallNumberItems();
 
+#if NO
                 edit.Enabled = false;
                 edit.Update();
+#endif
             }
             else if (sender is EntityControl)
             {
                 control = (EntityControl)sender;
+
+                func_enableControls = (enable) =>
+                    {
+                        control.Enabled = enable;
+                        control.Update();
+                    };
 
                 if (control.ListView.SelectedIndices.Count == 0)
                 {
@@ -3625,18 +3862,21 @@ chi	中文	如果是中文，则为空。
                 book_item = control.GetVisibleItemAt(control.ListView.SelectedIndices[index]);
                 Debug.Assert(book_item != null, "");
 
+                func_setText = (text) =>
+                    {
+                        book_item.AccessNo = text;
+                        book_item.RefreshListView();
+                        // 2011/11/10
+                        EntityControl entity_control = (EntityControl)sender;
+                        entity_control.Changed = true;
+                    };
+
                 strLocation = book_item.Location;
                 strLocation = StringUtil.GetPureLocationString(strLocation);  // 2009/3/29 
 
-                /*
-                if (String.IsNullOrEmpty(strLocation) == true)
-                {
-                    strError = "请先输入馆藏地点。否则无法创建索取号";
-                    goto ERROR1;
-                }*/
-
+#if NO
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this.DetailForm.MainForm.GetArrangementInfo(strLocation,
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
                     out info,
                     out strError);
                 if (nRet == 0)
@@ -3651,24 +3891,43 @@ chi	中文	如果是中文，则为空。
                 strClass = GetClassPart(
                     info.CallNumberStyle,
                     book_item.AccessNo);
+#endif
+                strClass = book_item.AccessNo;
 
                 strItemRecPath = book_item.RecPath;
 
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(strItemRecPath))
+                {
+                    strItemRecPath = "@refID:" + book_item.RefID;
+                    // TODO: 不应为空
+                }
+#endif
                 callnumber_items = control.Items.GetCallNumberItems();
-
-                control.Enabled = false;
-                control.Update();
             }
             else if (sender is BindingForm)
             {
                 binding = (BindingForm)sender;
 
+                func_enableControls = (enable) =>
+                    {
+                        binding.Enabled = enable;
+                        binding.Update();
+                    };
+
+                func_setText = (text) =>
+                    {
+                        binding.EntityEditControl.AccessNo = text;
+                    };
+
                 // 取得馆藏地点
                 strLocation = binding.EntityEditControl.LocationString;
                 strLocation = StringUtil.GetPureLocationString(strLocation);  // 2009/3/29 
 
+#if NO
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this.DetailForm.MainForm.GetArrangementInfo(strLocation,
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
                     out info,
                     out strError);
                 if (nRet == 0)
@@ -3683,14 +3942,90 @@ chi	中文	如果是中文，则为空。
                 strClass = GetClassPart(
                     info.CallNumberStyle,
                     binding.EntityEditControl.AccessNo);
+#endif
+                strClass = binding.EntityEditControl.AccessNo;
 
                 strItemRecPath = binding.EntityEditControl.RecPath;
 
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(strItemRecPath))
+                {
+                    strItemRecPath = "@refID:" + binding.EntityEditControl.RefID;
+                    // TODO: 不应为空
+                }
+#endif
                 // callnumber_items = edit.BookItems.GetCallNumberItems();
                 callnumber_items = binding.GetCallNumberItems();
+            }
+            else if (sender is BiblioAndEntities && e.Parameter is GetCallNumberParameter)
+            {
+                BiblioAndEntities biblio = sender as BiblioAndEntities;
+                callnumber_items = biblio.GetCallNumberItems();
+                GetCallNumberParameter parameter = e.Parameter as GetCallNumberParameter;
 
-                binding.Enabled = false;
-                binding.Update();
+                func_enableControls = (enable) =>
+                    {
+                        biblio.Owner.Enabled = enable;
+                    };
+                func_setText = (text) =>
+                    {
+                        parameter.ResultAccessNo = text;
+                    };
+
+                strLocation = parameter.Location;
+                strClass = parameter.ExistingAccessNo;
+                strItemRecPath = parameter.RecPath;
+#if NO
+                string strResult = "";
+                nRet = CreateOneCallNumber(
+                    this.Form,
+                    callnumber_items,
+                    parameter.ExistingAccessNo,
+                    parameter.Location,
+                    parameter.RecPath,
+                    out strResult,
+                    out strError);
+                if (nRet == -1)
+                    e.ErrorInfo = strError;
+                else
+                    parameter.ResultAccessNo = strResult;
+                return;
+#endif
+            }
+
+            else if (sender is BiblioAndEntities)
+            {
+                BiblioAndEntities biblio = sender as BiblioAndEntities;
+                callnumber_items = biblio.GetCallNumberItems();
+                EntityEditControl edit0 = e.FocusedControl as EntityEditControl;
+
+                func_enableControls = (enable) =>
+                {
+                    biblio.Owner.Enabled = enable;
+                };
+                func_setText = (text) =>
+                {
+                    edit0.Text = text;
+                };
+                strLocation = edit0.LocationString;
+                strClass = edit0.AccessNo;
+
+                strItemRecPath = edit0.RecPath;
+#if NO
+                string strResult = "";
+                nRet = CreateOneCallNumber(
+                    this.Form,
+                    callnumber_items,
+                    edit.AccessNo,
+                    edit.LocationString,
+                    edit.RecPath,
+                    out strResult,
+                    out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+                edit.AccessNo = strResult;
+#endif
             }
             else
             {
@@ -3698,45 +4033,29 @@ chi	中文	如果是中文，则为空。
                 goto ERROR1;
             }
 
+            if (info == null)
+            {
+                // 获得关于一个特定馆藏地点的索取号配置信息
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
+                    out info,
+                    out strError);
+                if (nRet == 0)
+                {
+                    strError = "没有关于馆藏地点 '" + strLocation + "' 的排架体系配置信息，无法获得索取号";
+                    goto ERROR1;
+                }
+                if (nRet == -1)
+                    goto ERROR1;
+            }
 
+            // 获得已有的类号
+            strClass = GetClassPart(
+                info.CallNumberStyle,
+                strClass);
+
+            func_enableControls(false);
             try
             {
-                /*
-                string strFieldName = "";
-                string strSubfieldName = "";
-
-                if (strClassType == "中图法")
-                {
-                    strFieldName = "690";
-                    strSubfieldName = "a";
-                }
-                else if (strClassType == "科图法")
-                {
-                    strFieldName = "692";
-                    strSubfieldName = "a";
-                }
-                else if (strClassType == "人大法")
-                {
-                    strFieldName = "694";
-                    strSubfieldName = "a";
-                }
-                else
-                {
-                    strError = "未知的分类法 '" + strClassType + "'";
-                    goto ERROR1;
-                }
-
-                // 总是从MARCEDIT中取得索取类号
-                strClass = this.DetailForm.MarcEditor.Record.Fields.GetFirstSubfield(
-                    strFieldName,
-                    strSubfieldName);
-                if (String.IsNullOrEmpty(strClass) == true)
-                {
-                    strError = "MARC记录中 " + strFieldName + "$" + strSubfieldName + " 没有找到，无法获得索取类号";
-                    goto ERROR1;
-                }
-                 * */
-
                 string strHeadLine = null;
 
                 if (info.CallNumberStyle == "馆藏代码+索取类号+区分号"
@@ -3785,9 +4104,14 @@ chi	中文	如果是中文，则为空。
                 Debug.Assert(nRet == 1, "");
 
                 // 先设置已经获得的索取类号部分
+                func_setText(RemoveSpecialChars(
+                    (strHeadLine != null ? strHeadLine + "/" : "") + strClass)
+                    );
+
+#if NO
+                // 先设置已经获得的索取类号部分
                 if (sender is EntityEditForm)
                 {
-                    // edit.entityEditControl_editing.AccessNo = strClass;
                     edit.entityEditControl_editing.AccessNo =
                         (strHeadLine != null ? strHeadLine + "/" : "")
                         + strClass;
@@ -3817,24 +4141,36 @@ chi	中文	如果是中文，则为空。
                 {
                     Debug.Assert(false, "");
                 }
+#endif
 
                 string strQufenhao = "";
 
                 if (info.QufenhaoType == "zhongcihao"
                     || info.QufenhaoType == "种次号")
                 {
+#if NO
+                    if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.104") < 0)
+                    {
+                        strError = "创建种次号功能必须和 dp2library 2.104 及以上版本配套使用 (而当前连接的 dp2library 版本为 "+Program.MainForm.ServerVersion+")";
+                        goto ERROR1;
+                    }
+#endif
+
                     // 获得种次号
                     CallNumberForm dlg = new CallNumberForm();
 
                     try
                     {
-                        dlg.MainForm = this.DetailForm.MainForm;
+                        dlg.MainForm = Program.MainForm;
                         // dlg.TopMost = true;
                         if (sender is Form)
                             dlg.Owner = (Form)sender;
                         dlg.MyselfItemRecPath = strItemRecPath;
                         dlg.MyselfParentRecPath = this.DetailForm.BiblioRecPath;
                         dlg.MyselfCallNumberItems = callnumber_items;   // 2009/6/4 
+
+                        Debug.Assert(this.DetailForm.MemoNumbers != null, "");
+                        dlg.MemoNumbers = this.DetailForm.MemoNumbers;
 
                         dlg.Show();
 
@@ -3893,17 +4229,26 @@ chi	中文	如果是中文，则为空。
                 }
 
                 // 最后设置完整的索取类号
+                func_setText(RemoveSpecialChars(
+                    ((strHeadLine != null ? strHeadLine + "/" : "")
+                        + strClass +
+                        (string.IsNullOrEmpty(strQufenhao) == false ?
+                        "/" + strQufenhao : "")
+                        )));
+
+#if NO
+                // 最后设置完整的索取类号
                 if (sender is EntityEditForm)
                 {
                     edit.entityEditControl_editing.AccessNo =
                         (strHeadLine != null ? strHeadLine + "/" : "")
                         + strClass +
-                        (string.IsNullOrEmpty(strQufenhao) == false ? 
+                        (string.IsNullOrEmpty(strQufenhao) == false ?
                         "/" + strQufenhao : "");
                 }
                 else if (sender is EntityControl)
                 {
-                    book_item.AccessNo = 
+                    book_item.AccessNo =
                         (strHeadLine != null ? strHeadLine + "/" : "")
                         + strClass +
                         (string.IsNullOrEmpty(strQufenhao) == false ?
@@ -3925,9 +4270,11 @@ chi	中文	如果是中文，则为空。
                 {
                     Debug.Assert(false, "");
                 }
+#endif
             }
             finally
             {
+#if NO
                 if (sender is EntityEditForm)
                 {
                     edit.Enabled = true;
@@ -3944,14 +4291,19 @@ chi	中文	如果是中文，则为空。
                 {
                     Debug.Assert(false, "");
                 }
+#endif
+                func_enableControls(true);
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
+            e.ErrorInfo = strError;
             return -1;
         }
 
+        delegate void Delegate_setText(string strText);
 
+        delegate void Delegate_enableControls(bool bEnable);
 
         // 创建索取号
         /// <summary>
@@ -4014,24 +4366,43 @@ chi	中文	如果是中文，则为空。
                 if (nRet == -1)
                     goto ERROR1;
             }
+            else if (sender is BiblioAndEntities)
+            {
+                nRet = CreateOneCallNumber(sender,
+                    e,
+                    0,
+                    out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+            }
             else
             {
                 strError = "sender必须是EntityEditForm或EntityControl或BindingForm类型(当前为" + sender.GetType().ToString() + ")";
                 goto ERROR1;
             }
             return;
-        ERROR1:
+            ERROR1:
             e.ErrorInfo = strError;
             if (e.ShowErrorBox == true)
-                MessageBox.Show(this.DetailForm, strError);
+            {
+                // MessageBox.Show(this.DetailForm, strError);
+                bool bTemp = false;
+                // TODO: 如果保持窗口修改后的尺寸位置?
+                MessageDialog.Show(this.DetailForm,
+                    "创建索取号时出错",
+                    strError,
+                    null,
+                    ref bTemp);
+            }
         }
 
+#if OLD_CODE
         // GCAT通道登录
         internal void gcat_channel_BeforeLogin(object sender,
             DigitalPlatform.GcatClient.BeforeLoginEventArgs e)
         {
-            string strUserName = (string)this.DetailForm.MainForm.ParamTable["author_number_account_username"];
-            string strPassword = (string)this.DetailForm.MainForm.ParamTable["author_number_account_password"];
+            string strUserName = (string)Program.MainForm.ParamTable["author_number_account_username"];
+            string strPassword = (string)Program.MainForm.ParamTable["author_number_account_password"];
 
             if (String.IsNullOrEmpty(strUserName) == true)
             {
@@ -4049,7 +4420,7 @@ chi	中文	如果是中文，则为空。
             }
 
             LoginDlg dlg = new LoginDlg();
-            GuiUtil.SetControlFont(dlg, this.DetailForm.MainForm.DefaultFont, false);
+            GuiUtil.SetControlFont(dlg, Program.MainForm.DefaultFont, false);
 
             if (e.Failed == true)
                 dlg.textBox_comment.Text = "登录失败。加著者号码功能需要重新登录";
@@ -4076,9 +4447,10 @@ chi	中文	如果是中文，则为空。
             e.UserName = strUserName;
             e.Password = strPassword;
 
-            this.DetailForm.MainForm.ParamTable["author_number_account_username"] = strUserName;
-            this.DetailForm.MainForm.ParamTable["author_number_account_password"] = strPassword;
+            Program.MainForm.ParamTable["author_number_account_username"] = strUserName;
+            Program.MainForm.ParamTable["author_number_account_password"] = strPassword;
         }
+#endif
 
         /// <summary>
         /// 通过资源 ID 找到对应的 856 字段
@@ -4098,7 +4470,7 @@ chi	中文	如果是中文，则为空。
                 if (field.Name == "856")
                 {
                     // 找到$8
-                    for(int j=0;j<field.Subfields.Count;j++)
+                    for (int j = 0; j < field.Subfields.Count; j++)
                     {
                         Subfield subfield = field.Subfields[j];
                         if (subfield.Name == LinkSubfieldName)
@@ -4169,8 +4541,8 @@ chi	中文	如果是中文，则为空。
             }
 
             // 如果发起来自MARC编辑器
-            if (field_856 == null 
-                && !(sender is BinaryResControl) )
+            if (field_856 == null
+                && !(sender is BinaryResControl))
             {
                 // 看看当前活动字段是不是856
                 field_856 = this.DetailForm.MarcEditor.FocusedField;
@@ -4188,9 +4560,9 @@ chi	中文	如果是中文，则为空。
             }
 
             Field856Dialog dlg = new Field856Dialog();
-            GuiUtil.SetControlFont(dlg, this.DetailForm.MainForm.DefaultFont, false);
-            dlg.RightsCfgFileName = Path.Combine(this.DetailForm.MainForm.UserDir, "objectrights.xml");
-
+            GuiUtil.SetControlFont(dlg, Program.MainForm.DefaultFont, false);
+            dlg.RightsCfgFileName = Path.Combine(Program.MainForm.UserDir, "objectrights.xml");
+            dlg.MarcSyntax = DetailForm.MarcSyntax;
             dlg.GetResInfo -= new GetResInfoEventHandler(dlg_GetResInfo);
             dlg.GetResInfo += new GetResInfoEventHandler(dlg_GetResInfo);
 
@@ -4202,20 +4574,23 @@ chi	中文	如果是中文，则为空。
             else
             {
                 dlg.Text = "创建新的856字段";
-                dlg.Value = "72";   // 缺省值
+                if (DetailForm.MarcSyntax == "unimarc")
+                    dlg.Value = "7 ";
+                else
+                    dlg.Value = "72";   // 缺省值
 
                 if (String.IsNullOrEmpty(strID) == false)
                 {
-                    dlg.Value += SUBFLD + LinkSubfieldName + strID + SUBFLD + "2dp2res";
+                    dlg.Value += SUBFLD + LinkSubfieldName + strID + SUBFLD + dlg.GetAccessMethodSubfieldName() + "dp2res";
                     dlg.AutoFollowIdSet = true; // 连带填充其它几个子字段
                     dlg.MessageText = "尚不存在和对象ID '" + strID + "' 关联的856字段，现在请创建...";
                 }
             }
 
-        REDO_INPUT:
-            this.DetailForm.MainForm.AppInfo.LinkFormState(dlg, "ctrl_a_field856dialog_state");
+            REDO_INPUT:
+            Program.MainForm.AppInfo.LinkFormState(dlg, "ctrl_a_field856dialog_state");
             dlg.ShowDialog(this.DetailForm);
-            this.DetailForm.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
@@ -4275,7 +4650,7 @@ chi	中文	如果是中文，则为空。
     ref List<string> results,
     out string strError)
         {
-            return this.DetailForm.MainForm.SearchDictionary(
+            return Program.MainForm.SearchDictionary(
                 channel,
             stop,
             strDbName,
@@ -4289,8 +4664,8 @@ chi	中文	如果是中文，则为空。
 #if NO
         void DoStop(object sender, StopEventArgs e)
         {
-            if (this.DetailForm.MainForm.Channel != null)
-                this.DetailForm.MainForm.Channel.Abort();
+            if (Program.MainForm.Channel != null)
+                Program.MainForm.Channel.Abort();
         }
 #endif
 
@@ -4298,7 +4673,7 @@ chi	中文	如果是中文，则为空。
         // parameters:
         //      strDef  关系定义。例如 "dbname=LCC-CLC,source=050a,target=098a,color=#00aa00;dbname=DDC-CLC,source=082a,target=098a,color=#aaaa00"
         //      strDefaultStyle 缺省的处理风格。如果为空，表示不改变 RelationDialog 本身的缺省处理风格，即 DefaultStyle 值。
-        public void RelationGenerate(string strDef, 
+        public void RelationGenerate(string strDef,
             string strDefaultStyle = "")
         {
             string strError = "";
@@ -4308,7 +4683,7 @@ chi	中文	如果是中文，则为空。
             if (nRet == -1)
                 goto ERROR1;
 
-            LibraryChannel channel = this.DetailForm.MainForm.GetChannel();
+            LibraryChannel channel = Program.MainForm.GetChannel();
 
             try
             {
@@ -4323,16 +4698,16 @@ chi	中文	如果是中文，则为空。
                 channel.Abort();
             };
 #endif
-                dlg.TempDir = this.DetailForm.MainForm.UserTempDir;
-                dlg.MarcHtmlHead = this.DetailForm.MainForm.GetMarcHtmlHeadString();
+                dlg.TempDir = Program.MainForm.UserTempDir;
+                dlg.MarcHtmlHead = Program.MainForm.GetMarcHtmlHeadString();
                 dlg.RelationCollection = relations;
-                dlg.UiState = this.DetailForm.MainForm.AppInfo.GetString(
+                dlg.UiState = Program.MainForm.AppInfo.GetString(
                     "RelationDialog",
                     "ui_state",
                     "");
-                this.DetailForm.MainForm.AppInfo.LinkFormState(dlg, "SelectDictionaryItemDialog_state");
+                Program.MainForm.AppInfo.LinkFormState(dlg, "SelectDictionaryItemDialog_state");
                 dlg.ShowDialog(this.DetailForm);
-                this.DetailForm.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "RelationDialog",
                     "ui_state",
                     dlg.UiState);
@@ -4344,7 +4719,7 @@ chi	中文	如果是中文，则为空。
             }
             finally
             {
-                this.DetailForm.MainForm.ReturnChannel(channel);
+                Program.MainForm.ReturnChannel(channel);
             }
 #if NO
             foreach (string s in dlg.ResultRelations)
@@ -4371,7 +4746,7 @@ chi	中文	如果是中文，则为空。
 #endif
             this.DetailForm.MarcEditor.EnsureVisible();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this.DetailForm, strError);
         }
     }

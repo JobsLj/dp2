@@ -1379,12 +1379,14 @@ namespace DigitalPlatform.ResultSet
                     FileAccess.ReadWrite,
                     FileShare.ReadWrite);
 
-                this.m_count = m_streamSmall.Length / 8;  //m_count;
+                // this.m_count = m_streamSmall.Length / 8;  //m_count;
             }
             else
             {
-                m_count = GetCount();
+                // m_count = GetCount();
             }
+
+            RefreshCount();
         }
 
         // 把某个文件挂接到结果集上
@@ -2782,7 +2784,7 @@ namespace DigitalPlatform.ResultSet
                 m_streamSmall.Write(bufferPosition, 0, 8);
             }
 
-            ByteList aBuffer = new ByteList(4096);
+            ByteList aBuffer = new ByteList(128);  // 4096
 
             int nLength = 0;
             byte[] bufferLength = new byte[4];
@@ -2813,16 +2815,12 @@ namespace DigitalPlatform.ResultSet
             Debug.Assert(bufferLength.Length == 4, "");
             ReplaceBuffer(aBuffer, 0, bufferLength);
 
-            //m_streamBig.Seek (-(nLength+4),SeekOrigin.Current  );
+#if NO
             byte[] bufferAll = new byte[aBuffer.Count];
-            /*
-            for (int i = 0; i < aBuffer.Count; i++)
-            {
-                bufferAll[i] = (byte)aBuffer[i];
-            }
-             * */
             // 2010/5/17
             aBuffer.CopyTo(bufferAll);
+#endif
+            byte[] bufferAll = aBuffer.ToArray();
 
             m_streamBig.Write(bufferAll, 0, bufferAll.Length);
             m_count++;

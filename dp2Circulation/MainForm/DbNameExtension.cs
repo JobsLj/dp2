@@ -183,6 +183,7 @@ namespace dp2Circulation
         // 
         // return:
         //      null    没有找到指定的书目库名
+        //      其他      MARC 格式语法名
         /// <summary>
         /// 根据书目库名获得 MARC 格式语法名
         /// </summary>
@@ -196,6 +197,23 @@ namespace dp2Circulation
                 {
                     if (this.BiblioDbProperties[i].DbName == strBiblioDbName)
                         return this.BiblioDbProperties[i].Syntax;
+                }
+            }
+
+            return null;
+        }
+
+        // return:
+        //      null    没有找到指定的规范库名
+        //      其他      MARC 格式语法名
+        public string GetAuthoritySyntax(string strBiblioDbName)
+        {
+            if (this.AuthorityDbProperties != null)
+            {
+                foreach (BiblioDbProperty prop in this.AuthorityDbProperties)
+                {
+                    if (prop.DbName == strBiblioDbName)
+                        return prop.Syntax;
                 }
             }
 
@@ -241,7 +259,7 @@ namespace dp2Circulation
                 }
 
                 results.Sort();
-                StringUtil.RemoveDup(ref results);
+                StringUtil.RemoveDup(ref results, true);
             }
 
             return results;
@@ -293,6 +311,7 @@ namespace dp2Circulation
 
             return false;
         }
+
 
         // 
         // 如果返回""，表示该书目库的下属库没有定义
@@ -596,13 +615,36 @@ namespace dp2Circulation
             if (String.IsNullOrEmpty(strIssueDbName) == true)
                 return null;
 
-
             if (this.BiblioDbProperties != null)
             {
                 for (int i = 0; i < this.BiblioDbProperties.Count; i++)
                 {
                     if (this.BiblioDbProperties[i].IssueDbName == strIssueDbName)
                         return this.BiblioDbProperties[i].DbName;
+                }
+            }
+
+            return null;
+        }
+
+        // 2017/3/5
+        // 获得出版物类型
+        // return:
+        //      null    不清楚
+        //      "book"
+        //      "series"
+        public string GetPubTypeFromOrderDbName(string strOrderDbName)
+        {
+            // 订购库名为空，无法找书目库名。
+            if (String.IsNullOrEmpty(strOrderDbName) == true)
+                return null;
+
+            if (this.BiblioDbProperties != null)
+            {
+                foreach (BiblioDbProperty prop in this.BiblioDbProperties)
+                {
+                    if (prop.OrderDbName == strOrderDbName)
+                        return string.IsNullOrEmpty(prop.IssueDbName) ? "book" : "series";
                 }
             }
 
@@ -852,6 +894,39 @@ namespace dp2Circulation
             return false;
         }
 
+        public string CompareTwoBiblioDbDef(string strSourceDbName, string strTargetDbName)
+        {
+            BiblioDbProperty source = this.GetBiblioDbProperty(strSourceDbName);
+            BiblioDbProperty target = this.GetBiblioDbProperty(strTargetDbName);
+
+            if (source == null)
+                return "源书目库名 '" + strSourceDbName + "' 不存在";
+            if (target == null)
+                return "目标书目库名 '" + strTargetDbName + "' 不存在";
+
+            List<string> errors = new List<string>();
+
+            if (string.IsNullOrEmpty(source.ItemDbName) == false
+&& string.IsNullOrEmpty(target.ItemDbName) == true)
+                errors.Add("实体库 '" + source.ItemDbName + "' ");   // 左边大于右边
+
+            if (string.IsNullOrEmpty(source.OrderDbName) == false
+&& string.IsNullOrEmpty(target.OrderDbName) == true)
+                errors.Add("订购库 '" + source.OrderDbName + "' ");   // 左边大于右边
+
+            if (string.IsNullOrEmpty(source.IssueDbName) == false
+                && string.IsNullOrEmpty(target.IssueDbName) == true)
+                errors.Add("期库 '" + source.IssueDbName + "' ");   // 左边大于右边
+
+            if (string.IsNullOrEmpty(source.CommentDbName) == false
+&& string.IsNullOrEmpty(target.CommentDbName) == true)
+                errors.Add("评注库 '" + source.CommentDbName + "' ");   // 左边大于右边
+
+            if (errors.Count == 0)
+                return null;
+
+            return "源书目库 '" + strSourceDbName + "' 具有下属的" + StringUtil.MakePathList(errors, "、") + "，而目标书目库 '" + strTargetDbName + "' 缺乏";
+        }
 
     }
 }

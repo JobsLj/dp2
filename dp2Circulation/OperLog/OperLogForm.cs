@@ -15,6 +15,8 @@ using System.Threading;
 using System.IO;
 using System.Web;
 
+using ClosedXML.Excel;
+
 using DigitalPlatform;
 using DigitalPlatform.GUI;
 using DigitalPlatform.Xml;
@@ -23,8 +25,6 @@ using DigitalPlatform.Range;
 using DigitalPlatform.Text;
 using DigitalPlatform.Marc;
 using DigitalPlatform.MarcDom;
-
-// using DigitalPlatform.LibraryClient.localhost;
 using DigitalPlatform.CommonControl;
 using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
@@ -65,23 +65,12 @@ namespace dp2Circulation
         const int COLUMN_OPERTIME = 5;
         const int COLUMN_SECONDS = 6;
         const int COLUMN_ATTACHMENT = 7;
+        const int COLUMN_COMMENT = 8;
 
         bool StoreInTempFile = false;
 
         // 参与排序的列号数组
-        SortColumns SortColumns = new SortColumns();
-
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        /// <summary>
-        /// 框架窗口
-        /// </summary>
-        public MainForm MainForm = null;
-
-        DigitalPlatform.Stop stop = null;
-#endif
+        SortColumns SortColumns_records = new SortColumns();
 
         // 临时文件名集合
         List<string> m_tempFileNames = new List<string>();
@@ -98,9 +87,9 @@ namespace dp2Circulation
 
         private void OperLogForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 
             this.AcceptButton = this.button_loadFromSingleFile;
@@ -112,12 +101,12 @@ namespace dp2Circulation
 #endif
 
             /*
-            if (this.MainForm.CanDisplayItemProperty() == true)
+            if (Program.MainForm.CanDisplayItemProperty() == true)
                 DownPannelVisible = false;
              * */
             DownPannelVisible = false;  // 必须隐藏。因为放开后有 javascript 没有连接 host 等问题
 
-            this.UiState = this.MainForm.AppInfo.GetString(
+            this.UiState = Program.MainForm.AppInfo.GetString(
 "operlog_form",
 "ui_state",
 "");
@@ -158,7 +147,7 @@ namespace dp2Circulation
 #if NO
         void Channels_BeforeLogin(object sender, BeforeLoginEventArgs e)
         {
-            this.MainForm.Channel_BeforeLogin(sender, e);    // 2015/11/8
+            Program.MainForm.Channel_BeforeLogin(sender, e);    // 2015/11/8
         }
 #endif
 
@@ -180,9 +169,9 @@ namespace dp2Circulation
 
             ClearAllTempFiles();
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
     "operlog_form",
     "ui_state",
     this.UiState);
@@ -218,8 +207,9 @@ namespace dp2Circulation
         {
             this.listView_records.Items.Clear();
             this.listView_records.Update();
+            Application.DoEvents();
 
-            this.SortColumns.Clear();
+            this.SortColumns_records.Clear();
             SortColumns.ClearColumnSortDisplay(this.listView_records.Columns);
 
             if (this.m_operlogViewer != null)
@@ -228,9 +218,58 @@ namespace dp2Circulation
             this.ClearAllTempFiles();
 
             Global.ClearHtmlPage(this.webBrowser_xml,
-    this.MainForm.DataDir);
+    Program.MainForm.DataDir);
             Global.ClearHtmlPage(this.webBrowser_html,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
+        }
+
+        bool PrepareFilter(ref int nLevel)
+        {
+            OperLogFindDialog dlg = new OperLogFindDialog();
+            MainForm.SetControlFont(dlg, this.Font, false);
+            dlg.Text = "请指定筛选方式";
+            //dlg.Operations = m_strFindOperations;
+            //dlg.Filters = this.m_strFilters;
+
+            Program.MainForm.AppInfo.LinkFormState(dlg, "operlogform_finddialog_formstate");
+            dlg.UiState = Program.MainForm.AppInfo.GetString("OperLogForm", "OperLogFindDialog_ui_state", "");
+            dlg.ShowDialog(this);
+            Program.MainForm.AppInfo.SetString("OperLogForm", "OperLogFindDialog_ui_state", dlg.UiState);
+            // Program.MainForm.AppInfo.UnlinkFormState(dlg);
+
+            if (dlg.DialogResult != DialogResult.OK)
+                return false;
+
+            if (StringUtil.IsInList("增998$t", dlg.Filters))
+                nLevel = 0;
+
+            m_strFindOperations = dlg.Operations;
+            m_strFilters = CanonicalizeFilters(dlg.Filters);
+            m_recPathList = dlg.RecPathList;
+            return true;
+        }
+
+        static string CanonicalizeFilters(string strFilters)
+        {
+            if (string.IsNullOrEmpty(strFilters))
+                return "<无>";
+
+            if (StringUtil.IsInList("<无>", strFilters)
+                || StringUtil.IsInList("<none>", strFilters))
+                return "<无>";
+
+            return strFilters;
+        }
+
+        string GetFilterParamString()
+        {
+            // string strText = this.m_strFilters;
+            string strText = this.m_strFindOperations;  // 2017/9/20
+            if (string.IsNullOrEmpty(strText)
+                || StringUtil.IsInList("<all>", strText)
+                || StringUtil.IsInList("<全部>", strText))
+                return "";
+            return strText;
         }
 
         // 
@@ -238,7 +277,7 @@ namespace dp2Circulation
         /// 装入一个日志文件中的全部记录
         /// </summary>
         /// <param name="strLogFileName">日志文件名。纯文件名</param>
-        /// <returns>-1: 出错; 1: 成功</returns>
+        /// <returns>-1: 出错; 0: 放弃处理; 1: 成功</returns>
         public int LoadRecordsFromSingleLogFile(string strLogFileName)
         {
             string strError = "";
@@ -248,6 +287,11 @@ namespace dp2Circulation
 
             this.tabControl_main.SelectedTab = this.tabPage_logRecords;
 
+            int nLevel = Program.MainForm.OperLogLevel;
+
+            if (PrepareFilter(ref nLevel) == false)
+                return 0;
+
             EnableControls(false);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
@@ -255,7 +299,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
 #if NO
             this.listView_records.Items.Clear();
@@ -266,11 +310,14 @@ namespace dp2Circulation
             this.ClearAllTempFiles();
 
             Global.ClearHtmlPage(this.webBrowser_xml,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
             Global.ClearHtmlPage(this.webBrowser_html,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
 #endif
             this.Clear();
+
+            Program.MainForm.OperHistory.AppendHtml("<div class='debug begin'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
+    + "开始装入日志文件 " + strLogFileName + " 中的记录" + "</div>");
 
             stop.SetMessage("正在装入日志文件 " + strLogFileName + " 中的记录...");
 #if DELAY_UPDATE
@@ -282,7 +329,7 @@ namespace dp2Circulation
                 lines.Add(strLogFileName);
 
                 string strStyle = "";
-                if (this.MainForm.AutoCacheOperlogFile == true)
+                if (Program.MainForm.AutoCacheOperlogFile == true)
                     strStyle = "autocache";
                 if (bControl)
                     StringUtil.SetInList(ref strStyle, "accessLog", true);
@@ -292,9 +339,10 @@ namespace dp2Circulation
     this.estimate,
     Channel,
     lines,
-    this.MainForm.OperLogLevel,
+    nLevel, // Program.MainForm.OperLogLevel,
     strStyle,
-    this.MainForm.OperLogCacheDir,
+    GetFilterParamString(),   // this.textBox_filter.Text,
+    Program.MainForm.OperLogCacheDir,
     null,   // param,
     DoRecord,
     out strError);
@@ -310,6 +358,10 @@ namespace dp2Circulation
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
                 stop.HideProgress();
+
+                Program.MainForm.OperHistory.AppendHtml("<div class='debug end'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
++ "结束装入日志文件 " + strLogFileName + " 中的记录" + "</div>");
+
 
                 EnableControls(true);
             }
@@ -428,6 +480,8 @@ namespace dp2Circulation
                 nRet = GetSetEntityString(dom, out strHtml, out strError);
             else if (strOperation == "setUser")
                 nRet = GetSetUserString(dom, out strHtml, out strError);
+            else if (strOperation == "manageDatabase")
+                nRet = GetManageDatabaseString(dom, out strHtml, out strError);
             else
             {
                 strError = "未知的操作类型 '" + strOperation + "'";
@@ -518,7 +572,7 @@ namespace dp2Circulation
 
         string GetHeadString(bool bAjax = true)
         {
-            string strCssFilePath = PathUtil.MergePath(this.MainForm.DataDir, "operloghtml.css");
+            string strCssFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "operloghtml.css");
 
             if (bAjax == true)
                 return
@@ -1085,6 +1139,47 @@ namespace dp2Circulation
 
                 BuildHtmlEncodedLine("操作前的读者记录", strOldReaderRecPath, strOldReaderRecordHtml) +
                 BuildHtmlEncodedLine("操作后的读者记录", strReaderRecPath, strReaderRecordHtml) +
+
+                BuildHtmlLine("操作者", strOperator) +
+                BuildHtmlLine("操作时间", strOperTime) +
+                BuildClientAddressLine(dom) +
+                "</table>";
+
+            return 0;
+        }
+
+        // ManageDatabase
+        int GetManageDatabaseString(XmlDocument dom,
+    out string strHtml,
+    out string strError)
+        {
+            strHtml = "";
+            strError = "";
+            int nRet = 0;
+
+            /*
+            string strLibraryCode = DomUtil.GetElementText(dom.DocumentElement, "libraryCode", out node);
+            if (node != null && string.IsNullOrEmpty(strLibraryCode) == true)
+                strLibraryCode = "<空>";
+             * */
+
+            string strOperation = DomUtil.GetElementText(dom.DocumentElement, "operation");
+            string strAction = DomUtil.GetElementText(dom.DocumentElement, "action");
+
+            string strOperator = DomUtil.GetElementText(dom.DocumentElement, "operator");
+            string strOperTime = GetRfc1123DisplayString(
+                DomUtil.GetElementText(dom.DocumentElement, "operTime"));
+
+            string strDatabases = "";
+            XmlNode node = dom.DocumentElement.SelectSingleNode("databases");
+            if (node != null)
+                strDatabases = node.InnerXml;   // TODO: 形成缩进效果
+
+            strHtml =
+                "<table class='operlog'>" +
+                BuildHtmlLine("操作类型", strOperation + " -- 数据库管理操作") +
+                BuildHtmlLine("动作", strAction + " -- " + GetActionName(strOperation, strAction)) +
+                BuildHtmlLine("数据库定义", strDatabases) +
 
                 BuildHtmlLine("操作者", strOperator) +
                 BuildHtmlLine("操作时间", strOperTime) +
@@ -1827,6 +1922,38 @@ out strError);
                     return -1;
             }
 
+            // 2017/1/16 重新设计 move 和 copy 的显示方式
+            string strDirection = "";
+            if (strAction.IndexOf("move") != -1
+                || strAction.IndexOf("copy") != -1)
+            {
+                strDirection = strOldRecPath + " --> " + strRecPath;
+                string strOverwritedRecord = DomUtil.GetElementText(dom.DocumentElement, "overwritedRecord", out node);
+                if (string.IsNullOrEmpty(strOverwritedRecord) == false)
+                {
+                    strOldRecord = strOverwritedRecord;
+                    strOldRecPath = DomUtil.GetAttr(node, "recPath");
+                    nRet = GetBiblioInfoString(
+                        strOldRecPath,
+                        strOldRecord,
+        out strOldRecordHtml,
+        out strError);
+                    if (nRet == -1)
+                        return -1;
+                }
+                else
+                {
+                    // 如果没有 overwritedRecord 元素，则只好显示修改后的记录内容了
+                    // 2017/1/16 以前的日志就有这个问题
+                    if (string.IsNullOrEmpty(strRecordHtml) == false)
+                    {
+                        strOldRecPath = "";
+                        strOldRecord = "";
+                        strOldRecordHtml = "";
+                    }
+                }
+            }
+
             string strDiffRecordHtml = "";
             if (string.IsNullOrEmpty(strOldRecord) == false && string.IsNullOrEmpty(strOldRecPath) == false
                 && string.IsNullOrEmpty(strRecord) == false && string.IsNullOrEmpty(strRecPath) == false)
@@ -1883,6 +2010,9 @@ DomUtil.GetElementInnerXml(dom.DocumentElement, "deletedCommentRecords"));
                 BuildHtmlLine("馆代码", strLibraryCode) +
                 BuildHtmlLine("操作类型", strOperation + " -- 设置书目信息") +
                 BuildHtmlLine("动作", strAction + " -- " + GetActionName(strOperation, strAction)) +
+
+                (string.IsNullOrEmpty(strDirection) == false ?
+                BuildHtmlLine("源和目标", strDirection) : "") +
 
                 (string.IsNullOrEmpty(strDiffRecordHtml) == false ?
                 BuildHtmlLine("修改前后书目记录", strDiffLineTitle) +
@@ -1990,6 +2120,20 @@ DomUtil.GetElementInnerXml(dom.DocumentElement, "deletedCommentRecords"));
                     return "撤回结算";
                 if (strAction == "delete")
                     return "删除";
+            }
+
+            if (strOperation == "manageDatabase")
+            {
+                if (strAction == "createDatabase")
+                    return "创建数据库";
+                if (strAction == "changeDatabase")
+                    return "修改数据库定义";
+                if (strAction == "deleteDatabase")
+                    return "删除数据库";
+                if (strAction == "initializeDatabase")
+                    return "初始化数据库";
+                if (strAction == "refreshDatabase")
+                    return "刷新数据库定义";
             }
 
             return strAction;
@@ -2400,10 +2544,10 @@ DomUtil.GetElementInnerXml(dom.DocumentElement, "deletedCommentRecords"));
                 if (string.IsNullOrEmpty(strOldMarc) == false
                     && string.IsNullOrEmpty(strNewMarc) == false)
                 {
-                    string strOldImageFragment = BiblioSearchForm.GetImageHtmlFragment(
+                    string strOldImageFragment = BiblioSearchForm.GetCoverImageHtmlFragment(
 strBiblioRecPath,
 strOldMarc);
-                    string strNewImageFragment = BiblioSearchForm.GetImageHtmlFragment(
+                    string strNewImageFragment = BiblioSearchForm.GetCoverImageHtmlFragment(
 strBiblioRecPath,
     strNewMarc);
                     // 创建展示两个 MARC 记录差异的 HTML 字符串
@@ -2425,7 +2569,7 @@ strBiblioRecPath,
                 else if (string.IsNullOrEmpty(strOldMarc) == false
         && string.IsNullOrEmpty(strNewMarc) == true)
                 {
-                    string strOldImageFragment = BiblioSearchForm.GetImageHtmlFragment(
+                    string strOldImageFragment = BiblioSearchForm.GetCoverImageHtmlFragment(
 strBiblioRecPath,
 strOldMarc);
                     if (string.IsNullOrEmpty(strNewFragmentXml) == false)
@@ -2452,9 +2596,9 @@ strOldMarc);
                 else if (string.IsNullOrEmpty(strOldMarc) == true
                     && string.IsNullOrEmpty(strNewMarc) == false)
                 {
-                    string strNewImageFragment = BiblioSearchForm.GetImageHtmlFragment(
-strBiblioRecPath,
-    strNewMarc);
+                    string strNewImageFragment = BiblioSearchForm.GetCoverImageHtmlFragment(
+                        strBiblioRecPath,
+                        strNewMarc);
                     if (string.IsNullOrEmpty(strOldFragmentXml) == false)
                     {
                         nRet = MarcDiff.DiffHtml(
@@ -2517,7 +2661,7 @@ strBiblioRecPath,
             else
             {
                 // 2015/1/3
-                string strImageFragment = BiblioSearchForm.GetImageHtmlFragment(
+                string strImageFragment = BiblioSearchForm.GetCoverImageHtmlFragment(
     strBiblioRecPath,
     strMarc);
 
@@ -2617,7 +2761,7 @@ out string strError)
             }
             // string strBarcodeLink = "<a href='javascript:void(0);' onclick=\"window.external.OpenForm('ItemInfoForm', this.innerText, true);\">" + strBarcode + "</a>";
 
-            // string strCssFilePath = PathUtil.MergePath(this.MainForm.DataDir, "operloghtml.css");
+            // string strCssFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "operloghtml.css");
 
             strHtml =
                 "<table class='iteminfo'>" +
@@ -3218,14 +3362,14 @@ out string strError)
                         {
                             Global.SetHtmlString(this.webBrowser_xml,
                                 strError,
-                                this.MainForm.DataDir,
+                                Program.MainForm.DataDir,
                                 "operlogerror");
                         }
                         else
                         {
                             Global.SetXmlString(this.webBrowser_xml,
         strXml,
-        this.MainForm.DataDir,
+        Program.MainForm.DataDir,
         "operlogexml");
 
                             string strHtml = "";
@@ -3241,19 +3385,19 @@ out string strError)
                             if (nRet == -1 || nRet == 1)
                                 Global.SetHtmlString(this.webBrowser_html,
                                     strError,
-                                    this.MainForm.DataDir,
+                                    Program.MainForm.DataDir,
                                     "operlogerror_html");
                             else
                             {
                                 if (string.IsNullOrEmpty(strHtml) == true)
                                     Global.SetHtmlString(this.webBrowser_html,
                                         NOTSUPPORT,
-                                        this.MainForm.DataDir,
+                                        Program.MainForm.DataDir,
                                         "operloghtml");
                                 else
                                     Global.SetHtmlString(this.webBrowser_html,
                                         strHtml,
-                                        this.MainForm.DataDir,
+                                        Program.MainForm.DataDir,
                                         "operloghtml");
                             }
 
@@ -3264,13 +3408,13 @@ out string strError)
                 else
                 {
                     Global.ClearHtmlPage(this.webBrowser_xml,
-                        this.MainForm.DataDir);
+                        Program.MainForm.DataDir);
                     Global.ClearHtmlPage(this.webBrowser_html,
-                        this.MainForm.DataDir);
+                        Program.MainForm.DataDir);
                 }
             }
 
-            DoViewOperlog(false);
+            DoViewOperlog(this.listView_records, false);
         }
 
 #if NO
@@ -3297,7 +3441,7 @@ out string strError)
 
 #if NO
             LibraryChannel channel = this.Channels.NewChannel(MainForm.LibraryServerUrl);
-            channel.Url = this.MainForm.LibraryServerUrl;
+            channel.Url = Program.MainForm.LibraryServerUrl;
 #endif
             LibraryChannel channel = this.GetChannel();
             try
@@ -3313,7 +3457,7 @@ out string strError)
 
                 if (info.InCacheFile == false)
                 {
-                    string strStyle = "level-" + this.MainForm.OperLogLevel.ToString();
+                    string strStyle = "level-" + Program.MainForm.OperLogLevel.ToString();
                     if (this.AccessLog)
                         strStyle += ",accessLog";
 
@@ -3349,7 +3493,7 @@ out string strError)
                 else
                 {
                     string strCacheFilename = Path.Combine(
-                        this.MainForm.OperLogCacheDir,
+                        Program.MainForm.OperLogCacheDir,
                         strLogFileName);
                     using (Stream stream = File.Open(
 strCacheFilename,
@@ -3386,7 +3530,7 @@ FileShare.ReadWrite))
                                 return -1;
                             }
                             if (stream.Position != lHint)
-                                stream.Seek(lHint, SeekOrigin.Begin);
+                                stream.FastSeek(lHint);
                         }
 
                         long lAttachmentTotalLength = 0;
@@ -3506,11 +3650,11 @@ FileShare.ReadWrite))
 
         private void OperLogForm_Activated(object sender, EventArgs e)
         {
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 
-            this.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
-            this.MainForm.MenuItem_font.Enabled = false;
-            this.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
+            Program.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
+            Program.MainForm.MenuItem_font.Enabled = false;
+            Program.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
 
         }
 
@@ -3524,18 +3668,49 @@ FileShare.ReadWrite))
             if (nClickColumn == 1)
                 sortStyle = ColumnSortStyle.RightAlign;
 
-            this.SortColumns.SetFirstColumn(nClickColumn,
+            this.SortColumns_records.SetFirstColumn(nClickColumn,
                 sortStyle,
                 this.listView_records.Columns,
                 true);
 
             // 排序
-            this.listView_records.ListViewItemSorter = new SortColumnsComparer(this.SortColumns);
+            this.listView_records.ListViewItemSorter = new SortColumnsComparer(this.SortColumns_records);
 
             this.listView_records.ListViewItemSorter = null;
 
         }
 
+        // 获得日志文件名
+        private void button_loadFilenams_Click(object sender, EventArgs e)
+        {
+            GetOperLogFilenameDlg dlg = new GetOperLogFilenameDlg();
+            MainForm.SetControlFont(dlg, this.Font, false);
+
+            // TODO: 可以抽取第一行和最后一行的日期，设置到 dlg.OperLogFilenames 中
+
+            dlg.ShowDialog(this);
+
+            if (dlg.DialogResult != DialogResult.OK)
+                return;
+
+            string strText = "";
+            if (dlg.OperLogFilenames.Count == 1)
+                strText = dlg.OperLogFilenames[0];
+            else
+            {
+                for (int i = 0; i < dlg.OperLogFilenames.Count; i++)
+                {
+                    if (i != 0)
+                        strText += "\r\n";
+                    strText += dlg.OperLogFilenames[i];
+                }
+            }
+            this.textBox_filenames.Text = strText;
+            this.textBox_filenames.Focus();
+        }
+
+
+#if NO
         // 获得日志文件名
         private void button_loadFilenams_Click(object sender, EventArgs e)
         {
@@ -3581,6 +3756,8 @@ FileShare.ReadWrite))
             // API.PostMessage(this.Handle, WM_SETCARETPOS, x, y);
         }
 
+#endif
+
         /*
         protected override void DefWndProc(ref Message m)
         {
@@ -3598,7 +3775,178 @@ FileShare.ReadWrite))
             base.DefWndProc(ref m);
         }*/
 
+        class FilterParam
+        {
+            public string Xml { get; set; }
+            //      strLocation 用于报错的文件名和偏移量文字内容
+            public string Location { get; set; }
 
+            // [out] 过滤过程中创建的注释文字
+            public string Comment { get; set; }
+        }
+
+        // 进行过滤
+        // parameters:
+        // return:
+        //      true    满足过滤条件
+        //      false   不满足过滤条件
+        bool DoFilter(
+            // string strXml, string strLocation
+            FilterParam param
+            )
+        {
+            List<string> errors = new List<string>();
+            string strError = "";
+            int nRet = 0;
+
+            XmlDocument dom = new XmlDocument();
+            try
+            {
+                dom.LoadXml(param.Xml);
+            }
+            catch
+            {
+                return true;
+            }
+
+            string strOperation = DomUtil.GetElementText(dom.DocumentElement, "operation");
+            string strAction = DomUtil.GetElementText(dom.DocumentElement, "action");
+
+            if (string.IsNullOrEmpty(this.m_strFindOperations) == false
+                && this.m_strFindOperations != "<all>")
+            {
+                if (StringUtil.IsInList(strOperation, this.m_strFindOperations) == false)
+                    return false;
+            }
+
+            // TODO: 如果对话框中 operation 没有选择包含 setBiblioInfo，而又要筛选 增998$t，要警告
+            if (string.IsNullOrEmpty(this.m_strFilters) == false
+                && !(this.m_strFilters == "<无>" || this.m_strFilters == "<none>"))
+            {
+                if (StringUtil.IsInList("册修改历史", this.m_strFilters))
+                {
+                    if (strOperation == "setEntity")
+                    {
+                        XmlNode node = null;
+
+                        string strOldRecord = DomUtil.GetElementText(dom.DocumentElement, "oldRecord", out node);
+                        string strOldRecPath = "";
+                        if (node != null)
+                            strOldRecPath = DomUtil.GetAttr(node, "recPath");
+
+                        string strRecord = DomUtil.GetElementText(dom.DocumentElement, "record", out node);
+                        string strRecPath = "";
+                        if (node != null)
+                            strRecPath = DomUtil.GetAttr(node, "recPath");
+
+                        if (string.IsNullOrEmpty(strRecPath) == false
+                            && this.m_recPathList.IndexOf(strRecPath) != -1)
+                        {
+                            param.Comment = "path:" + strRecPath;
+                        }
+                        else if (string.IsNullOrEmpty(strOldRecPath) == false
+                            && this.m_recPathList.IndexOf(strOldRecPath) != -1)
+                        {
+                            param.Comment = "path:" + strOldRecPath;
+                        }
+                        else
+                            return false;
+                    }
+                    else if (strOperation == "borrow" || strOperation == "return")
+                    {
+                        XmlNode node = null;
+
+                        string strRecord = DomUtil.GetElementText(dom.DocumentElement, "itemRecord", out node);
+                        string strRecPath = "";
+                        if (node != null)
+                            strRecPath = DomUtil.GetAttr(node, "recPath");
+
+                        if (string.IsNullOrEmpty(strRecPath) == false
+                            && this.m_recPathList.IndexOf(strRecPath) != -1)
+                        {
+                            param.Comment = "path:" + strRecPath;
+                        }
+                        else
+                            return false;
+                    }
+                    else
+                        return false;
+                }
+
+                if (StringUtil.IsInList("增998$t", this.m_strFilters))
+                {
+                    if (strOperation == "setBiblioInfo"
+                    && (strAction == "change" || strAction == "new"))
+                    {
+                        // 比较新旧记录的 998 字段，看看是否增加了 $t
+                        string strOldRecord = DomUtil.GetElementText(dom.DocumentElement, "oldRecord");
+                        string strNewRecord = DomUtil.GetElementText(dom.DocumentElement, "record");
+
+                        string strOutMarcSyntax = "";
+                        string strOldMarc = "";
+                        string strNewMarc = "";
+                        // 将XML格式转换为MARC格式
+                        // 自动从数据记录中获得MARC语法
+                        nRet = MarcUtil.Xml2Marc(strOldRecord,
+                            true,
+                            null,
+                            out strOutMarcSyntax,
+                            out strOldMarc,
+                            out strError);
+                        if (nRet == -1)
+                        {
+                            strError = param.Location + " oldRecord 元素内 XML 转换到 MARC 记录时出错: " + strError;
+                            errors.Add(strError);
+                            goto ERROR1;
+                        }
+
+                        nRet = MarcUtil.Xml2Marc(strNewRecord,
+        true,
+        null,
+        out strOutMarcSyntax,
+        out strNewMarc,
+        out strError);
+                        if (nRet == -1)
+                        {
+                            strError = param.Location + " record 元素内 XML 转换到 MARC 记录时出错: " + strError;
+                            errors.Add(strError);
+                            goto ERROR1;
+                        }
+
+                        MarcRecord old_record = new MarcRecord(strOldMarc);
+                        MarcRecord new_record = new MarcRecord(strNewMarc);
+
+                        string strOldContent = old_record.select("field[@name='998']/subfield[@name='t']").FirstContent;
+                        string strNewContent = new_record.select("field[@name='998']/subfield[@name='t']").FirstContent;
+
+                        if (string.IsNullOrEmpty(strOldContent) == true
+                            && string.IsNullOrEmpty(strNewContent) == false)
+                        {
+                        }
+                        else
+                            return false;
+                    }
+                    else
+                        return false;
+                }
+            }
+
+            if (strOperation == "crashReport")
+            {
+                string strSubject = DomUtil.GetElementText(dom.DocumentElement, "subject");
+                param.Comment = strSubject;
+            }
+            return true;
+
+        ERROR1:
+            foreach (string error in errors)
+            {
+                Program.MainForm.OperHistory.AppendHtml("<div class='debug error'>" + HttpUtility.HtmlEncode(strError) + "</div>");
+            }
+            return true;
+        }
+
+        DateTime _lastUpdateTime = DateTime.Now;
 
         ProgressEstimate estimate = new ProgressEstimate();
 
@@ -3614,6 +3962,16 @@ FileShare.ReadWrite))
             strError = "";
 
             if (string.IsNullOrEmpty(strXml) == true)
+                return 0;
+
+            FilterParam filter = new FilterParam();
+            filter.Xml = strXml;
+            filter.Location = strLogFileName + ":" + lIndex;
+            // 进行过滤
+            // return:
+            //      true    满足过滤条件
+            //      false   不满足过滤条件
+            if (DoFilter(filter) == false)
                 return 0;
 
             OperLogItemInfo info = new OperLogItemInfo();
@@ -3650,9 +4008,14 @@ FileShare.ReadWrite))
             if (nRet == -1)
                 return -1;
 
-            if ((lIndex % 100) == 0)
-                this.listView_records.ForceUpdate();
+            ListViewUtil.ChangeItemText(item, COLUMN_COMMENT, filter.Comment);
 
+            if ((lIndex % 100) == 0
+                || DateTime.Now - _lastUpdateTime > TimeSpan.FromSeconds(5))
+            {
+                this.listView_records.ForceUpdate();
+                _lastUpdateTime = DateTime.Now;
+            }
             return 0;
         }
 
@@ -3667,6 +4030,11 @@ FileShare.ReadWrite))
 
             this.tabControl_main.SelectedTab = this.tabPage_logRecords;
 
+            int nLevel = Program.MainForm.OperLogLevel;
+
+            if (PrepareFilter(ref nLevel) == false)
+                return;
+
             EnableControls(false);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
@@ -3675,7 +4043,7 @@ FileShare.ReadWrite))
 
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
 #if DELAY_UPDATE
             this.listView_records.BeginUpdate();
@@ -3690,11 +4058,15 @@ FileShare.ReadWrite))
             this.ClearAllTempFiles();
 
             Global.ClearHtmlPage(this.webBrowser_xml,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
             Global.ClearHtmlPage(this.webBrowser_html,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
 #endif
             this.Clear();
+
+            Program.MainForm.OperHistory.AppendHtml("<div class='debug begin'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
++ "开始装入日志文件中的记录" + "</div>");
+
 
             try
             {
@@ -3715,7 +4087,7 @@ FileShare.ReadWrite))
                 }
 
                 string strStyle = "";
-                if (this.MainForm.AutoCacheOperlogFile == true)
+                if (Program.MainForm.AutoCacheOperlogFile == true)
                     strStyle = "autocache";
                 if (bControl)
                     StringUtil.SetInList(ref strStyle, "accessLog", true);
@@ -3725,9 +4097,10 @@ FileShare.ReadWrite))
                     this.estimate,
                     Channel,
                     lines,
-                    this.MainForm.OperLogLevel,
+                    nLevel, // Program.MainForm.OperLogLevel,
                     strStyle,
-                    this.MainForm.OperLogCacheDir,
+                    GetFilterParamString(),   // this.textBox_filter.Text,
+                    Program.MainForm.OperLogCacheDir,
                     null,   // param,
                     DoRecord,
                     out strError);
@@ -3746,10 +4119,14 @@ FileShare.ReadWrite))
                 stop.Initial("");
                 stop.HideProgress();
 
+                Program.MainForm.OperHistory.AppendHtml("<div class='debug end'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
++ "结束装入日志文件中的记录" + "</div>");
+
+
                 EnableControls(true);
             }
 
-            this.MainForm.StatusBarMessage = "总共耗费时间: " + this.estimate.GetTotalTime().ToString();
+            Program.MainForm.StatusBarMessage = "总共耗费时间: " + this.estimate.GetTotalTime().ToString();
             return;
         ERROR1:
             MessageBox.Show(this, strError);
@@ -4015,13 +4392,18 @@ FileShare.ReadWrite))
         /// </summary>
         /// <param name="strFilename">日志文件名的文件</param>
         /// <param name="strError">返回出错信息</param>
-        /// <returns>-1: 出错; 0: 成功</returns>
+        /// <returns>-1: 出错; 0: 放弃; 1: 成功</returns>
         public int LoadFromFilenamesFile(
             string strFilename,
             out string strError)
         {
             strError = "";
             int nRet = 0;
+
+            int nLevel = Program.MainForm.OperLogLevel;
+
+            if (PrepareFilter(ref nLevel) == false)
+                return 0;
 
             StreamReader sr = null;
             try
@@ -4046,8 +4428,8 @@ FileShare.ReadWrite))
             stop.BeginLoop();
 
 
-            this.Update();
-            this.MainForm.Update();
+            //this.Update();
+            //Program.MainForm.Update();
 
 #if NO
             this.listView_records.Items.Clear();
@@ -4059,11 +4441,14 @@ FileShare.ReadWrite))
             this.ClearAllTempFiles();
 
             Global.ClearHtmlPage(this.webBrowser_xml,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
             Global.ClearHtmlPage(this.webBrowser_html,
-                this.MainForm.DataDir);
+                Program.MainForm.DataDir);
 #endif
             this.Clear();
+
+            Program.MainForm.OperHistory.AppendHtml("<div class='debug begin'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
++ "开始装入日志文件中的记录" + "</div>");
 
             try
             {
@@ -4087,7 +4472,7 @@ FileShare.ReadWrite))
                 }
 
                 string strStyle = "";
-                if (this.MainForm.AutoCacheOperlogFile == true)
+                if (Program.MainForm.AutoCacheOperlogFile == true)
                     strStyle = "autocache";
                 if (this.AccessLog)
                     strStyle += ",accessLog";
@@ -4097,14 +4482,17 @@ FileShare.ReadWrite))
     this.estimate,
     Channel,
     lines,
-    this.MainForm.OperLogLevel,
+    nLevel,     // Program.MainForm.OperLogLevel,
     strStyle,
-    this.MainForm.OperLogCacheDir,
+    GetFilterParamString(),   // this.textBox_filter.Text,
+    Program.MainForm.OperLogCacheDir,
     null,   // param,
     DoRecord,
     out strError);
                 if (nRet == -1)
                     return -1;
+
+                return 1;
             }
             finally
             {
@@ -4118,14 +4506,11 @@ FileShare.ReadWrite))
                 stop.Initial("");
                 stop.HideProgress();
 
+                Program.MainForm.OperHistory.AppendHtml("<div class='debug begin'>" + HttpUtility.HtmlEncode(DateTime.Now.ToLongTimeString())
++ "结束装入日志文件中的记录" + "</div>");
+
                 EnableControls(true);
             }
-
-            return 0;
-            /*
-        ERROR1:
-            return -1;
-             * */
         }
 
         private void button_repair_findSourceFilename_Click(object sender, EventArgs e)
@@ -4449,7 +4834,6 @@ FileShare.ReadWrite))
                 return -1;
             }
 
-            /*
             if (lMetaDataLength > 0)
             {
                 byte[] metadatabody = new byte[(int)lMetaDataLength];
@@ -4461,9 +4845,9 @@ FileShare.ReadWrite))
                     return -1;
                 }
 
-                strMetaData = Encoding.UTF8.GetString(metadatabody);
+                string strMetaData = Encoding.UTF8.GetString(metadatabody);
             }
-             * */
+
             if (lMetaDataLength > stream.Length - stream.Position)
             {
                 strError = "XML记录体metadata部分长度(" + lMetaDataLength.ToString() + ")超过文件剩余部分尺寸";
@@ -4494,7 +4878,13 @@ FileShare.ReadWrite))
                 return -1;
             }
 
-            /*
+
+            if (lBodyLength > stream.Length - stream.Position)
+            {
+                strError = "XML记录体body部分长度(" + lBodyLength.ToString() + ")超过文件剩余部分尺寸";
+                return -1;
+            }
+
             if (lBodyLength > 0)
             {
                 byte[] xmlbody = new byte[(int)lBodyLength];
@@ -4506,15 +4896,20 @@ FileShare.ReadWrite))
                     return -1;
                 }
 
-                strBody = Encoding.UTF8.GetString(xmlbody);
+                string strBody = Encoding.UTF8.GetString(xmlbody);
+                XmlDocument dom = new XmlDocument();
+                try
+                {
+                    dom.LoadXml(strBody);
+                }
+                catch(Exception ex)
+                {
+                    strError = "XML 内容不合法: " + ex.Message;
+                    return -1;
+                }
             }
-             * */
-            if (lBodyLength > stream.Length - stream.Position)
-            {
-                strError = "XML记录体body部分长度(" + lBodyLength.ToString() + ")超过文件剩余部分尺寸";
-                return -1;
-            }
-            stream.Seek(lBodyLength, SeekOrigin.Current);
+
+            // stream.Seek(lBodyLength, SeekOrigin.Current);
 
             // 文件指针此时自然在末尾
             if (stream.Position - lStart != lEntryLength + 8)
@@ -4968,10 +5363,45 @@ FileShare.ReadWrite))
             }
             else if (strName == "最近十年" || strName == "最近10年")
             {
+#if NO
                 DateTime now = DateTime.Now;
                 DateTime start = now - new TimeSpan(10 * 365 - 1, 0, 0, 0);
                 strStartDate = DateTimeUtil.DateTimeToString8(start);
                 strEndDate = DateTimeUtil.DateTimeToString8(now);
+#endif
+                GetYearsRange(10, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近九年" || strName == "最近9年")
+            {
+                GetYearsRange(9, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近八年" || strName == "最近8年")
+            {
+                GetYearsRange(8, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近七年" || strName == "最近7年")
+            {
+                GetYearsRange(7, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近六年" || strName == "最近6年")
+            {
+                GetYearsRange(6, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近五年" || strName == "最近5年")
+            {
+                GetYearsRange(5, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近四年" || strName == "最近4年")
+            {
+                GetYearsRange(4, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近三年" || strName == "最近3年")
+            {
+                GetYearsRange(3, out strStartDate, out strEndDate);
+            }
+            else if (strName == "最近二年" || strName == "最近2年")
+            {
+                GetYearsRange(2, out strStartDate, out strEndDate);
             }
             else
             {
@@ -4989,7 +5419,7 @@ FileShare.ReadWrite))
             // return:
             //      -1  错误
             //      0   成功
-            int nRet = OperLogStatisForm.MakeLogFileNames(strStartDate,
+            int nRet = OperLogLoader.MakeLogFileNames(strStartDate,
                 strEndDate,
                 true,  // 是否包含扩展名 ".log"
         out LogFileNames,
@@ -5014,6 +5444,13 @@ FileShare.ReadWrite))
             MessageBox.Show(this, strError);
         }
 
+        void GetYearsRange(int n, out string strStartDate, out string strEndDate)
+        {
+            DateTime now = DateTime.Now;
+            DateTime start = now - new TimeSpan(n * 365 - 1, 0, 0, 0);
+            strStartDate = DateTimeUtil.DateTimeToString8(start);
+            strEndDate = DateTimeUtil.DateTimeToString8(now);
+        }
 
         private void comboBox_quickSetFilenames_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -5021,7 +5458,8 @@ FileShare.ReadWrite))
             this.BeginInvoke(d, new object[] { sender });
         }
 
-        void DoViewOperlog(bool bOpenWindow)
+        void DoViewOperlog(ListView list,
+            bool bOpenWindow)
         {
             string strError = "";
             string strHtml = "";
@@ -5030,12 +5468,12 @@ FileShare.ReadWrite))
             // 优化，避免无谓地进行服务器调用
             if (bOpenWindow == false)
             {
-                if (this.MainForm.PanelFixedVisible == false
+                if (Program.MainForm.PanelFixedVisible == false
                     && (m_operlogViewer == null || m_operlogViewer.Visible == false))
                     return;
             }
 
-            if (this.listView_records.SelectedItems.Count != 1)
+            if (list.SelectedItems.Count != 1)
             {
                 // 2012/10/2
                 if (this.m_operlogViewer != null)
@@ -5044,7 +5482,7 @@ FileShare.ReadWrite))
                 return;
             }
 
-            ListViewItem item = this.listView_records.SelectedItems[0];
+            ListViewItem item = list.SelectedItems[0];
             string strFilename = ListViewUtil.GetItemText(item, COLUMN_FILENAME);
             string strIndex = ListViewUtil.GetItemText(item, COLUMN_INDEX);
 
@@ -5086,11 +5524,11 @@ FileShare.ReadWrite))
             {
                 m_operlogViewer = new CommentViewerForm();
                 MainForm.SetControlFont(m_operlogViewer, this.Font, false);
-                m_operlogViewer.SuppressScriptErrors = this.MainForm.SuppressScriptErrors;
+                m_operlogViewer.SuppressScriptErrors = Program.MainForm.SuppressScriptErrors;
                 bNew = true;
             }
 
-            m_operlogViewer.MainForm = this.MainForm;  // 必须是第一句
+            // m_operlogViewer.MainForm = Program.MainForm;  // 必须是第一句
 
             if (bNew == true)
                 m_operlogViewer.InitialWebBrowser();
@@ -5105,11 +5543,11 @@ FileShare.ReadWrite))
             {
                 if (m_operlogViewer.Visible == false)
                 {
-                    this.MainForm.AppInfo.LinkFormState(m_operlogViewer, "operlog_viewer_state");
+                    Program.MainForm.AppInfo.LinkFormState(m_operlogViewer, "operlog_viewer_state");
                     m_operlogViewer.Show(this);
                     m_operlogViewer.Activate();
 
-                    this.MainForm.CurrentPropertyControl = null;
+                    Program.MainForm.CurrentPropertyControl = null;
                 }
                 else
                 {
@@ -5126,7 +5564,7 @@ FileShare.ReadWrite))
                 }
                 else
                 {
-                    if (this.MainForm.CurrentPropertyControl != m_operlogViewer.MainControl)
+                    if (Program.MainForm.CurrentPropertyControl != m_operlogViewer.MainControl)
                         m_operlogViewer.DoDock(false); // 不会自动显示FixedPanel
                 }
             }
@@ -5139,14 +5577,14 @@ FileShare.ReadWrite))
         {
             if (m_operlogViewer != null)
             {
-                this.MainForm.AppInfo.UnlinkFormState(m_operlogViewer);
+                Program.MainForm.AppInfo.UnlinkFormState(m_operlogViewer);
                 this.m_operlogViewer = null;
             }
         }
 
         private void listView_records_DoubleClick(object sender, EventArgs e)
         {
-            DoViewOperlog(true);
+            DoViewOperlog(this.listView_records, true);
         }
 
         private void toolStripButton_closeDownPanel_Click(object sender, EventArgs e)
@@ -5191,6 +5629,20 @@ FileShare.ReadWrite))
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
+            menuItem = new MenuItem("导出附件(&A) [" + this.listView_records.SelectedItems.Count.ToString() + "]");
+            menuItem.Click += new System.EventHandler(this.menu_exportAttachment_Click);
+            if (this.listView_records.SelectedItems.Count == 0)
+                menuItem.Enabled = false;
+            contextMenu.MenuItems.Add(menuItem);
+
+
+            menuItem = new MenuItem("导出 amerce 操作信息到 Excel 文件(&E) [" + this.listView_records.SelectedItems.Count.ToString() + "]");
+            menuItem.Click += new System.EventHandler(this.menu_exportAmerceExcel_Click);
+            if (this.listView_records.SelectedItems.Count == 0)
+                menuItem.Enabled = false;
+            contextMenu.MenuItems.Add(menuItem);
+
+
             // ---
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
@@ -5202,8 +5654,365 @@ FileShare.ReadWrite))
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
+            menuItem = new MenuItem("补做 SetBiblioInfo-move (&M) [" + this.listView_records.SelectedItems.Count.ToString() + "]");
+            menuItem.Click += new System.EventHandler(this.menu_redoSetBiblioInfoMove_Click);
+            if (this.listView_records.SelectedItems.Count == 0)
+                menuItem.Enabled = false;
+            contextMenu.MenuItems.Add(menuItem);
 
             contextMenu.Show(this.listView_records, new Point(e.X, e.Y));
+        }
+
+        // 补做 SetBiblioInfo-move
+        void menu_redoSetBiblioInfoMove_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            if (this.listView_records.SelectedItems.Count == 0)
+            {
+                strError = "尚未选定要补做 SetBiblioInfo 的行";
+                goto ERROR1;
+            }
+
+            // 检查是否具备足够权限
+            string[] rights = new string[] { 
+            "setbiblioinfo",
+            "setiteminfo",
+            "setissueinfo",
+            "setorderinfo",
+            "setcommentinfo"};
+
+            string strRights = Program.MainForm._currentUserRights;
+            foreach (string right in rights)
+            {
+                if (StringUtil.IsInList(right, strRights) == false)
+                {
+                    strError = "当前用户缺乏 '" + right + "' 权限";
+                    goto ERROR1;
+                }
+            }
+
+            LibraryChannel channel = this.GetChannel();
+
+            Stop stop = new DigitalPlatform.Stop();
+            stop.Register(MainForm.stopManager, true);	// 和容器关联
+
+            stop.OnStop += new StopEventHandler(this.DoStopPrint);
+            stop.Initial("正在补做 SetBiblioInfo-move ...");
+            stop.BeginLoop();
+
+            try
+            {
+                stop.SetProgressRange(0, this.listView_records.SelectedItems.Count);
+                int i = 0;
+                foreach (ListViewItem item in this.listView_records.SelectedItems)
+                {
+                    Application.DoEvents();
+
+                    if (stop != null && stop.State != 0)
+                    {
+                        strError = "用户中断";
+                        goto ERROR1;
+                    }
+
+                    OperLogItemInfo info = (OperLogItemInfo)item.Tag;
+
+                    string strLogFileName = ListViewUtil.GetItemText(item, COLUMN_FILENAME);
+                    string strIndex = ListViewUtil.GetItemText(item, COLUMN_INDEX);
+
+                    string strXml = "";
+                    // 从服务器获得
+                    // return:
+                    //      -1  出错
+                    //      0   正常
+                    //      1   用户中断
+                    int nRet = GetXml(item,
+            out strXml,
+            out strError);
+                    if (nRet == 1)
+                        return;
+                    if (nRet == -1)
+                        goto ERROR1;
+
+                    XmlDocument dom = new XmlDocument();
+                    dom.LoadXml(strXml);
+
+                    string strOperation = DomUtil.GetElementText(dom.DocumentElement, "operation");
+                    if (strOperation != "setBiblioInfo")
+                        continue;
+                    string strAction = DomUtil.GetElementText(dom.DocumentElement, "action");
+                    if (strAction != "move")
+                        continue;
+
+                    XmlNode node = null;
+
+                    string strOldRecord = DomUtil.GetElementText(dom.DocumentElement, "oldRecord", out node);
+                    string strOldRecPath = "";
+                    if (node != null)
+                        strOldRecPath = DomUtil.GetAttr(node, "recPath");
+
+                    string strRecord = DomUtil.GetElementText(dom.DocumentElement, "record", out node);
+                    string strRecPath = "";
+                    if (node != null)
+                        strRecPath = DomUtil.GetAttr(node, "recPath");
+
+                    if (string.IsNullOrEmpty(strOldRecPath) || string.IsNullOrEmpty(strRecPath))
+                        continue;
+
+                    string strMergeStyle = DomUtil.GetElementText(dom.DocumentElement, "mergeStyle");
+
+                    // 观察 strOldRecPath 位置是否还有记录
+                    // return:
+                    //      -1  出错
+                    //      0   没有找到
+                    //      1   找到
+                    nRet = DetectBiblioRecord(channel,
+                        stop,
+                strOldRecPath,
+                out strError);
+                    if (nRet == -1)
+                        goto ERROR1;
+                    if (nRet == 1)
+                        continue;
+
+                    // TODO: 检查源和目标库的下级库定义情况，对少于源的情况进行警告
+                    strError = Program.MainForm.CompareTwoBiblioDbDef(Global.GetDbName(strOldRecPath), Global.GetDbName(strRecPath));
+                    if (string.IsNullOrEmpty(strError) == false)
+                    {
+                        strError += "\r\n这样可能会导致移动操作后某些下级记录丢失。为避免出现此类报错，请修改相关书目库定义，以满足移动操作要求";
+                        DialogResult result = MessageBox.Show(this,
+strError + "\r\n\r\n是否强行处理本条?\r\n(Yes 强行处理本条; No 跳过本条记录处理后面的记录; No 退出全部处理)",
+"OperLogForm",
+MessageBoxButtons.YesNoCancel,
+MessageBoxIcon.Question,
+MessageBoxDefaultButton.Button1);
+                        if (result == System.Windows.Forms.DialogResult.Cancel)
+                            goto ERROR1;
+                        if (result == System.Windows.Forms.DialogResult.No)
+                            goto CONTINUE;
+                    }
+
+                    stop.SetMessage(" " + strOldRecPath + " --> " + strRecPath + " (" + strMergeStyle + ")");
+
+                    // return:
+                    //      -1  出错
+                    //      0   成功，没有警告信息。
+                    //      1   成功，有警告信息。警告信息在 strError 中
+                    nRet = DoMove(channel,
+                        stop,
+            strOldRecPath,
+            strRecPath,
+            strMergeStyle,
+            out strError);
+                    if (nRet == -1)
+                    {
+                        // TODO: 询问是否重试、跳过、放弃
+                        MessageBox.Show(this, " '" + strOldRecPath + "' --> '" + strRecPath + "' " + strError);
+                        continue;
+                        // goto ERROR1;
+                    }
+
+                    if (nRet == 1)
+                    {
+                        MessageBox.Show(this, "移动 " + strOldRecPath + " --> " + strRecPath + " 的过程中出现警告：" + strError);
+                    }
+
+                CONTINUE:
+                    stop.SetProgressValue(i + 1);
+                    i++;
+                }
+            }
+            finally
+            {
+                stop.EndLoop();
+                stop.OnStop -= new StopEventHandler(this.DoStopPrint);
+                stop.Initial("");
+                stop.HideProgress();
+
+                if (stop != null) // 脱离关联
+                {
+                    stop.Unregister();	// 和容器关联
+                    stop = null;
+                }
+
+                this.ReturnChannel(channel);
+            }
+
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // return:
+        //      -1  出错
+        //      0   成功，没有警告信息。
+        //      1   成功，有警告信息。警告信息在 strError 中
+        static int DoMove(LibraryChannel channel,
+            Stop stop,
+            string strSourceRecPath,
+            string strTargetRecPath,
+            string strMergeStyle,
+            out string strError)
+        {
+            strError = "";
+
+            string strOutputBiblio = "";
+            string strOutputBiblioRecPath = "";
+            byte[] baOutputTimestamp = null;
+            // result.Value:
+            //      -1  出错
+            //      0   成功，没有警告信息。
+            //      1   成功，有警告信息。警告信息在 result.ErrorInfo 中
+            long lRet = channel.CopyBiblioInfo(
+                stop,
+                "move",
+                strSourceRecPath,
+                "xml",
+                null,
+                null,   // this.BiblioTimestamp,
+                strTargetRecPath,
+                null,
+                strMergeStyle,
+                out strOutputBiblio,
+                out strOutputBiblioRecPath,
+                out baOutputTimestamp,
+                out strError);
+            if (lRet == -1)
+                return -1;
+
+            return (int)lRet;
+        }
+
+        // return:
+        //      -1  出错
+        //      0   没有找到
+        //      1   找到
+        static int DetectBiblioRecord(LibraryChannel channel,
+            Stop stop,
+            string strBiblioRecPath,
+            out string strError)
+        {
+            strError = "";
+
+            string[] results = null;
+            byte[] baTimestamp = null;
+            long lRet = channel.GetBiblioInfos(
+                stop,
+                strBiblioRecPath,
+                "",
+                new string[] { "xml" },   // formats
+                out results,
+                out baTimestamp,
+                out strError);
+            if (lRet == 0)
+                return 0;
+
+            if (lRet == -1)
+                return -1;
+            if (results == null || results.Length == 0)
+            {
+                strError = "results error";
+                return -1;
+            }
+
+            return 1;
+        }
+
+        // 导出附件
+        void menu_exportAttachment_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            string strDirectory = "";
+            string strOutputFileName = "";
+
+            if (this.listView_records.SelectedItems.Count == 0)
+            {
+                strError = "尚未选择要导出(附件)的事项";
+                goto ERROR1;
+            }
+
+
+            if (this.listView_records.SelectedItems.Count > 1)
+            {
+                FolderBrowserDialog dir_dlg = new FolderBrowserDialog();
+
+                dir_dlg.Description = "请指定对象文件所在目录:";
+                dir_dlg.RootFolder = Environment.SpecialFolder.MyComputer;
+                dir_dlg.ShowNewFolderButton = false;
+                // dir_dlg.SelectedPath = this.textBox_objectDirectoryName.Text;
+
+                if (dir_dlg.ShowDialog() != DialogResult.OK)
+                    return;
+
+                strDirectory = dir_dlg.SelectedPath;
+            }
+            else
+            {
+
+                // 询问文件名
+                SaveFileDialog dlg = new SaveFileDialog();
+
+                dlg.Title = "请指定要创建的附件文件名";
+                dlg.CreatePrompt = false;
+                dlg.OverwritePrompt = true;
+                dlg.FileName = "";
+                dlg.Filter = "附件文件 (*.bin)|*.bin|All files (*.*)|*.*";
+
+                dlg.RestoreDirectory = true;
+
+                if (dlg.ShowDialog() != DialogResult.OK)
+                    return;
+
+                strOutputFileName = dlg.FileName;
+            }
+
+            LibraryChannel channel = this.GetChannel();
+
+            try
+            {
+                int nCount = 0;
+                int nRet = ProcessSelectedRecords((date, index, dom, timestamp) =>
+                        {
+                            string strCurrentFileName = strOutputFileName;
+                            if (string.IsNullOrEmpty(strCurrentFileName))
+                                strCurrentFileName = Path.Combine(strDirectory, date.Substring(0, 8) + "_" + index.ToString() + ".bin");
+
+                            long lHintNext = 0;
+                            // return:
+                            //      -1  出错
+                            //      0   没有找到日志记录
+                            //      >0  附件总长度
+                            long lRet = channel.DownloadOperlogAttachment(
+                                null,   // stop,
+                                date,
+                                index,
+                                -1, // lHint,
+                                strCurrentFileName,
+                                out lHintNext,
+                                out strError);
+                            if (lRet == -1)
+                                throw new Exception(strError);
+                            if (lRet > 0)
+                            {
+                                // TODO: 把文件创建和最后修改时间，修改为日志记录的操作时间
+                                nCount++;
+                            }
+                            return true;
+                        },
+                    out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+
+                MessageBox.Show(this, "共导出 " + nCount + " 个附件");
+            }
+            finally
+            {
+                this.ReturnChannel(channel);
+            }
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
         }
 
         // 导出到 XML 文件
@@ -5257,6 +6066,381 @@ FileShare.ReadWrite))
             return;
         ERROR1:
             MessageBox.Show(this, strError);
+        }
+
+        // 导出 amerce 操作到 Excel 文件
+        void menu_exportAmerceExcel_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            // 询问文件名
+            SaveFileDialog dlg = new SaveFileDialog();
+
+            dlg.Title = "请指定要创建的 Excel 文件名";
+            dlg.CreatePrompt = false;
+            dlg.OverwritePrompt = true;
+            dlg.FileName = "";
+            dlg.Filter = "Excel 文件 (*.xlsx)|*.xlsx|All files (*.*)|*.*";
+
+            dlg.RestoreDirectory = true;
+
+            if (dlg.ShowDialog() != DialogResult.OK)
+                return;
+
+            XLWorkbook doc = null;
+            try
+            {
+                doc = new XLWorkbook(XLEventTracking.Disabled);
+                File.Delete(dlg.FileName);
+            }
+            catch (Exception ex)
+            {
+                strError = "OperLogForm new XLWorkbook() exception: " + ExceptionUtil.GetAutoText(ex);
+                goto ERROR1;
+            }
+
+            IXLWorksheet sheet = null;
+            sheet = doc.Worksheets.Add("表格");
+
+#if NO
+            SumLine sum_amerce = new SumLine();
+            SumLine sum_undo = new SumLine();
+            SumLine sum_modify = new SumLine();
+#endif
+            Hashtable sum_table = new Hashtable();  // action --> SumLine
+
+            bool bLaunchExcel = true;
+            int nRowIndex = 1;
+            int nItemIndex = 0;
+            List<int> column_max_chars = new List<int>();
+
+            List<IXLCell> cells = new List<IXLCell>();
+            List<string> titles = new List<string>();
+            titles.Add("总序号");
+            titles.Add("日期");
+            titles.Add("action");
+            titles.Add("index");
+            titles.Add("sub_index");
+            titles.Add("册条码号");
+            titles.Add("书目摘要");
+            titles.Add("证条码号");
+            titles.Add("说明");
+            titles.Add("金额");
+            titles.Add("ID");
+            titles.Add("调试信息");
+
+            int nColIndex = 2;
+            foreach (string s in titles)
+            {
+                IXLCell cell = sheet.Cell(nRowIndex, nColIndex).SetValue(s);
+                cell.Style.Alignment.WrapText = true;
+                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                cell.Style.Font.Bold = true;
+                cell.Style.Font.FontColor = XLColor.DarkGray;
+                nColIndex++;
+                cells.Add(cell);
+            }
+            nRowIndex++;
+
+            try
+            {
+                int nRet = ProcessSelectedRecords((date, index, dom, timestamp) =>
+                        {
+                            if (dom.DocumentElement != null)
+                            {
+                                string action = DomUtil.GetElementText(dom.DocumentElement, "action");
+                                List<OperLogLineBase> lines = DoOneRecord(dom,
+    date.Substring(0, 8),
+    index,
+    out strError);
+                                if (lines == null)
+                                    return true;
+
+                                foreach (AmerceOperLogLine line in lines)
+                                {
+                                    List<string> cols = new List<string>();
+                                    cols.Add((nItemIndex + 1).ToString());
+                                    cols.Add(date.Substring(0, 8));
+                                    cols.Add(line.Action);
+                                    cols.Add(index.ToString());
+                                    cols.Add(line.SubNo.ToString());
+                                    cols.Add(line.ItemBarcode);
+                                    cols.Add("");
+                                    cols.Add(line.ReaderBarcode);
+                                    cols.Add(line.Reason);
+                                    cols.Add(line.Price.ToString());
+                                    cols.Add(line.ID);
+                                    cols.Add(strError);
+                                    strError = "";  // 只有第一行有调试信息
+
+                                    {
+                                        SumLine sum_line = sum_table[line.Action] as SumLine;
+                                        if (sum_line == null)
+                                        {
+                                            sum_line = new SumLine();
+                                            sum_table[line.Action] = sum_line;
+                                        }
+                                        sum_line.Count++;
+                                        sum_line.Value += line.Price;
+                                    }
+
+#if NO
+                                    if (line.Action == "modifyprice")
+                                    {
+                                        sum_modify.Count++;
+                                        sum_modify.Value += line.Price;
+                                    }
+                                    else if (line.Action == "amerce")
+                                    {
+                                        sum_amerce.Count++;
+                                        sum_amerce.Value += line.Price;
+                                    }
+                                    else if (line.Action == "undo")
+                                    {
+                                        sum_undo.Count++;
+                                        sum_undo.Value += line.Price;
+                                    }
+#endif
+
+                                    WriteLine(
+                                        sheet,
+                                        cols,
+                                        cells,
+                                        ref nItemIndex,
+                                        ref nRowIndex,
+                                        ref column_max_chars);
+                                }
+                            }
+
+                            return true;
+                        },
+                    out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+
+
+                foreach (string action in sum_table.Keys)
+                {
+                    SumLine sum_amerce = sum_table[action] as SumLine;
+                    List<string> cols = new List<string>();
+                    cols.Add("合计");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add(action);
+                    cols.Add("次 " + sum_amerce.Count.ToString());
+                    cols.Add(sum_amerce.Value.ToString());
+                    cols.Add("");
+                    cols.Add("");
+
+                    WriteLine(
+        sheet,
+        cols,
+        cells,
+        ref nItemIndex,
+        ref nRowIndex,
+        ref column_max_chars);
+                }
+#if NO
+                // 合计行
+                {
+                    List<string> cols = new List<string>();
+                    cols.Add("合计");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("交费");
+                    cols.Add("次 " + sum_amerce.Count.ToString());
+                    cols.Add(sum_amerce.Value.ToString());
+                    cols.Add("");
+                    cols.Add("");
+
+                    WriteLine(
+        sheet,
+        cols,
+        cells,
+        ref nItemIndex,
+        ref nRowIndex,
+        ref column_max_chars);
+                }
+
+                // 合计行
+                {
+                    List<string> cols = new List<string>();
+                    cols.Add("合计");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("撤销交费");
+                    cols.Add("次 " + sum_undo.Count.ToString());
+                    cols.Add(sum_undo.Value.ToString());
+                    cols.Add("");
+                    cols.Add("");
+
+                    WriteLine(
+        sheet,
+        cols,
+        cells,
+        ref nItemIndex,
+        ref nRowIndex,
+        ref column_max_chars);
+                }
+
+                // 合计行
+                {
+                    List<string> cols = new List<string>();
+                    cols.Add("合计");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("");
+                    cols.Add("修改金额");
+                    cols.Add("次 " + sum_modify.Count.ToString());
+                    cols.Add(sum_modify.Value.ToString());
+                    cols.Add("");
+                    cols.Add("");
+
+                    WriteLine(
+        sheet,
+        cols,
+        cells,
+        ref nItemIndex,
+        ref nRowIndex,
+        ref column_max_chars);
+                }
+#endif
+
+                // 字符数太多的列不要做 width auto adjust
+                foreach (IXLColumn column in sheet.Columns())
+                {
+                    int MAX_CHARS = 50;   // 60
+
+                    int nIndex = column.FirstCell().Address.ColumnNumber - 1;
+                    if (nIndex >= column_max_chars.Count)
+                        break;
+                    int nChars = column_max_chars[nIndex];
+
+                    if (nIndex == 1)
+                    {
+                        column.Width = 10;
+                        continue;
+                    }
+
+                    if (nIndex == 3)
+                        MAX_CHARS = 50;
+                    else
+                        MAX_CHARS = 24;
+
+                    if (nChars < MAX_CHARS)
+                        column.AdjustToContents();
+                    else
+                        column.Width = Math.Min(MAX_CHARS, nChars);
+                }
+            }
+            finally
+            {
+                if (doc != null)
+                {
+                    doc.SaveAs(dlg.FileName);
+                    doc.Dispose();
+                }
+
+                if (bLaunchExcel)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(dlg.FileName);
+                    }
+                    catch
+                    {
+
+                    }
+                }
+            }
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        void WriteLine(
+            IXLWorksheet sheet,
+            List<string> cols,
+            List<IXLCell> cells,
+            ref int nItemIndex,
+            ref int nRowIndex,
+            ref List<int> column_max_chars)
+        {
+            int nColIndex = 2;
+            foreach (string s in cols)
+            {
+                // 统计最大字符数
+                ReaderSearchForm.SetMaxChars(ref column_max_chars, nColIndex - 1, ReaderSearchForm.GetCharWidth(s));
+
+                IXLCell cell = null;
+                cell = sheet.Cell(nRowIndex, nColIndex).SetValue(s);
+                if (nColIndex == 2)
+                {
+                    // cell = sheet.Cell(nRowIndex, nColIndex).SetValue(nItemIndex + 1);
+                    cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                }
+
+                cell.Style.Alignment.WrapText = true;
+                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                nColIndex++;
+                cells.Add(cell);
+            }
+
+            nItemIndex++;
+            nRowIndex++;
+        }
+
+        class SumLine
+        {
+            public long Count { get; set; }
+            public long Value { get; set; }
+        }
+
+        List<OperLogLineBase> DoOneRecord(XmlDocument dom,
+            string strDate,
+            long lIndex,
+            out string strError)
+        {
+            strError = "";
+
+            List<OperLogLineBase> lines = null;
+
+            string strOperation = DomUtil.GetElementText(dom.DocumentElement, "operation");
+            string strAction = DomUtil.GetElementText(dom.DocumentElement, "action");
+#if NO
+            if (strAction == "expire")
+                return new List<OperLogLineBase>();
+#endif
+
+            AmerceOperLogLine line = new AmerceOperLogLine();
+            int nRet = line.SetData(dom,
+        strDate,
+        lIndex,
+        out lines,
+        out strError);
+            if (nRet == -1)
+                return null;
+
+            if (lines == null)
+                lines = new List<OperLogLineBase>();
+
+            lines.Insert(0, line);
+            return lines;
         }
 
         void menu_selectAllLines_Click(object sender, EventArgs e)
@@ -5364,6 +6548,11 @@ FileShare.ReadWrite))
 
                 return 0;
             }
+            catch (Exception ex)
+            {
+                strError = ex.Message;
+                return -1;
+            }
             finally
             {
                 stop.EndLoop();
@@ -5391,7 +6580,7 @@ FileShare.ReadWrite))
             }
 
             List<string> filenames = new List<string>();
-            string strFileNamePrefix = this.MainForm.DataDir + "\\~operlog_print_";
+            string strFileNamePrefix = Program.MainForm.DataDir + "\\~operlog_print_";
             string strFilename = strFileNamePrefix + (1).ToString() + ".html";
             filenames.Add(strFilename);
 
@@ -5410,7 +6599,8 @@ FileShare.ReadWrite))
             stop.BeginLoop();
 
             m_webExternalHost = new WebExternalHost();
-            m_webExternalHost.Initial(this.MainForm, null);
+            m_webExternalHost.Initial(// Program.MainForm,
+                null);
             m_webExternalHost.IsInLoop = true;
 
             this.GetSummary += new GetSummaryEventHandler(OperLogForm_GetSummary);
@@ -5450,7 +6640,7 @@ FileShare.ReadWrite))
 
                     Global.SetXmlString(this.webBrowser_xml,
     strXml,
-    this.MainForm.DataDir,
+    Program.MainForm.DataDir,
     "operlogexml");
 
                     string strHtml = "";
@@ -5504,12 +6694,12 @@ FileShare.ReadWrite))
             HtmlPrintForm printform = new HtmlPrintForm();
 
             printform.Text = "打印解释内容";
-            printform.MainForm = this.MainForm;
+            // printform.MainForm = Program.MainForm;
             printform.Filenames = filenames;
 
-            this.MainForm.AppInfo.LinkFormState(printform, "operlogform_printform_state");
+            Program.MainForm.AppInfo.LinkFormState(printform, "operlogform_printform_state");
             printform.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(printform);
+            Program.MainForm.AppInfo.UnlinkFormState(printform);
 
             return;
         ERROR1:
@@ -5538,13 +6728,12 @@ FileShare.ReadWrite))
             dlg.Text = "筛选";
             dlg.Operations = m_strFindOperations;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "operlogform_finddialog_formstate");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "operlogform_finddialog_formstate");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
-
 
             m_strFindOperations = dlg.Operations;
 
@@ -5606,7 +6795,10 @@ FileShare.ReadWrite))
             return;
         }
 
+        // *** 过滤所用的特性参数
         string m_strFindOperations = "";    // 曾经用过的查找参数
+        string m_strFilters = "";   // 过滤器
+        List<string> m_recPathList = new List<string>();    // 相关记录路径
 
         void menu_find_Click(object sender, EventArgs e)
         {
@@ -5615,9 +6807,9 @@ FileShare.ReadWrite))
             MainForm.SetControlFont(dlg, this.Font, false);
             dlg.Operations = m_strFindOperations;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "operlogform_finddialog_formstate");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "operlogform_finddialog_formstate");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
@@ -5714,9 +6906,9 @@ Keys keyData)
                 MainForm.SetControlFont(dlg, this.Font, false);
                 dlg.Operations = m_strFindOperations;
 
-                this.MainForm.AppInfo.LinkFormState(dlg, "operlogform_finddialog_formstate");
+                Program.MainForm.AppInfo.LinkFormState(dlg, "operlogform_finddialog_formstate");
                 dlg.ShowDialog(this);
-                this.MainForm.AppInfo.UnlinkFormState(dlg);
+                Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
                 if (dlg.DialogResult != DialogResult.OK)
                     return;
@@ -5735,7 +6927,6 @@ Keys keyData)
 
             try
             {
-
                 List<string> operations = StringUtil.FromListString(m_strFindOperations);
                 int i = 0;
                 foreach (ListViewItem item in this.listView_records.Items)
@@ -5750,7 +6941,8 @@ Keys keyData)
 
                     foreach (string o in operations)
                     {
-                        if (strOperation.IndexOf(o) != -1)
+                        if (o == "<all>"
+                            || strOperation.IndexOf(o) != -1)
                         {
                             found_item = item;
                             goto FOUND;
@@ -5766,13 +6958,13 @@ Keys keyData)
                 this.Cursor = oldCursor;
             }
 
-            this.MainForm.StatusBarMessage = "操作类型为 '" + m_strFindOperations + "' 的日志记录没有找到";
+            Program.MainForm.StatusBarMessage = "操作类型为 '" + m_strFindOperations + "' 的日志记录没有找到";
             return;
         FOUND:
             ListViewUtil.ClearSelection(this.listView_records);
             found_item.Selected = true;
             found_item.EnsureVisible();
-            this.MainForm.StatusBarMessage = "找到";
+            Program.MainForm.StatusBarMessage = "找到";
         }
 
         // 
@@ -5783,7 +6975,7 @@ Keys keyData)
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "operlog_form",
                     "display_reader_borrow_history",
                     true);
@@ -5798,7 +6990,7 @@ Keys keyData)
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                 "operlog_form",
                 "display_item_borrow_history",
                 true);
@@ -5806,7 +6998,7 @@ Keys keyData)
         }
 
 
-        #region 改进后的批处理功能
+#region 改进后的批处理功能
 
         // parameters:
         //      bInCacheFile    lHint指示的是否为本地cache文件中的hint
@@ -5853,6 +7045,7 @@ Keys keyData)
         /// <param name="filenames">要参与处理的日志文件名集合</param>
         /// <param name="nLevel">从 dp2Library 服务器获取日志记录的详细级别</param>
         /// <param name="strStyle">处理风格。autocache</param>
+        /// <param name="strFilter">过滤参数</param>
         /// <param name="strCacheDir">日志本地缓存目录</param>
         /// <param name="param">回调对象</param>
         /// <param name="procDoRecord">回调函数</param>
@@ -5870,6 +7063,7 @@ Keys keyData)
             List<string> filenames,
             int nLevel,
             string strStyle,
+            string strFilter,
             string strCacheDir,
             object param,
             Delegate_doRecord procDoRecord,
@@ -5881,7 +7075,7 @@ Keys keyData)
             bool bAccessLog = StringUtil.IsInList("accessLog", strStyle);
 
             if (string.IsNullOrEmpty(strCacheDir) == false)
-                PathUtil.CreateDirIfNeed(strCacheDir);
+                PathUtil.TryCreateDir(strCacheDir);
 
             // ProgressEstimate estimate = new ProgressEstimate();
             bool bAutoCache = StringUtil.IsInList("autocache", strStyle);
@@ -5929,7 +7123,7 @@ Keys keyData)
                         out strError);
                     if (nRet == -1)
                         return -1;
-                    PathUtil.CreateDirIfNeed(strCacheDir);  // 重新创建目录
+                    PathUtil.TryCreateDir(strCacheDir);  // 重新创建目录
 
                     // 创建版本文件
                     nRet = CreateCacheVersionFile(
@@ -6088,6 +7282,7 @@ Keys keyData)
                     sizes[i],
                     strRange,
                     strStyle,
+                    strFilter,
                     strCacheDir,
                     param,
                     procDoRecord,
@@ -6203,6 +7398,7 @@ MessageBoxDefaultButton.Button1);
     string strVersionFileName,
     string strLibraryCodeList,
     string strDp2LibraryServerUrl,
+            //string strFilter,   // 2017/9/20
     out string strError)
         {
             strError = "";
@@ -6222,11 +7418,14 @@ MessageBoxDefaultButton.Button1);
                 return -1;
             }
 
-            string strCurrentLibraryCode = DomUtil.GetAttr(dom.DocumentElement, "libraryCodeList");
-            string strCurrentServerUrl = DomUtil.GetAttr(dom.DocumentElement, "libraryServerUrl");
+            string strCurrentLibraryCode = dom.DocumentElement.GetAttribute("libraryCodeList");
+            string strCurrentServerUrl = dom.DocumentElement.GetAttribute("libraryServerUrl");
+            //string strCurrentFilter = dom.DocumentElement.GetAttribute("filter");
 
             if (strLibraryCodeList != strCurrentLibraryCode
-                || strCurrentServerUrl != strDp2LibraryServerUrl)
+                || strCurrentServerUrl != strDp2LibraryServerUrl
+                // || strCurrentFilter != strFilter
+                )
                 return 1;
 
             return 0;
@@ -6239,6 +7438,7 @@ MessageBoxDefaultButton.Button1);
             string strVersionFileName,
             string strLibraryCodeList,
             string strDp2LibraryServerUrl,
+            //string strFilter,   // 2017/9/20
             out string strError)
         {
             strError = "";
@@ -6250,8 +7450,9 @@ MessageBoxDefaultButton.Button1);
 
                 XmlDocument dom = new XmlDocument();
                 dom.LoadXml("<root />");
-                DomUtil.SetAttr(dom.DocumentElement, "libraryCodeList", strLibraryCodeList);
-                DomUtil.SetAttr(dom.DocumentElement, "libraryServerUrl", strDp2LibraryServerUrl);
+                dom.DocumentElement.SetAttribute("libraryCodeList", strLibraryCodeList);
+                dom.DocumentElement.SetAttribute("libraryServerUrl", strDp2LibraryServerUrl);
+                // dom.DocumentElement.SetAttribute("filter", strFilter);
                 dom.Save(strVersionFilePath);
             }
             catch (Exception ex)
@@ -6263,11 +7464,13 @@ MessageBoxDefaultButton.Button1);
             return 0;
         }
 
-        // 创建日志文件的metadata文件，记载服务器端文件尺寸
+        // 创建日志文件的 metadata 文件，记载服务器端文件尺寸
         static int CreateCacheMetadataFile(
             string strCacheDir,
             string strLogFileName,
             long lServerFileSize,
+            string strLevel,    // 2017/9/20
+            string strFilter,   // 2017/9/20
             out string strError)
         {
             strError = "";
@@ -6280,6 +7483,8 @@ MessageBoxDefaultButton.Button1);
                 XmlDocument dom = new XmlDocument();
                 dom.LoadXml("<root />");
                 DomUtil.SetAttr(dom.DocumentElement, "serverFileSize", lServerFileSize.ToString());
+                dom.DocumentElement.SetAttribute("filter", strFilter);
+                dom.DocumentElement.SetAttribute("level", strLevel);
                 dom.Save(strCacheMetaDataFilename);
             }
             catch (Exception ex)
@@ -6315,10 +7520,13 @@ MessageBoxDefaultButton.Button1);
             return 0;
         }
 
+        // TODO: 请求较为简略级别的文件的时候，可以用详细级别的文件充当；请求具有内容的 filter 的时候，可以用空 filter 的文件充当
         static int PrepareCacheFile(
             string strCacheDir,
             string strLogFileName,
             long lServerFileSize,
+            string strLevel,    // 2017/9/20
+            string strFilter,   // 2017/9/20
             out bool bCacheFileExist,
             out Stream stream,
             out string strError)
@@ -6366,10 +7574,19 @@ MessageBoxDefaultButton.Button1);
                     return -1;
                 }
 
-                if (lTempFileSize != lServerFileSize)
+                string strCurrentFilter = "<not_found>";
+                if (metadata_dom.DocumentElement.HasAttribute("filter"))
+                    strCurrentFilter = metadata_dom.DocumentElement.GetAttribute("filter");
+
+                string strCurrentLevel = metadata_dom.DocumentElement.GetAttribute("level");
+
+                if (lTempFileSize != lServerFileSize
+                    || strFilter != strCurrentFilter
+                    || strLevel != strCurrentLevel)
                     bCacheFileExist = false;
 
             }
+
             // 如果文件存在，就打开，如果文件不存在，就创建一个新的
             stream = File.Open(
 strCacheFilename,
@@ -6669,6 +7886,7 @@ FileShare.ReadWrite);
             long lServerFileSize,
             string strRange,
             string strStyle,
+            string strFilter,   // 2016/12/6
             string strCacheDir,
             object param,
             Delegate_doRecord procDoRecord,
@@ -6734,15 +7952,23 @@ FileShare.ReadWrite);
 
             if (bAutoCache == true)
             {
+                string strPhysicalFileName = bAccessLog ? strLogFileName + ".a" : strLogFileName;
                 nRet = PrepareCacheFile(
                     strCacheDir,
-                    bAccessLog ? strLogFileName + ".a" : strLogFileName,
+                    strPhysicalFileName,
                     lServerFileSize,
+                    nLevel.ToString(),
+                    strFilter,
                     out bCacheFileExist,
                     out stream,
                     out strError);
                 if (nRet == -1)
                     return -1;
+
+                if (bCacheFileExist)
+                    Program.MainForm.OperHistory.AppendHtml("<div class='debug normal'>" + HttpUtility.HtmlEncode(strPhysicalFileName + " 采用缓存").Replace("\r\n", "<br/>") + "</div>");
+                else
+                    Program.MainForm.OperHistory.AppendHtml("<div class='debug normal'>" + HttpUtility.HtmlEncode(strPhysicalFileName + " 从服务器获取").Replace("\r\n", "<br/>") + "</div>");
 
                 if (bCacheFileExist == false && stream != null)
                     bRemoveCacheFile = true;
@@ -6775,13 +8001,10 @@ FileShare.ReadWrite);
                     {
                         Application.DoEvents();
 
-                        if (stop != null)
+                        if (stop != null && stop.State != 0)
                         {
-                            if (stop.State != 0)
-                            {
-                                strError = "用户中断1";
-                                goto ERROR1;
-                            }
+                            strError = "用户中断1";
+                            goto ERROR1;
                         }
 
                         if (lIndex == ri.lStart)
@@ -6815,7 +8038,7 @@ FileShare.ReadWrite);
                                     return -1;
                                 }
                                 if (stream.Position != lHint)
-                                    stream.Seek(lHint, SeekOrigin.Begin);
+                                    stream.FastSeek(lHint);
                             }
 
                             nRet = ReadCachedEnventLog(
@@ -6854,7 +8077,7 @@ FileShare.ReadWrite);
                                     lHint,
                                     nCount,
                                     strTempStyle,
-                                    "", // strFilter
+                                    strFilter,
                                     out records,
                                     out strError);
                                 if (lRet == -1)
@@ -6973,6 +8196,8 @@ MessageBoxDefaultButton.Button1);
                         strCacheDir,
                         bAccessLog ? strLogFileName + ".a" : strLogFileName,
                         lServerFileSize,
+                        nLevel.ToString(),
+                        strFilter,
                         out strError);
                     if (nRet == -1)
                         goto ERROR1;
@@ -7002,7 +8227,7 @@ MessageBoxDefaultButton.Button1);
         ERROR1:
             return -1;
         }
-        #endregion
+#endregion
 
         public string UiState
         {
@@ -7015,6 +8240,7 @@ MessageBoxDefaultButton.Button1);
                 controls.Add(this.textBox_repair_sourceFilename);
                 controls.Add(this.textBox_repair_targetFilename);
                 controls.Add(this.textBox_repair_verifyFolderName);
+                //controls.Add(this.textBox_filter);
                 return GuiState.GetUiState(controls);
             }
             set
@@ -7026,8 +8252,1344 @@ MessageBoxDefaultButton.Button1);
                 controls.Add(this.textBox_repair_sourceFilename);
                 controls.Add(this.textBox_repair_targetFilename);
                 controls.Add(this.textBox_repair_verifyFolderName);
+                //controls.Add(this.textBox_filter);
                 GuiState.SetUiState(controls, value);
             }
+        }
+
+        private void toolStripButton_file_load_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dlg = new OpenFileDialog();
+
+            dlg.Title = "请指定日志文件名";
+            // dlg.FileName = this.textBox_repair_sourceFilename.Text;
+            dlg.Filter = "日志文件 (*.log)|*.log|All files (*.*)|*.*";
+            dlg.RestoreDirectory = true;
+
+            if (dlg.ShowDialog() != DialogResult.OK)
+                return;
+
+            string strError = "";
+            int nRet = 0;
+
+            this.EnableControls(false);
+            stop.OnStop += new StopEventHandler(this.DoStop);
+            stop.Initial("正在装在日志文件 " + dlg.FileName + " ...");
+            stop.BeginLoop();
+            try
+            {
+                nRet = LoadFile(dlg.FileName, out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+            }
+            finally
+            {
+                stop.EndLoop();
+                stop.OnStop -= new StopEventHandler(this.DoStop);
+                stop.Initial("");
+                stop.HideProgress();
+
+                this.EnableControls(true);
+            }
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        int LoadFile(string strFileName,
+            out string strError)
+        {
+            strError = "";
+
+            this.listView_file.Items.Clear();
+            this.SortColumns_file.Clear();
+            SortColumns.ClearColumnSortDisplay(this.listView_file.Columns);
+
+            this.listView_file.BeginUpdate();
+
+            using (Stream source = File.Open(
+                        strFileName,
+                        FileMode.Open,
+                        FileAccess.ReadWrite, // Read会造成无法打开 2007/5/22
+                        FileShare.ReadWrite))
+            {
+                if (stop != null)
+                    stop.SetProgressRange(0, source.Length);
+
+                for (int i = 0; ; i++)
+                {
+                    Application.DoEvents();
+
+                    if (stop != null && stop.State != 0)
+                    {
+                        strError = "用户中断1";
+                        return -1;
+                    }
+
+                    long lStart = source.Position;
+
+                    LogRecordInfo info = null;
+                    int nRet = ReadLogRecord(
+                        source,
+                        out info,
+                        out strError);
+                    if (nRet == -1)
+                        return -1;
+
+                    if (stop != null)
+                        stop.SetProgressValue(source.Position);
+
+                    if (source.Position >= source.Length)
+                        break;
+
+                    XmlDocument dom = new XmlDocument();
+                    dom.LoadXml(info.Body);
+
+                    string strOperation = DomUtil.GetElementText(dom.DocumentElement, "operation");
+
+                    string strOperator = DomUtil.GetElementText(dom.DocumentElement, "operator");
+
+                    ListViewItem item = new ListViewItem();
+                    ListViewUtil.ChangeItemText(item, COLUMN_FILE_INDEX, (i + 1).ToString());
+                    ListViewUtil.ChangeItemText(item, COLUMN_FILE_SIZE, info.Length.ToString());
+                    ListViewUtil.ChangeItemText(item, COLUMN_FILE_OPERATION, strOperation);
+                    ListViewUtil.ChangeItemText(item, COLUMN_FILE_OPERATOR, strOperator);
+
+                    this.listView_file.Items.Add(item);
+                }
+            }
+
+            this.listView_file.EndUpdate();
+            return 0;
+        }
+
+        const int COLUMN_FILE_INDEX = 0;
+        const int COLUMN_FILE_SIZE = 1;
+        const int COLUMN_FILE_OPERATION = 2;
+        const int COLUMN_FILE_OPERATOR = 3;
+
+
+        class LogRecordInfo
+        {
+            public long Length { get; set; }
+            public string Metadata { get; set; }
+            public string Body { get; set; }
+            public long AttachmentLength { get; set; }
+        }
+
+        static int ReadLogRecord(
+            Stream stream,
+            out LogRecordInfo info,
+            out string strError)
+        {
+            strError = "";
+
+            info = new LogRecordInfo();
+
+            long lStart = stream.Position;	// 记忆起始位置
+
+            byte[] length = new byte[8];
+
+            int nRet = stream.Read(length, 0, 8);
+            if (nRet < 8)
+            {
+                strError = "ReadLogRecord()从偏移量 " + lStart.ToString() + " 开始试图读入8个byte，但是只读入了 " + nRet.ToString() + " 个。起始位置不正确";
+                return -1;
+            }
+
+            Int64 lRecordLength = BitConverter.ToInt64(length, 0);
+
+            if (lRecordLength == 0)
+            {
+                strError = "VerifyLogRecord()从偏移量 " + lStart.ToString() + " 开始读入了8个byte，其整数值为0，表明不是正常的记录长度";
+                return -1;
+            }
+
+            info.Length = lRecordLength;
+
+            Debug.Assert(lRecordLength != 0, "");
+
+            if (lRecordLength < 0)
+            {
+                strError = "lRecordLength = " + lRecordLength.ToString() + "不正常，为负数";
+                return -1;
+            }
+
+            if (lRecordLength > stream.Length - (lStart + 8))
+            {
+                strError = "lRecordLength = " + lRecordLength.ToString() + "不正常，超过文件尾部";
+                return -1;
+            }
+
+            string strMetadata = "";
+            string strBody = "";
+            // 读入 xml 事项
+            nRet = ReadEntry(stream,
+                true,
+                out strMetadata,
+                out strBody,
+                out strError);
+            if (nRet == -1)
+                return -1;
+
+            info.Metadata = strMetadata;
+            info.Body = strBody;
+
+            string strTempMatadata = "";
+            long lAttachmentLength = 0;
+            // 读出attachment事项
+            nRet = ReadEntry(
+                stream,
+                true,
+                out strTempMatadata,
+                out lAttachmentLength,
+                out strError);
+            if (nRet == -1)
+                return -1;
+
+            info.AttachmentLength = lAttachmentLength;
+
+            // 文件指针此时自然在末尾
+            if (stream.Position - lStart != lRecordLength + 8)
+            {
+                // Debug.Assert(false, "");
+                strError = "Record长度经检验不正确: stream.Position - lStart ["
+                    + (stream.Position - lStart).ToString()
+                    + "] 不等于 lRecordLength + 8 ["
+                    + (lRecordLength + 8).ToString()
+                    + "]";
+                return -1;
+            }
+
+            return 0;
+        }
+
+        // 读出一个事项(string类型)
+        // parameters:
+        public static int ReadEntry(
+            Stream stream,
+            bool bRead,
+            out string strMetaData,
+            out string strBody,
+            out string strError)
+        {
+            strMetaData = "";
+            strBody = "";
+            strError = "";
+
+            long lStart = stream.Position;  // 保留起始位置
+
+            byte[] length = new byte[8];
+
+            int nRet = stream.Read(length, 0, 8);
+            if (nRet < 8)
+            {
+                strError = "起始位置不正确";
+                return -1;
+            }
+
+            Int64 lEntryLength = BitConverter.ToInt64(length, 0);
+
+            // metadata长度
+            nRet = stream.Read(length, 0, 8);
+            if (nRet < 8)
+            {
+                strError = "metadata长度位置不足8bytes";
+                return -1;
+            }
+
+            Int64 lMetaDataLength = BitConverter.ToInt64(length, 0);
+
+            if (lMetaDataLength > 100 * 1024)
+            {
+                strError = "记录格式不正确，metadata长度超过100K";
+                return -1;
+            }
+
+            if (lMetaDataLength > 0)
+            {
+                if (bRead)
+                {
+                    byte[] metadatabody = new byte[(int)lMetaDataLength];
+
+                    nRet = stream.Read(metadatabody, 0, (int)lMetaDataLength);
+                    if (nRet < (int)lMetaDataLength)
+                    {
+                        strError = "metadata不足其长度定义";
+                        return -1;
+                    }
+
+                    strMetaData = Encoding.UTF8.GetString(metadatabody);
+                }
+                else
+                    stream.Seek(lMetaDataLength, SeekOrigin.Current);
+            }
+
+
+
+
+            // strBody长度
+            nRet = stream.Read(length, 0, 8);
+            if (nRet < 8)
+            {
+                strError = "strBody长度位置不足8bytes";
+                return -1;
+            }
+
+            Int64 lBodyLength = BitConverter.ToInt64(length, 0);
+
+            if (lBodyLength > 1000 * 1024)
+            {
+                strError = "记录格式不正确，body长度超过1000K";
+                return -1;
+            }
+
+            if (lBodyLength > 0)
+            {
+                if (bRead)
+                {
+                    byte[] xmlbody = new byte[(int)lBodyLength];
+
+                    nRet = stream.Read(xmlbody, 0, (int)lBodyLength);
+                    if (nRet < (int)lBodyLength)
+                    {
+                        strError = "body不足其长度定义";
+                        return -1;
+                    }
+
+                    strBody = Encoding.UTF8.GetString(xmlbody);
+                }
+                else
+                    stream.Seek(lBodyLength, SeekOrigin.Current);
+
+            }
+
+            // 文件指针此时自然在末尾
+            if (stream.Position - lStart != lEntryLength + 8)
+            {
+                // Debug.Assert(false, "");
+                strError = "entry长度经检验不正确";
+                return -1;
+            }
+
+            return 0;
+        }
+
+        // 读出一个事项(只观察长度)
+        public static int ReadEntry(
+            Stream stream,
+            bool bRead,
+            out string strMetaData,
+            out long lBodyLength,
+            out string strError)
+        {
+            strError = "";
+            strMetaData = "";
+            lBodyLength = 0;
+
+            long lStart = stream.Position;  // 保留起始位置
+
+            byte[] length = new byte[8];
+
+            int nRet = stream.Read(length, 0, 8);
+            if (nRet < 8)
+            {
+                strError = "起始位置不正确";
+                return -1;
+            }
+
+            Int64 lEntryLength = BitConverter.ToInt64(length, 0);
+
+#if NO
+            if (lEntryLength == 0)
+            {
+                // Debug.Assert(false, "");
+                // 文件指针此时自然在末尾
+                if (stream.Position - lStart != lEntryLength + 8)
+                {
+                    strError = "entry长度经检验不正确 1";
+                    return -1;
+                }
+
+                return 0;
+            }
+#endif
+
+            // metadata长度
+            nRet = stream.Read(length, 0, 8);
+            if (nRet < 8)
+            {
+                strError = "metadata长度位置不足8bytes";
+                return -1;
+            }
+
+            Int64 lMetaDataLength = BitConverter.ToInt64(length, 0);
+
+            if (lMetaDataLength > 100 * 1024)
+            {
+                strError = "记录格式不正确，metadata长度超过100K";
+                return -1;
+            }
+
+            if (lMetaDataLength > 0)
+            {
+                if (bRead)
+                {
+                    byte[] metadatabody = new byte[(int)lMetaDataLength];
+
+                    nRet = stream.Read(metadatabody, 0, (int)lMetaDataLength);
+                    if (nRet < (int)lMetaDataLength)
+                    {
+                        strError = "metadata不足其长度定义";
+                        return -1;
+                    }
+
+                    strMetaData = Encoding.UTF8.GetString(metadatabody);
+                }
+                else
+                    stream.Seek(lMetaDataLength, SeekOrigin.Current);
+            }
+
+            // body长度
+            nRet = stream.Read(length, 0, 8);
+            if (nRet < 8)
+            {
+                strError = "strBody长度位置不足8bytes";
+                return -1;
+            }
+
+            lBodyLength = BitConverter.ToInt64(length, 0);
+
+            if (lBodyLength > stream.Length - stream.Position)
+            {
+                strError = "记录格式不正确，body长度超过文件剩余部分尺寸";
+                return -1;
+            }
+
+            if (lBodyLength > 0)
+            {
+                // 虽然不读内容，但文件指针要到位
+                stream.Seek(lBodyLength, SeekOrigin.Current);
+            }
+
+            // 文件指针此时自然在末尾
+            if (stream.Position - lStart != lEntryLength + 8)
+            {
+                // Debug.Assert(false, "");
+                strError = "entry长度经检验不正确";
+                return -1;
+            }
+
+            return 0;
+        }
+
+        // 参与排序的列号数组
+        SortColumns SortColumns_file = new SortColumns();
+
+
+        private void listView_file_ColumnClick(object sender, ColumnClickEventArgs e)
+        {
+            int nClickColumn = e.Column;
+
+            ColumnSortStyle sortStyle = ColumnSortStyle.LeftAlign;
+
+            // 第1列为id，排序风格特殊
+            if (nClickColumn == COLUMN_FILE_INDEX)
+                sortStyle = ColumnSortStyle.RightAlign;
+            else if (nClickColumn == COLUMN_FILE_SIZE)
+                sortStyle = ColumnSortStyle.RightAlign;
+
+            this.SortColumns_file.SetFirstColumn(nClickColumn,
+                sortStyle,
+                this.listView_file.Columns,
+                true);
+
+            // 排序
+            this.listView_file.ListViewItemSorter = new SortColumnsComparer(this.SortColumns_file);
+
+            this.listView_file.ListViewItemSorter = null;
+
+        }
+
+        private void listView_restoreList_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right)
+                return;
+
+            ContextMenu contextMenu = new ContextMenu();
+            MenuItem menuItem = null;
+
+            menuItem = new MenuItem("装载(&L)");
+            menuItem.Click += new System.EventHandler(this.menu_restoreList_load_Click);
+            contextMenu.MenuItems.Add(menuItem);
+
+            // ---
+            menuItem = new MenuItem("-");
+            contextMenu.MenuItems.Add(menuItem);
+
+            menuItem = new MenuItem("全选(&A)");
+            menuItem.Click += new System.EventHandler(this.menu_recover_selectAllLines_Click);
+            contextMenu.MenuItems.Add(menuItem);
+
+            // ---
+            menuItem = new MenuItem("-");
+            contextMenu.MenuItems.Add(menuItem);
+
+            menuItem = new MenuItem("保存回书目库(&S) [" + this.listView_restoreList.SelectedItems.Count.ToString() + "]");
+            menuItem.Click += new System.EventHandler(this.menu_recover_saveToDatabase_Click);
+            if (this.listView_restoreList.SelectedItems.Count == 0)
+                menuItem.Enabled = false;
+            contextMenu.MenuItems.Add(menuItem);
+
+
+            menuItem = new MenuItem("导出到 .bdf 文件(&E) [" + this.listView_restoreList.SelectedItems.Count.ToString() + "]");
+            menuItem.Click += new System.EventHandler(this.menu_recover_exportBdf_Click);
+            if (this.listView_restoreList.SelectedItems.Count == 0)
+                menuItem.Enabled = false;
+            contextMenu.MenuItems.Add(menuItem);
+
+            contextMenu.Show(this.listView_restoreList, new Point(e.X, e.Y));
+        }
+
+        // 将恢复的结果保存回到原来的数据库
+        void menu_recover_saveToDatabase_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            LibraryChannel channel = this.GetChannel();
+
+            stop.Style = StopStyle.EnableHalfStop;
+            stop.OnStop += new StopEventHandler(this.DoStop);
+            stop.Initial("正在保存书目记录 ...");
+            stop.BeginLoop();
+
+            this.EnableControls(false);
+            try
+            {
+                stop.SetProgressRange(0, this.listView_restoreList.Items.Count);
+
+                int i = 0;
+                foreach (ListViewItem item in this.listView_restoreList.Items)
+                {
+                    string strBiblioRecPath = ListViewUtil.GetItemText(item, COLUMN_RECOVER_RECPATH);
+                    if (string.IsNullOrEmpty(strBiblioRecPath))
+                        goto CONTINUE;
+                    RecoverData data = (RecoverData)_recoverTable[strBiblioRecPath];
+                    if (data == null)
+                    {
+                        MessageBox.Show(this, "data == null");
+                        goto CONTINUE;
+                    }
+
+                    // TODO: 是否先探测一下书目记录是否存在？已经存在最好给出特殊的提示和警告
+
+                REDO:
+                    stop.SetMessage("正在保存书目记录 " + strBiblioRecPath);
+
+                    byte[] baNewTimestamp = null;
+                    string strOutputPath = "";
+                    long lRet = channel.SetBiblioInfo(
+                        stop,
+                        "change",
+                        strBiblioRecPath,
+                        "xml",
+                        data.Xml,
+                        null,   // timestamp
+                        "",
+                        out strOutputPath,
+                        out baNewTimestamp,
+                        out strError);
+                    if (lRet == -1)
+                    {
+                        if (channel.ErrorCode == ErrorCode.TimestampMismatch)
+                        {
+#if NO
+                            DialogResult result = MessageBox.Show(this,
+    "保存书目记录 " + strBiblioRecPath + " 时遭遇时间戳不匹配: " + strError + "。\r\n\r\n此记录已无法被保存。\r\n\r\n请问现在是否要顺便重新装载此记录? \r\n\r\n(Yes 重新装载；\r\nNo 不重新装载、但继续处理后面的记录保存; \r\nCancel 中断整批保存操作)",
+    "OperLogForm",
+    MessageBoxButtons.YesNoCancel,
+    MessageBoxIcon.Question,
+    MessageBoxDefaultButton.Button1);
+                            if (result == System.Windows.Forms.DialogResult.Cancel)
+                                break;
+                            if (result == System.Windows.Forms.DialogResult.No)
+                                goto CONTINUE;
+
+                            // 重新装载书目记录到 OldXml
+                            string[] results = null;
+                            // byte[] baTimestamp = null;
+                            lRet = channel.GetBiblioInfos(
+                                stop,
+                                strBiblioRecPath,
+                                "",
+                                new string[] { "xml" },   // formats
+                                out results,
+                                out baNewTimestamp,
+                                out strError);
+                            if (lRet == 0)
+                            {
+                                // TODO: 警告后，把 item 行移除？
+                                return -1;
+                            }
+                            if (lRet == -1)
+                                return -1;
+                            if (results == null || results.Length == 0)
+                            {
+                                strError = "results error";
+                                return -1;
+                            }
+                            info.OldXml = results[0];
+                            info.Timestamp = baNewTimestamp;
+                            nReloadCount++;
+                            goto CONTINUE;
+#endif
+                        }
+
+                        DialogResult result = MessageBox.Show(this,
+"保存书目记录 " + strBiblioRecPath + " 时出错: " + strError + "。\r\n\r\n请问是否重试保存操作? \r\n\r\n(Yes 重试保存；\r\nNo 放弃保存、但继续处理后面的记录保存; \r\nCancel 中断整批保存操作)",
+"OperLogForm",
+MessageBoxButtons.YesNoCancel,
+MessageBoxIcon.Question,
+MessageBoxDefaultButton.Button1);
+                        if (result == System.Windows.Forms.DialogResult.Cancel)
+                            goto ERROR1;
+                        if (result == System.Windows.Forms.DialogResult.No)
+                            goto CONTINUE;
+
+                        goto REDO;
+                    }
+
+                CONTINUE:
+                    i++;
+                    stop.SetProgressValue(i);
+                }
+
+            }
+            finally
+            {
+                stop.EndLoop();
+                stop.OnStop -= new StopEventHandler(this.DoStop);
+                stop.Initial("");
+                stop.HideProgress();
+                stop.Style = StopStyle.None;
+
+                this.ReturnChannel(channel);
+
+                this.EnableControls(true);
+            }
+
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 将恢复结果导出到 .bdf 文件
+        void menu_recover_exportBdf_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            // 询问文件名
+            SaveFileDialog dlg = new SaveFileDialog();
+
+            dlg.Title = "请指定要创建的书目转储件名";
+            dlg.CreatePrompt = false;
+            dlg.OverwritePrompt = true;
+            dlg.FileName = "";
+            dlg.Filter = "书目转储文件 (*.bdf)|*.bdf|All files (*.*)|*.*";
+
+            dlg.RestoreDirectory = true;
+
+            if (dlg.ShowDialog() != DialogResult.OK)
+                return;
+
+            XmlTextWriter writer = null;
+
+            try
+            {
+                writer = new XmlTextWriter(dlg.FileName, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                strError = "创建文件 " + dlg.FileName + " 失败，原因: " + ex.Message;
+                goto ERROR1;
+            }
+
+
+            stop.Style = StopStyle.EnableHalfStop;
+            stop.OnStop += new StopEventHandler(this.DoStop);
+            stop.Initial("正在保存书目记录到 .bdf 文件 ...");
+            stop.BeginLoop();
+
+            this.EnableControls(false);
+            try
+            {
+                stop.SetProgressRange(0, this.listView_restoreList.Items.Count);
+
+                writer.Formatting = Formatting.Indented;
+                writer.Indentation = 4;
+
+                writer.WriteStartDocument();
+                writer.WriteStartElement("dprms", "collection", DpNs.dprms);
+
+                writer.WriteAttributeString("xmlns", "dprms", null, DpNs.dprms);
+
+
+                int i = 0;
+                foreach (ListViewItem item in this.listView_restoreList.Items)
+                {
+                    Application.DoEvents();
+
+                    if (stop != null && stop.State != 0)
+                    {
+                        strError = "用户中断";
+                        goto ERROR1;
+                    }
+
+                    string strBiblioRecPath = ListViewUtil.GetItemText(item, COLUMN_RECOVER_RECPATH);
+                    if (string.IsNullOrEmpty(strBiblioRecPath))
+                        goto CONTINUE;
+                    RecoverData data = (RecoverData)_recoverTable[strBiblioRecPath];
+                    if (data == null)
+                    {
+                        MessageBox.Show(this, "data == null");
+                        goto CONTINUE;
+                    }
+
+                    if (string.IsNullOrEmpty(data.Xml))
+                    {
+                        MessageBox.Show(this, "data.Xml 为空");
+                        goto CONTINUE;
+                    }
+
+                    stop.SetMessage("正在保存书目记录 " + strBiblioRecPath + " 到 .bdf 文件");
+
+                    XmlDocument biblio_dom = new XmlDocument();
+                    biblio_dom.LoadXml(data.Xml);
+
+                    // 写入 dprms:record 元素
+                    writer.WriteStartElement("dprms", "record", DpNs.dprms);
+
+                    {
+                        // 写入 dprms:biblio 元素
+                        writer.WriteStartElement("dprms", "biblio", DpNs.dprms);
+
+                        writer.WriteAttributeString("path", Program.MainForm.LibraryServerUrl + "?" + strBiblioRecPath);
+                        // writer.WriteAttributeString("timestamp", ByteArray.GetHexTimeStampString(item.BiblioInfo.Timestamp));
+
+                        biblio_dom.DocumentElement.WriteTo(writer);
+                        writer.WriteEndElement();
+                    }
+
+                    // 收尾 dprms:record 元素
+                    writer.WriteEndElement();
+
+                CONTINUE:
+                    i++;
+                    stop.SetProgressValue(i);
+                }
+
+                writer.WriteEndElement();   // </collection>
+                writer.WriteEndDocument();
+            }
+            catch (Exception ex)
+            {
+                strError = "写入文件 " + dlg.FileName + " 失败，原因: " + ex.Message;
+                goto ERROR1;
+            }
+            finally
+            {
+                writer.Close();
+
+                stop.EndLoop();
+                stop.OnStop -= new StopEventHandler(this.DoStop);
+                stop.Initial("");
+                stop.HideProgress();
+                stop.Style = StopStyle.None;
+
+                this.EnableControls(true);
+            }
+
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 全选 “恢复列表”
+        void menu_recover_selectAllLines_Click(object sender, EventArgs e)
+        {
+            Cursor oldCursor = this.Cursor;
+            this.Cursor = Cursors.WaitCursor;
+            bool bOldUpdate = this.listView_restoreList.SuppressUpdate;
+            this.listView_records.SuppressUpdate = true;    // 禁止中间刷新
+            try
+            {
+                // TODO: 暂时禁止Update功能
+                ListViewUtil.SelectAllLines(this.listView_restoreList);
+            }
+            finally
+            {
+                this.listView_restoreList.SuppressUpdate = bOldUpdate;
+                this.listView_restoreList.ForceUpdate();
+                this.Cursor = oldCursor;
+            }
+        }
+
+
+        void menu_restoreList_load_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            // 搜集时间范围 记录路径列表
+            RecoverRecordDialog dlg = new RecoverRecordDialog();
+            MainForm.SetControlFont(dlg, this.Font, false);
+            Program.MainForm.AppInfo.LinkFormState(dlg, "RecoverRecordDialog_state");
+            dlg.UiState = Program.MainForm.AppInfo.GetString("OperLogForm", "RecoverRecordDialog_ui_state", "");
+            dlg.ShowDialog(this);
+            Program.MainForm.AppInfo.SetString("OperLogForm", "RecoverRecordDialog_ui_state", dlg.UiState);
+
+            if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
+                return;
+
+            int nRet = RecoverFromOperLogs(dlg.Dates,
+                dlg.RecPathList,
+                out strError);
+            if (nRet == -1)
+                goto ERROR1;
+
+            // FillRecoverList();
+
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 册记录路径 --> RecoverData
+        Hashtable _recoverTable = new Hashtable();
+
+        class RecoverData
+        {
+            // 操作历史列表。每个元素
+            public List<OperLogItem> HistoryList { get; set; }
+
+            public string BiblioRecPath { get; set; }
+
+            public string Xml { get; set; } // 最后恢复的数据库记录
+
+            public ListViewItem ListViewItem { get; set; }
+        }
+
+        const int COLUMN_RECOVER_NO = 0;
+        const int COLUMN_RECOVER_RECPATH = 1;
+        const int COLUMN_RECOVER_SUMMARY = 2;
+        const int COLUMN_RECOVER_HISTORY = 3;
+
+#if NO
+        void FillRecoverList()
+        {
+            int i = 0;
+            this.listView_restoreList.Items.Clear();
+            this.listView_restoreList.BeginUpdate();
+            try
+            {
+                foreach (string recpath in _recoverTable.Keys)
+                {
+                    RecoverData data = (RecoverData)_recoverTable[recpath];
+
+                    ListViewItem item = new ListViewItem();
+                    ListViewUtil.ChangeItemText(item, COLUMN_RECOVER_NO, (i + 1).ToString());
+                    ListViewUtil.ChangeItemText(item, COLUMN_RECOVER_RECPATH, data.BiblioRecPath);
+                    ListViewUtil.ChangeItemText(item, COLUMN_RECOVER_HISTORY, StringUtil.MakePathList(data.HistoryList, "; "));
+                    this.listView_restoreList.Items.Add(item);
+                }
+            }
+            finally
+            {
+                this.listView_restoreList.EndUpdate();
+            }
+        }
+#endif
+
+        class RecoverBiblioItem
+        {
+            public string BiblioRecPath { get; set; }
+            public string Xml { get; set; }
+        }
+
+        int RecoverFromOperLogs(List<string> dates,
+            List<string> recpath_list,
+            out string strError)
+        {
+            strError = "";
+
+            this.listView_restoreList.Items.Clear();
+            Application.DoEvents();
+
+            _recoverTable = new Hashtable();
+
+            EnableControls(false);
+
+            LibraryChannel channel = this.GetChannel();
+            TimeSpan old_timeout = channel.Timeout;
+            channel.Timeout = TimeSpan.FromMinutes(2);
+
+            stop.Style = StopStyle.EnableHalfStop;
+            stop.OnStop += new StopEventHandler(this.DoStop);
+            stop.Initial("正在从日志记录恢复数据库记录 ...");
+            stop.BeginLoop();
+
+            this.listView_restoreList.BeginUpdate();
+            try
+            {
+                ProgressEstimate estimate = new ProgressEstimate();
+
+                OperLogLoader loader = new OperLogLoader();
+                loader.Channel = channel;
+                loader.Stop = this.Progress;
+                loader.Estimate = estimate;
+                loader.Dates = dates;
+                loader.Level = 0;   // 2;  // Program.MainForm.OperLogLevel;
+                loader.AutoCache = false;
+                loader.CacheDir = "";
+                loader.Filter = "setBiblioInfo";
+
+                loader.Prompt -= new MessagePromptEventHandler(loader_Prompt);
+                loader.Prompt += new MessagePromptEventHandler(loader_Prompt);
+
+                int count = 0;
+                foreach (OperLogItem item in loader)
+                {
+                    Application.DoEvents();
+
+                    if (stop != null && stop.State != 0)
+                    {
+                        strError = "用户中断";
+                        return 0;
+                    }
+
+                    if (stop != null)
+                        stop.SetMessage("正在获取 " + item.Date + " " + item.Index.ToString() + " " + estimate.Text + "...");
+
+                    if (string.IsNullOrEmpty(item.Xml) == true)
+                        continue;
+
+                    XmlDocument dom = new XmlDocument();
+                    try
+                    {
+                        dom.LoadXml(item.Xml);
+                    }
+                    catch (Exception ex)
+                    {
+                        strError = "日志记录 " + item.Date + " " + item.Index.ToString() + " XML 装入 DOM 的时候发生错误: " + ex.Message;
+                        DialogResult result = MessageBox.Show(this,
+    strError + "\r\n\r\n是否跳过此条记录继续处理?",
+    "OperLogForm",
+    MessageBoxButtons.YesNo,
+    MessageBoxIcon.Question,
+    MessageBoxDefaultButton.Button1);
+                        if (result == System.Windows.Forms.DialogResult.No)
+                            return -1;
+
+                        // 记入日志，继续处理
+                        // this.GetErrorInfoForm().WriteHtml(strError + "\r\n");
+                        continue;
+                    }
+
+                    string strOperation = DomUtil.GetElementText(dom.DocumentElement, "operation");
+                    if (strOperation != "setBiblioInfo")
+                        continue;
+                    string strAction = DomUtil.GetElementText(dom.DocumentElement,
+        "action");
+                    string strOperator = DomUtil.GetElementText(dom.DocumentElement,
+        "operator");
+                    string strOperTime = DomUtil.GetElementText(dom.DocumentElement,
+        "operTime");
+                    string strBiblioRecPath = "";
+                    string strXml = "";
+
+                    List<RecoverBiblioItem> records = new List<RecoverBiblioItem>();
+
+                    if (strAction.IndexOf("delete") != -1
+                        || strAction.IndexOf("copy") != -1
+                        || strAction.IndexOf("move") != -1)
+                    {
+                        XmlNode node = dom.DocumentElement.SelectSingleNode("oldRecord/@recPath");
+                        if (node != null)
+                        {
+                            strBiblioRecPath = node.Value;
+                            strXml = DomUtil.GetElementText(dom.DocumentElement, "oldRecord");
+
+                            RecoverBiblioItem record = new RecoverBiblioItem();
+                            record.BiblioRecPath = strBiblioRecPath;
+                            record.Xml = strXml;
+                            records.Add(record);
+                        }
+                    }
+
+                    {
+                        XmlNode node = dom.DocumentElement.SelectSingleNode("record/@recPath");
+                        if (node != null)
+                        {
+                            strBiblioRecPath = node.Value;
+                            strXml = DomUtil.GetElementText(dom.DocumentElement, "record");
+
+                            RecoverBiblioItem record = new RecoverBiblioItem();
+                            record.BiblioRecPath = strBiblioRecPath;
+                            record.Xml = strXml;
+                            records.Add(record);
+                        }
+                    }
+
+                    // 至少产生一个 record
+                    if (records.Count == 0 && string.IsNullOrEmpty(strBiblioRecPath) == false)
+                    {
+                        RecoverBiblioItem record = new RecoverBiblioItem();
+                        record.BiblioRecPath = strBiblioRecPath;
+                        record.Xml = "";
+                        records.Add(record);
+                    }
+
+                    if (records.Count > 0)
+                    {
+                        string strHistory = "date=" + item.Date + ", index=" + item.Index + ", action=" + strAction + ", operTime=" + strOperTime + ", operator=" + strOperator;
+
+                        AddRecords(
+        records,
+        recpath_list,
+        item);
+                    }
+
+#if NO
+                    if (recpath_list != null
+                        && recpath_list.Count > 0
+                        && recpath_list.IndexOf(strItemRecPath) == -1)
+                        continue;
+
+                    if (string.IsNullOrEmpty(strXml))
+                        continue;
+
+                    RecoverData data = (RecoverData)_recoverTable[strItemRecPath];
+                    if (data == null)
+                    {
+                        data = new RecoverData();
+                        data.BiblioRecPath = strItemRecPath;
+                        _recoverTable[strItemRecPath] = data;
+
+                        // 中途就要考虑填入 list
+                    }
+
+                    data.Xml = strXml;
+                    if (data.HistoryList == null)
+                        data.HistoryList = new List<string>();
+                    data.HistoryList.Add("date=" + item.Date + ", index=" + item.Index + ", action=" + strAction + ", operTime=" + strOperTime + ", operator=" + strOperator);
+
+                    if (data.ListViewItem == null)
+                    {
+                        ListViewItem new_item = new ListViewItem();
+                        ListViewUtil.ChangeItemText(new_item, COLUMN_RECOVER_NO, (_recoverTable.Count).ToString());
+                        ListViewUtil.ChangeItemText(new_item, COLUMN_RECOVER_RECPATH, data.BiblioRecPath);
+                        ListViewUtil.ChangeItemText(new_item, COLUMN_RECOVER_HISTORY, StringUtil.MakePathList(data.HistoryList, "; "));
+                        this.listView_restoreList.Items.Add(new_item);
+                        data.ListViewItem = new_item;
+                    }
+                    else
+                    {
+                        // 刷新显示
+                        ListViewUtil.ChangeItemText(data.ListViewItem, COLUMN_RECOVER_HISTORY, StringUtil.MakePathList(data.HistoryList, "; "));
+                    }
+
+#endif
+
+                    if ((count % 100) == 0
+                || DateTime.Now - _lastUpdateTime > TimeSpan.FromSeconds(5))
+                    {
+                        this.listView_restoreList.ForceUpdate();
+                        _lastUpdateTime = DateTime.Now;
+                    }
+
+                    count++;
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                strError = "获取日志记录的过程中出现异常: " + ex.Message;
+                return -1;
+            }
+            finally
+            {
+                this.listView_restoreList.EndUpdate();
+
+                stop.EndLoop();
+                stop.OnStop -= new StopEventHandler(this.DoStop);
+                stop.Initial("");
+                stop.Style = StopStyle.None;
+
+                channel.Timeout = old_timeout;
+                this.ReturnChannel(channel);
+
+                EnableControls(true);
+            }
+
+        }
+
+        // parameters:
+        //      records 要处理的集合
+        void AddRecords(
+            List<RecoverBiblioItem> records,
+            List<string> recpath_list,
+            OperLogItem history_item)
+        {
+            foreach (RecoverBiblioItem record in records)
+            {
+                if (recpath_list != null
+        && recpath_list.Count > 0
+        && recpath_list.IndexOf(record.BiblioRecPath) == -1)
+                    continue;
+
+                //if (string.IsNullOrEmpty(record.Xml))
+                //    continue;
+
+                RecoverData data = (RecoverData)_recoverTable[record.BiblioRecPath];
+                if (data == null)
+                {
+                    data = new RecoverData();
+                    data.BiblioRecPath = record.BiblioRecPath;
+                    _recoverTable[record.BiblioRecPath] = data;
+
+                    // 中途就要考虑填入 list
+                }
+
+                if (string.IsNullOrEmpty(record.Xml) == false)
+                    data.Xml = record.Xml;
+                if (data.HistoryList == null)
+                    data.HistoryList = new List<OperLogItem>();
+                data.HistoryList.Add(history_item);
+
+                if (data.ListViewItem == null)
+                {
+                    ListViewItem new_item = new ListViewItem();
+                    ListViewUtil.ChangeItemText(new_item, COLUMN_RECOVER_NO, (_recoverTable.Count).ToString());
+                    ListViewUtil.ChangeItemText(new_item, COLUMN_RECOVER_RECPATH, data.BiblioRecPath);
+                    ListViewUtil.ChangeItemText(new_item, COLUMN_RECOVER_HISTORY, data.HistoryList.Count.ToString());
+                    this.listView_restoreList.Items.Add(new_item);
+                    data.ListViewItem = new_item;
+                }
+                else
+                {
+                    // 刷新显示
+                    ListViewUtil.ChangeItemText(data.ListViewItem, COLUMN_RECOVER_HISTORY, data.HistoryList.Count.ToString());
+                }
+            }
+        }
+
+        void loader_Prompt(object sender, MessagePromptEventArgs e)
+        {
+            // TODO: 不再出现此对话框。不过重试有个次数限制，同一位置失败多次后总要出现对话框才好
+            if (e.Actions == "yes,no,cancel")
+            {
+                DialogResult result = MessageBox.Show(this,
+    e.MessageText + "\r\n\r\n是否重试操作?\r\n\r\n(是: 重试;  否: 跳过本次操作，继续后面的操作; 取消: 停止全部操作)",
+    "OperLogForm",
+    MessageBoxButtons.YesNoCancel,
+    MessageBoxIcon.Question,
+    MessageBoxDefaultButton.Button1);
+                if (result == DialogResult.Yes)
+                    e.ResultAction = "yes";
+                else if (result == DialogResult.Cancel)
+                    e.ResultAction = "cancel";
+                else
+                    e.ResultAction = "no";
+            }
+        }
+
+        private void listView_restoreList_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            DoViewRecover(false);
+
+            {
+                string strBiblioRecPath = "";
+                {
+                    ListViewItem item = null;
+                    if (this.listView_restoreList.SelectedItems.Count > 0)
+                    {
+                        item = this.listView_restoreList.SelectedItems[0];
+
+                        strBiblioRecPath = ListViewUtil.GetItemText(item, COLUMN_RECOVER_RECPATH);
+                    }
+                }
+
+                if (string.IsNullOrEmpty(strBiblioRecPath))
+                {
+                    this.listView_recover_history.Items.Clear();
+                }
+                else
+                {
+                    RecoverData data = (RecoverData)_recoverTable[strBiblioRecPath];
+
+                    FillHistoryList(data.HistoryList);
+                }
+            }
+
+        }
+
+        void DoViewRecover(bool bOpenWindow)
+        {
+            int nRet = 0;
+            string strError = "";
+            string strHtml = "";
+            string strXml = "";
+
+            // 优化，避免无谓地进行服务器调用
+            if (bOpenWindow == false)
+            {
+                if (Program.MainForm.PanelFixedVisible == false
+                    && (m_operlogViewer == null || m_operlogViewer.Visible == false))
+                    return;
+            }
+
+            if (this.listView_restoreList.SelectedItems.Count != 1)
+            {
+                // 2012/10/2
+                if (this.m_operlogViewer != null)
+                    this.m_operlogViewer.Clear();
+
+                return;
+            }
+
+            ListViewItem item = this.listView_restoreList.SelectedItems[0];
+            string strRecPath = ListViewUtil.GetItemText(item, COLUMN_RECOVER_RECPATH);
+
+            RecoverData data = (RecoverData)_recoverTable[strRecPath];
+            if (data == null)
+            {
+                strError = "data not found";
+                goto ERROR1;
+            }
+
+            strXml = data.Xml;
+
+            string strOldMARC = "";
+            string strOldFragmentXml = "";
+            if (string.IsNullOrEmpty(strXml) == false)
+            {
+                string strOutMarcSyntax = "";
+                // 将XML格式转换为MARC格式
+                // 自动从数据记录中获得MARC语法
+                nRet = MarcUtil.Xml2Marc(strXml,
+                    MarcUtil.Xml2MarcStyle.Warning | MarcUtil.Xml2MarcStyle.OutputFragmentXml,
+                    "",
+                    out strOutMarcSyntax,
+                    out strOldMARC,
+                    out strOldFragmentXml,
+                    out strError);
+                if (nRet == -1)
+                {
+                    strError = "XML转换到MARC记录时出错: " + strError;
+                    goto ERROR1;
+                }
+            }
+
+            string strImageFragment = BiblioSearchForm.GetCoverImageHtmlFragment(
+    data.BiblioRecPath,
+    strOldMARC);
+            string strHtml2 = MarcUtil.GetHtmlOfMarc(strOldMARC,
+                strOldFragmentXml,
+                strImageFragment,
+                false);
+
+            strHtml = "<html>" +
+Program.MainForm.GetMarcHtmlHeadString(true) +
+"<body>" +
+strHtml2 +
+"</body></html>";
+
+            bool bNew = false;
+            if (this.m_operlogViewer == null
+                || (bOpenWindow == true && this.m_operlogViewer.Visible == false))
+            {
+                m_operlogViewer = new CommentViewerForm();
+                MainForm.SetControlFont(m_operlogViewer, this.Font, false);
+                m_operlogViewer.SuppressScriptErrors = Program.MainForm.SuppressScriptErrors;
+                bNew = true;
+            }
+
+            // m_operlogViewer.MainForm = Program.MainForm;  // 必须是第一句
+
+            if (bNew == true)
+                m_operlogViewer.InitialWebBrowser();
+
+            m_operlogViewer.Text = "数据库记录 '" + strRecPath + "'";
+            m_operlogViewer.HtmlString = (string.IsNullOrEmpty(strHtml) == true ? NOTSUPPORT : strHtml);
+            m_operlogViewer.XmlString = strXml;
+            m_operlogViewer.FormClosed -= new FormClosedEventHandler(m_viewer_FormClosed);
+            m_operlogViewer.FormClosed += new FormClosedEventHandler(m_viewer_FormClosed);
+
+            if (bOpenWindow == true)
+            {
+                if (m_operlogViewer.Visible == false)
+                {
+                    Program.MainForm.AppInfo.LinkFormState(m_operlogViewer, "operlog_viewer_state");
+                    m_operlogViewer.Show(this);
+                    m_operlogViewer.Activate();
+
+                    Program.MainForm.CurrentPropertyControl = null;
+                }
+                else
+                {
+                    if (m_operlogViewer.WindowState == FormWindowState.Minimized)
+                        m_operlogViewer.WindowState = FormWindowState.Normal;
+                    m_operlogViewer.Activate();
+                }
+            }
+            else
+            {
+                if (m_operlogViewer.Visible == true)
+                {
+
+                }
+                else
+                {
+                    if (Program.MainForm.CurrentPropertyControl != m_operlogViewer.MainControl)
+                        m_operlogViewer.DoDock(false); // 不会自动显示FixedPanel
+                }
+            }
+            return;
+        ERROR1:
+            MessageBox.Show(this, "DoViewRecover() 出错: " + strError);
+        }
+
+        void FillHistoryList(List<OperLogItem> history_list)
+        {
+            this.listView_recover_history.Items.Clear();
+            foreach (OperLogItem history_item in history_list)
+            {
+
+                OperLogItemInfo info = new OperLogItemInfo();
+                {
+                    info.Hint = -1;
+                    info.InCacheFile = false;
+                }
+
+                string strLogFileName = history_item.Date + ".log";
+
+                ListViewItem item = new ListViewItem(strLogFileName, 0);
+                ListViewUtil.ChangeItemText(item, COLUMN_INDEX, history_item.Index.ToString());
+                this.listView_recover_history.Items.Add(item);
+                item.Tag = info;
+                string strError = "";
+                int nRet = FillListViewItem(item,
+                    history_item.Xml,
+                    0,  // lAttachmentTotalLength,
+                    out strError);
+                if (nRet == -1)
+                    ListViewUtil.ChangeItemText(item, 1, strError);
+            }
+        }
+
+        private void listView_recover_history_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            DoViewOperlog(this.listView_recover_history, false);
         }
     }
 

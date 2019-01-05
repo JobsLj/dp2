@@ -14,6 +14,7 @@ using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 using DigitalPlatform.Text;
 using DigitalPlatform.CommonControl;
+using DigitalPlatform.LibraryClient;
 
 namespace dp2Circulation
 {
@@ -351,7 +352,6 @@ namespace dp2Circulation
             item.OrderedCount = nRet;
 
             this.m_currentTreeNode = e.Node;
-
             return;
         ERROR1:
             MessageBox.Show(this, strError);
@@ -2121,7 +2121,7 @@ namespace dp2Circulation
 
                     string strNewCopy = "";
                     string strOldCopy = "";
-                    OrderDesignControl.ParseOldNewValue(strCopy,
+                    dp2StringUtil.ParseOldNewValue(strCopy,
                         out strOldCopy,
                         out strNewCopy);
 

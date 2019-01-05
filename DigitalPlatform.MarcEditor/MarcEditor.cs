@@ -3,28 +3,21 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
-using System.Data;
 using System.Windows.Forms;
 using System.ComponentModel.Design;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Xml;
-using System.Threading;
-using System.IO;
-using System.Text;
 
-using DigitalPlatform;
+using Newtonsoft.Json;
+
 using DigitalPlatform.GUI;
-using DigitalPlatform.IO;
-using DigitalPlatform.Drawing;
 using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
 using DigitalPlatform.CommonControl;
 
 namespace DigitalPlatform.Marc
 {
-
-
     /// <summary>
     /// MARC 编辑器控件
     /// </summary>
@@ -511,7 +504,7 @@ namespace DigitalPlatform.Marc
 
                 this.m_domMarcDef = e.XmlDocument;
                 return this.m_domMarcDef;
-            ERROR1:
+                ERROR1:
                 m_strMarcDomError = strError;
                 return null;
             }
@@ -1005,24 +998,24 @@ namespace DigitalPlatform.Marc
                         }
                     }
                     break;
-                /*
-            case API.WM_LBUTTONDBLCLK:
-                {
-                    API.SendMessage(this.curEdit.Handle,
-                        m.Msg,
-                        m.WParam, 
-                        m.LParam);
-                    return;
-                }
-                break;
-                 */
-                /*
-                // 2008/11/26
-            case API.WM_GETDLGCODE:
-                {
-                    m.Result = new IntPtr(API.DLGC_WANTALLKEYS);
-                    return;
-                }*/
+                    /*
+                case API.WM_LBUTTONDBLCLK:
+                    {
+                        API.SendMessage(this.curEdit.Handle,
+                            m.Msg,
+                            m.WParam, 
+                            m.LParam);
+                        return;
+                    }
+                    break;
+                     */
+                    /*
+                    // 2008/11/26
+                case API.WM_GETDLGCODE:
+                    {
+                        m.Result = new IntPtr(API.DLGC_WANTALLKEYS);
+                        return;
+                    }*/
 
             }
             base.DefWndProc(ref m);
@@ -1129,17 +1122,17 @@ namespace DigitalPlatform.Marc
             int nCol)
         {
             Debug.Assert(nFieldIndex >= 0 && nFieldIndex < this.record.Fields.Count, "nFieldIndex参数不合法。");
-            Debug.Assert(nCol == 1 || nCol == 2 || nCol == 3, "nCol只能为1,2,3");
+            Debug.Assert(nCol == 1 || nCol == 2 || nCol == 3, "nCol 只能为 1,2,3");
 
             Field field = this.record.Fields[nFieldIndex];
 
 
             // 如果是没有指示符的字段，需要调整
             // 2008/3/19
-            if (Record.IsHeaderFieldName(field.Name) == true
+            if (Record.IsFirstHeaderFieldName(field.Name) == true
                 && (nCol == 1 || nCol == 2))
             {
-                Debug.Assert(false, "");
+                Debug.Assert(false, "第一个头标区字段的 1 2 列不让接触");
                 // nCol = 3;
             }
             else if (Record.IsControlFieldName(field.Name) == true
@@ -1399,22 +1392,22 @@ namespace DigitalPlatform.Marc
 
             // ???
             // controlfield的所在列有限制，需要调整
-            if (Record.IsHeaderFieldName(this.FocusedField.Name) == true
+            if (Record.IsFirstHeaderFieldName(this.FocusedField.Name) == true
                 && (this.m_nFocusCol == 1 || this.m_nFocusCol == 2))
             {
-                Debug.Assert(false, "头标区的列不能为1或2");
+                Debug.Assert(false, "第一个头标区的列不能为 1 或 2");
             }
             else if (Record.IsControlFieldName(this.FocusedField.Name) == true
                 && this.m_nFocusCol == 2)
             {
-                Debug.Assert(false, "控制字段的列不能为2");
+                Debug.Assert(false, "控制字段的列不能为 2");
             }
 
             // 头标区
-            if (Record.IsHeaderFieldName(this.FocusedField.Name) == true
+            if (Record.IsFirstHeaderFieldName(this.FocusedField.Name) == true
                 && (this.m_nFocusCol == 1 || this.m_nFocusCol == 2))
             {
-                Debug.Assert(false, "头标区的列不能为1或2");
+                Debug.Assert(false, "第一个头标区的列不能为1或2");
             }
 
             ChangeEditSizeAndMove(nField, this.m_nFocusCol);
@@ -1820,7 +1813,7 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
                     // return;
                 }
             }
-        END1:
+            END1:
             base.OnMouseDown(e);
         }
 
@@ -2023,6 +2016,18 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
             }
         }
 
+        static IDataObject GetClipboardDataObject()
+        {
+            IDataObject ido = null;
+
+            StringUtil.RunClipboard(() =>
+            {
+                ido = Clipboard.GetDataObject();
+            });
+
+            return ido;
+        }
+
         // 在已有的菜单事项上追加事项
         // parameters:
         //      bFull   是否包含一些重复事项
@@ -2108,8 +2113,7 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
             else
                 menuItem.Enabled = false;
 
-            IDataObject ido = Clipboard.GetDataObject();
-
+            IDataObject ido = GetClipboardDataObject(); // Clipboard.GetDataObject();
 
             // 从dp2OPAC粘贴整个记录
             menuItem = new MenuItem("从 dp2OPAC 粘贴整个记录");// + strName);
@@ -2361,7 +2365,7 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
             if (nRet == 1)
                 this.Marc = strMARC;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2406,7 +2410,7 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
             if (nRet == 1)
                 this.Marc = strMARC;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2429,7 +2433,7 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
             if (nRet == 1)
                 this.Marc = strMARC;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2463,7 +2467,7 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
 
             MarcEditor.TextToClipboard(strText);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2694,7 +2698,7 @@ System.Drawing.Drawing2D.SmoothingMode.HighQuality;
                         if (value >= 0 && value < this.record.Fields.Count)
                         {
                             Field field = this.record.Fields[value];
-                            if (Record.IsHeaderFieldName(field.Name) == true
+                            if (Record.IsFirstHeaderFieldName(field.Name) == true
                                 && (this.m_nFocusCol == 1 || this.m_nFocusCol == 2)) // 没有字段名和指示符
                             {
                                 this.SetActiveField(value, 3, false);
@@ -3760,7 +3764,6 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                     + rectCaret.X;
             }
 
-
             if (nDelta + rectCaret.Width >= this.ClientWidth)
             {
                 if (rectCaret.Width >= this.ClientWidth)
@@ -3854,16 +3857,92 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
 #if BIDI_SUPPORT
             strText = strText.Replace("\x200e", "");
 #endif
-            Clipboard.SetDataObject(strText);
+            StringUtil.RunClipboard(() => { Clipboard.SetDataObject(strText); });
+        }
+
+        [Serializable()]
+        public class MarcEditorData
+        {
+            public string Text { get; set; }
+
+            public MarcEditorData(string text)
+            {
+                this.Text = text;
+            }
+        }
+
+        internal static void TextToClipboardFormat(string strText)
+        {
+#if BIDI_SUPPORT
+            strText = strText.Replace("\x200e", "");
+#endif
+
+            // Make a DataObject.
+            DataObject data_object = new DataObject();
+
+            // Add the data in various formats.
+            // 普通格式
+            data_object.SetData(DataFormats.UnicodeText, strText
+                .Replace((char)Record.SUBFLD, '$')
+                .Replace((char)Record.FLDEND, '#')
+                .Replace((char)Record.RECEND, '*'));
+            // 专用格式
+            data_object.SetData(new MarcEditorData(strText));
+
+            // Place the data in the Clipboard.
+            StringUtil.RunClipboard(() =>
+            {
+                Clipboard.SetDataObject(data_object);
+            });
         }
 
         internal static string ClipboardToText()
         {
-            IDataObject ido = Clipboard.GetDataObject();
-            if (ido.GetDataPresent(DataFormats.UnicodeText) == false)
-                return "";
+            string result = "";
 
-            return (string)ido.GetData(DataFormats.UnicodeText);
+            StringUtil.RunClipboard(() =>
+            {
+                IDataObject ido = Clipboard.GetDataObject();
+                if (ido.GetDataPresent(DataFormats.UnicodeText) == false)
+                    result = "";
+                else
+                    result = (string)ido.GetData(DataFormats.UnicodeText);
+            });
+
+            return result;
+        }
+
+        internal static string ClipboardToTextFormat()
+        {
+            string result = "";
+
+            StringUtil.RunClipboard(() =>
+            {
+                IDataObject ido = Clipboard.GetDataObject();
+
+                if (ido.GetDataPresent(typeof(MarcEditorData)) == true)
+                {
+                    MarcEditorData data = (MarcEditorData)ido.GetData(typeof(MarcEditorData));
+                    result = data.Text;
+                    return;
+                }
+
+                if (ido.GetDataPresent(DataFormats.UnicodeText) == true)
+                {
+                    result = (string)ido.GetData(DataFormats.UnicodeText);
+                    return;
+                }
+
+                if (ido.GetDataPresent(DataFormats.Text) == true)
+                {
+                    result = (string)ido.GetData(DataFormats.Text);
+                    return;
+                }
+
+                result = null;
+            });
+
+            return result;
         }
 
         private void Menu_SelectAll(object sender,
@@ -3914,8 +3993,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                 strText += field.GetFieldMarc(true);
             }
 
-            MarcEditor.TextToClipboard(strText);
-
+            MarcEditor.TextToClipboardFormat(strText);
 
             int[] fieldIndices = new int[this.SelectedFieldIndices.Count];
             for (int i = 0; i < fieldIndices.Length; i++)
@@ -3927,6 +4005,35 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             // 2007/7/17
             AdjustOriginY();
 
+        }
+
+        public void DoCtrlK(Keys key)
+        {
+            // 复制当前字段到后面
+            if (key == Keys.F)
+            {
+                menuItem_Copy(this, null);
+                menuItem_PasteInsert_InsertAfter(this, null);
+            }
+
+            // 复制当前子字段到后面
+            if (key == Keys.S)
+            {
+                this.curEdit.DupCurrentSubfield();
+            }
+
+
+            // 插入 {cr:CALIS}
+            if (key == Keys.C)
+            {
+                this.curEdit.PasteToCurrent("{cr:CALIS}");
+            }
+
+            // 插入 {cr:NLC}
+            if (key == Keys.N)
+            {
+                this.curEdit.PasteToCurrent("{cr:NLC}");
+            }
         }
 
         // 复制
@@ -3945,7 +4052,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                 Field field = this.record.Fields[nIndex];
                 strText += field.GetFieldMarc(true);
             }
-            MarcEditor.TextToClipboard(strText);
+            MarcEditor.TextToClipboardFormat(strText);
         }
 
         /* http://z39.tcmarc.net/Index.asp?one=1
@@ -4094,7 +4201,6 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
         {
             Debug.Assert(this.SelectedFieldIndices.Count >= 1, "在粘贴覆盖时，SelectedFieldIndices必须>=1。");
 
-
             // 先删除选定的所有字段
             int[] fieldIndices = new int[this.SelectedFieldIndices.Count];
             for (int i = 0; i < fieldIndices.Length; i++)
@@ -4111,7 +4217,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             // 如果到最后被覆盖的字段用完，则接着进行插入。如果被覆盖的字段没用
             // 用完，就把剩下的删除。这是为了针对离散选择的情况
             int nNewFieldsCount = 0;
-            string strFieldsMarc = MarcEditor.ClipboardToText();
+            string strFieldsMarc = MarcEditor.ClipboardToTextFormat();
             // TODO: 这个函数可以改造为两步实现：
             // 1) 一个函数切分MARC多字段字符串为一个一个字段单独字符串
             // 2) 根据上一步切分出来的字符串数组，进行插入或者替换等操作
@@ -4163,7 +4269,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
         private void menuItem_PasteInsert_AppendChild(object sender,
             System.EventArgs e)
         {
-            string strFieldsMarc = MarcEditor.ClipboardToText();
+            string strFieldsMarc = MarcEditor.ClipboardToTextFormat();
             if (this.record.Fields.Count == 0)
             {
                 string strError = "";
@@ -4212,7 +4318,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             int nIndex = this.FocusedFieldIndex;
             Debug.Assert(nIndex >= 0 && nIndex < this.record.Fields.Count, "在'粘贴插入/前插'时，FocusFieldIndex越界。");
 
-            string strFieldsMarc = MarcEditor.ClipboardToText();
+            string strFieldsMarc = MarcEditor.ClipboardToTextFormat();
 
             // 这里要特别注意，把原来的焦点清空，以便在给新字段赋值时，不影响老字段
             this.ClearSelectFieldIndices();
@@ -4244,7 +4350,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             int nIndex = this.FocusedFieldIndex;
             Debug.Assert(nIndex >= 0 && nIndex < this.record.Fields.Count, "在'粘贴插入/后插'时，FocusFieldIndex越界。");
 
-            string strFieldsMarc = MarcEditor.ClipboardToText();
+            string strFieldsMarc = MarcEditor.ClipboardToTextFormat();
 
             int nStartIndex = nIndex + 1;
 
@@ -4361,7 +4467,9 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                 if (this.AppInfo == null)
                     dlg.InsertBefore = this.m_bInsertBefore;
                 else
-                    dlg.InsertBefore = this.AppInfo.GetBoolean("marceditor", "newfielddlg_insertbefore", false);
+                    dlg.InsertBefore = this.AppInfo.GetBoolean("marceditor",
+                        "newfielddlg_insertbefore",
+                        false);
             }
             else
                 dlg.InsertBefore = (nInsertBofore == 1 ? true : false);
@@ -4372,7 +4480,9 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                 if (this.AppInfo == null)
                     dlg.AutoComplete = this.m_bAutoComplete;
                 else
-                    dlg.AutoComplete = this.AppInfo.GetBoolean("marceditor", "newfielddlg_autocomplete", false);
+                    dlg.AutoComplete = this.AppInfo.GetBoolean("marceditor",
+                        "newfielddlg_autocomplete",
+                        false);
             }
             else
                 dlg.AutoComplete = (nAutoComplete == 1 ? true : false);
@@ -4402,7 +4512,9 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                 if (this.AppInfo == null)
                     this.m_bAutoComplete = dlg.AutoComplete;
                 else
-                    this.AppInfo.SetBoolean("marceditor", "newfielddlg_autocomplete", dlg.AutoComplete);
+                    this.AppInfo.SetBoolean("marceditor",
+                        "newfielddlg_autocomplete",
+                        dlg.AutoComplete);
             }
 
             if (nInsertBofore == -1)
@@ -4410,7 +4522,9 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                 if (this.AppInfo == null)
                     this.m_bInsertBefore = dlg.InsertBefore;
                 else
-                    this.AppInfo.SetBoolean("marceditor", "newfielddlg_insertbefore", dlg.InsertBefore);
+                    this.AppInfo.SetBoolean("marceditor",
+                        "newfielddlg_insertbefore",
+                        dlg.InsertBefore);
             }
 
             bool bControlField = Record.IsControlFieldName(dlg.FieldName);
@@ -4745,7 +4859,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
 #if NOOOOOOOOOOOOOOOOOO
         // 设置当前位置的缺省值
         // parameters:
-        //      bSumulate   如果==true，表示模拟获得缺省值，但是并不在当前位置插入值。注意，某些对种子号有推动作用的宏，这里只能取当前值而不能增量。
+        //      bSimulate   如果==true，表示模拟获得缺省值，但是并不在当前位置插入值。注意，某些对种子号有推动作用的宏，这里只能取当前值而不能增量。
         public string SetCurDefaultValue(bool bSimulate)
         {
             if (this.SelectedFieldIndices.Count > 1)
@@ -4924,7 +5038,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
         // 警告：因为本函数无法让宏真正执行，所以废弃不用
         // 设置当前位置的缺省值。只取缺省值的第一个
         // parameters:
-        //      bSumulate   如果==true，表示模拟获得缺省值，但是并不在当前位置插入值。注意，某些对种子号有推动作用的宏，这里只能取当前值而不能增量。
+        //      bSimulate   如果==true，表示模拟获得缺省值，但是并不在当前位置插入值。注意，某些对种子号有推动作用的宏，这里只能取当前值而不能增量。
         void SetCurrentDefaultValue(string strValue)
         {
             Debug.Assert(false, "本函数已经被废弃");
@@ -5026,7 +5140,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
 
         // 设置当前位置的缺省值。只取缺省值的第一个
         // parameters:
-        //      bSumulate   如果==true，表示模拟获得缺省值，但是并不在当前位置插入值。注意，某些对种子号有推动作用的宏，这里只能取当前值而不能增量。
+        //      bSimulate   如果==true，表示模拟获得缺省值，但是并不在当前位置插入值。注意，某些对种子号有推动作用的宏，这里只能取当前值而不能增量。
         //      index   如果有多个值，这里指定要设置的值的下标。必须在bSimulate == false时使用。如果bSimulate == true，则此参数应当使用-1，以明确表示不用它
         /// <summary>
         /// 设置当前位置的缺省值。
@@ -5206,7 +5320,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             }
 
             return results;
-        ERROR1:
+            ERROR1:
             if (bSimulate == true)
             {
                 results.Add("出错: " + strError);
@@ -5511,6 +5625,10 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             Debug.Assert(strSubFieldName != null, "GetValueFromTemplate()，strSubFieldName参数不能为null");
             Debug.Assert(strValue != null, "GetValueFromTemplate()，strValue参数不能为null");
 
+            // 2017/1/31
+            if (strFieldName == "hdr")
+                strFieldName = "###";
+
             strError = "";
             strOutputValue = strValue;
 
@@ -5520,6 +5638,10 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                 strError = this.m_strMarcDomError;
                 return 0;   // 2008/3/19恢复。 原来为什么要注释掉?
             }
+
+            string strCmd = StringUtil.GetLeadingCommand(strValue);
+            if (string.IsNullOrEmpty(strCmd) == false)
+                strValue = strValue.Substring(strCmd.Length + 2);
 
             XmlNode nodeDef = null;
             string strTitle = "";
@@ -5598,7 +5720,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             {
                 nodeDef = nodes[0];
             }
-        FOUND:
+            FOUND:
             FixedTemplateDlg dlg = new FixedTemplateDlg();
             // GuiUtil.AutoSetDefaultFont(dlg);
             if (string.IsNullOrEmpty(strTitle) == false)
@@ -5635,10 +5757,11 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
 
             dlg.TemplateControl.ParseMacro -= new ParseMacroEventHandler(TemplateControl_ParseMacro);
 
-
             if (dlg.DialogResult == DialogResult.OK)
             {
                 strOutputValue = dlg.TemplateControl.Value;
+                if (string.IsNullOrEmpty(strCmd) == false)
+                    strOutputValue = "{" + strCmd + "}" + strOutputValue;
             }
 
             return 1;
@@ -5767,7 +5890,8 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
                     dlg.AppInfo = this.AppInfo; // 为了能够保持列宽度
 
                     if (this.AppInfo != null)
-                        this.AppInfo.LinkFormState(dlg, "marceditor_valuelistdialog_state");
+                        this.AppInfo.LinkFormState(dlg,
+                            "marceditor_valuelistdialog_state");
                     dlg.ShowDialog(this);
                     if (this.AppInfo != null)
                         this.AppInfo.UnlinkFormState(dlg);
@@ -6178,6 +6302,31 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5697.17821, Culture=neutral, 
             }
         }
 
+        class MarcEditorState
+        {
+            // 字段名区域像素宽度
+            public int FieldNameCaptionWidth { get; set; }
+        }
+
+        public string UiState
+        {
+            get
+            {
+                MarcEditorState state = new MarcEditorState
+                {
+                    FieldNameCaptionWidth = this.FieldNameCaptionWidth,
+                };
+                return JsonConvert.SerializeObject(state);
+            }
+            set
+            {
+                MarcEditorState state = JsonConvert.DeserializeObject<MarcEditorState>(value);
+                if (state != null)
+                {
+                    this.FieldNameCaptionWidth = state.FieldNameCaptionWidth;
+                }
+            }
+        }
     }
 
     internal class InvalidateRect

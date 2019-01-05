@@ -2,15 +2,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
 using System.Xml;
 using System.Diagnostics;
-using System.Threading;
-using System.IO;
-using System.Web;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
@@ -54,6 +50,7 @@ namespace dp2Circulation
             "order","订购",
             "issue","期",
             "reader","读者",
+            "authority", "规范",
             "message","消息",
             "arrived","预约到书",
             "amerce","违约金",
@@ -62,6 +59,9 @@ namespace dp2Circulation
             "zhongcihao","种次号",
             "dictionary","词典",
             "inventory","盘点",
+            "pinyin","拼音",
+            "gcat","著者号码",
+            "word","词",
         };
 
         // 根据类型汉字名得到类型字符串
@@ -124,6 +124,51 @@ namespace dp2Circulation
             ListViewProperty prop1 = new ListViewProperty();
             this.listView_location_list.Tag = prop1;
 
+            this.kernelResTree1.AppInfo = Program.MainForm.AppInfo;
+            this.kernelResTree1.HideIndices = new int[] { KernelResTree.RESTYPE_FROM };
+            this.kernelResTree1.DownloadFiles += kernelResTree1_DownloadFiles;
+            this.kernelResTree1.UploadFiles += KernelResTree1_UploadFiles;
+        }
+
+        private void KernelResTree1_UploadFiles(object sender, UploadFilesEventArgs e)
+        {
+            Program.MainForm.BeginUploadFiles(e);
+        }
+
+        void kernelResTree1_DownloadFiles(object sender, DownloadFilesEventArgs e)
+        {
+            string strError = "";
+            string strOutputFolder = "";
+
+            List<dp2Circulation.MainForm.DownloadFileInfo> infos = MainForm.BuildDownloadInfoList(e.FileNames);
+
+            bool bAppend = false;
+            // 询问是否覆盖已有的目标下载文件。整体询问
+            // return:
+            //      -1  出错
+            //      0   放弃下载
+            //      1   同意启动下载
+            int nRet = Program.MainForm.AskOverwriteFiles(infos,    // e.FileNames,
+ref strOutputFolder,
+out bAppend,
+out strError);
+            if (nRet == -1)
+            {
+                e.ErrorInfo = strError;
+                return;
+            }
+
+            // return:
+            //      -1  出错
+            //      0   放弃下载
+            //      1   成功启动了下载
+            nRet = Program.MainForm.BeginDownloadFiles(infos,   // e.FileNames,
+                bAppend ? "append" : "overwrite",
+                null,
+                ref strOutputFolder,
+                out strError);
+            if (nRet == -1)
+                e.ErrorInfo = strError;
         }
 
         void prop_CompareColumn(object sender, CompareEventArgs e)
@@ -159,9 +204,9 @@ namespace dp2Circulation
 
         private void ManagerForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 
 #if NO
@@ -269,6 +314,7 @@ namespace dp2Circulation
                 MessageBox.Show(this, strError);
             }
 
+            ActivateHelpUrl();
         }
 
 #if NO
@@ -618,7 +664,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -638,7 +684,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -654,11 +700,11 @@ namespace dp2Circulation
 
         private void ManagerForm_Activated(object sender, EventArgs e)
         {
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 
-            this.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
-            this.MainForm.MenuItem_font.Enabled = false;
-            this.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
+            Program.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
+            Program.MainForm.MenuItem_font.Enabled = false;
+            Program.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
         }
 
         // 从服务器获得最新的关于全部数据库的 XML 定义。注意，不刷新界面。
@@ -748,6 +794,7 @@ namespace dp2Circulation
             return 0;
         }
 
+        const int DATABASE_COLUMN_NAME = 0;
         const int DATABASE_COLUMN_TYPENAME = 1;
         const int DATABASE_COLUMN_SHUOMING = 2;
 
@@ -783,13 +830,14 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
                 long lRet = Channel.ManageDatabase(
                     stop,
                     "getinfo",
+                    "",
                     "",
                     "",
                     out strOutputInfo,
@@ -807,7 +855,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -834,7 +882,7 @@ namespace dp2Circulation
         {
             BiblioDatabaseDialog dlg = new BiblioDatabaseDialog();
             MainForm.SetControlFont(dlg, this.Font, false);
-
+            dlg.HelpRequested += Dlg_createBiblioDatabase_HelpRequested;
             dlg.Text = "创建新书目库";
             dlg.ManagerForm = this;
             dlg.CreateMode = true;
@@ -857,7 +905,48 @@ namespace dp2Circulation
             SelectDatabaseLine(dlg.BiblioDatabaseName);
 
             // 重新获得各种库名、列表
-            this.MainForm.StartPrepareNames(false, false);
+            Program.MainForm.StartPrepareNames(false, false);
+        }
+
+        private void Dlg_createBiblioDatabase_HelpRequested(object sender, HelpEventArgs hlpevent)
+        {
+            Process.Start("https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E5%88%9B%E5%BB%BA%E6%88%96%E5%88%A0%E9%99%A4%E4%B9%A6%E7%9B%AE%E5%BA%93");
+        }
+
+        // 创建规范库
+        private void ToolStripMenuItem_createAuthorityDatabase_Click(object sender, EventArgs e)
+        {
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "3.6") < 0)
+            {
+                MessageBox.Show(this, "本功能只能和 dp2library 3.6 及以上版本配套使用");
+                return;
+            }
+
+            BiblioDatabaseDialog dlg = new BiblioDatabaseDialog();
+            MainForm.SetControlFont(dlg, this.Font, false);
+            dlg.DbType = "authority";
+            dlg.Text = "创建新规范库";
+            dlg.ManagerForm = this;
+            dlg.CreateMode = true;
+            dlg.StartPosition = FormStartPosition.CenterScreen;
+            dlg.ShowDialog(this);
+
+            if (dlg.DialogResult != DialogResult.OK)
+                return;
+
+            // 刷新库名列表
+            string strError = "";
+            int nRet = ListAllDatabases(out strError);
+            if (nRet == -1)
+            {
+                MessageBox.Show(this, strError);
+            }
+
+            // 选定刚创建的数据库
+            SelectDatabaseLine(dlg.BiblioDatabaseName);
+
+            // 重新获得各种库名、列表
+            Program.MainForm.StartPrepareNames(false, false);
         }
 
         void SelectDatabaseLine(string strDatabaseName)
@@ -898,7 +987,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -907,6 +996,7 @@ namespace dp2Circulation
                     bRecreate == false ? "create" : "recreate",
                     "",
                     strDatabaseInfo,
+                    "",
                     out strOutputInfo,
                     out strError);
                 if (lRet == -1)
@@ -922,7 +1012,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -949,7 +1039,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -957,6 +1047,7 @@ namespace dp2Circulation
                     stop,
                     "delete",
                     strDatabaseNames,
+                    "",
                     "",
                     out strOutputInfo,
                     out strError);
@@ -973,7 +1064,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1004,7 +1095,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -1013,6 +1104,7 @@ namespace dp2Circulation
                     "refresh",
                     strDatabaseNames,
                     strDatabaseInfo,
+                    "",
                     out strOutputInfo,
                     out strError);
                 if (lRet == -1)
@@ -1028,7 +1120,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1055,7 +1147,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -1063,6 +1155,7 @@ namespace dp2Circulation
                     stop,
                     "initialize",
                     strDatabaseNames,
+                    "",
                     "",
                     out strOutputInfo,
                     out strError);
@@ -1079,7 +1172,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1108,7 +1201,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -1117,6 +1210,7 @@ namespace dp2Circulation
                     "change",
                     strDatabaseNames,
                     strDatabaseInfo,
+                    "",
                     out strOutputInfo,
                     out strError);
                 if (lRet == -1)
@@ -1132,7 +1226,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1166,7 +1260,9 @@ namespace dp2Circulation
                 "ManagerForm",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2);
+                MessageBoxDefaultButton.Button2,
+                0,
+                "https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E5%88%9B%E5%BB%BA%E6%88%96%E5%88%A0%E9%99%A4%E4%B9%A6%E7%9B%AE%E5%BA%93");  // 最好是一个笼统介绍如何删除各种数据库的页面
             if (result != DialogResult.Yes)
                 return;
 
@@ -1184,22 +1280,7 @@ namespace dp2Circulation
                 goto ERROR1;
             }
 
-            /*
-            // 为更新AllDatabaseInfoXml
-            XmlDocument dom = new XmlDocument();
-            try
-            {
-                dom.LoadXml(this.AllDatabaseInfoXml);
-            }
-            catch (Exception ex)
-            {
-                strError = "AllDatabaseInfoXml装入XMLDOM时出错: " + ex.Message;
-                goto ERROR1;
-            }
-             * */
-
             EnableControls(false);
-
             try
             {
 
@@ -1211,9 +1292,8 @@ namespace dp2Circulation
 
                     string strDatabaseName = this.listView_databases.Items[index].Text;
 
-                    string strOutputInfo = "";
                     nRet = DeleteDatabase(strDatabaseName,
-                        out strOutputInfo,
+                        out string strOutputInfo,
                         out strError);
                     if (nRet == -1)
                         goto ERROR1;
@@ -1249,7 +1329,7 @@ namespace dp2Circulation
                     UpdateLoanPolicyLibraryCode();
 
                 // 重新获得各种库名、列表
-                this.MainForm.StartPrepareNames(false, false);
+                Program.MainForm.StartPrepareNames(false, false);
             }
             finally
             {
@@ -1257,11 +1337,122 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
+        // 重新创建多个数据库
+        // return:
+        //      -1  出错
+        //      0   放弃
+        //      其他  重新创建的个数
+        int recreateDatabases(out string strError)
+        {
+            strError = "";
+            int nRet = 0;
 
+            if (this.listView_databases.SelectedIndices.Count == 0)
+            {
+                strError = "尚未选择要重新创建的数据库事项";
+                return -1;
+            }
+
+            string strLibraryCodeList = this.GetLibraryCodeList();
+
+            string strDbNameList = ListViewUtil.GetItemNameList(this.listView_databases.SelectedItems);
+
+            // 对话框警告
+            DialogResult result = MessageBox.Show(this,
+                "确实要重新创建数据库 " + strDbNameList + "?",
+                "ManagerForm",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+            if (result != DialogResult.Yes)
+                return 0;
+
+            // 为确认身份而登录
+            // return:
+            //      -1  出错
+            //      0   放弃登录
+            //      1   登录成功
+            nRet = ConfirmLogin(out strError);
+            if (nRet == -1)
+                return -1;
+            if (nRet == 0)
+            {
+                strError = "重新创建数据库操作被放弃";
+                return -1;
+            }
+
+            EnableControls(false);
+            try
+            {
+                int nCount = 0;
+                XmlDocument dom = new XmlDocument();
+                dom.LoadXml("<root />");
+
+                foreach (ListViewItem item in this.listView_databases.SelectedItems)
+                {
+                    XmlNode nodeDatabase = dom.CreateElement("database");
+                    dom.DocumentElement.AppendChild(nodeDatabase);
+
+                    string strName = ListViewUtil.GetItemText(item, DATABASE_COLUMN_NAME);
+                    string strTypeName = ListViewUtil.GetItemText(item, DATABASE_COLUMN_TYPENAME);
+
+                    string strXml = (string)item.Tag;
+                    XmlDocument node_dom = new XmlDocument();
+                    node_dom.LoadXml(strXml);
+
+                    string strType = node_dom.DocumentElement.GetAttribute("type");
+
+                    DomUtil.SetAttr(nodeDatabase, "name", strName);
+                    // type
+                    DomUtil.SetAttr(nodeDatabase, "type", strType);
+                    DomUtil.SetAttr(nodeDatabase, "info", "existing");
+
+                    nCount++;
+                }
+
+                string strDatabaseInfo = dom.OuterXml;
+                string strOutputInfo = "";
+                // 创建数据库
+                nRet = this.CreateDatabase(
+                    strDatabaseInfo,
+                    true,
+                    out strOutputInfo,
+                    out strError);
+                if (nRet == -1)
+                    return -1;
+#if NO
+                nRet = RefreshAllDatabaseXml(out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+#endif
+
+                // 刷新库名列表
+                nRet = ListAllDatabases(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+
+                RefreshOpacDatabaseList();
+                RefreshOpacBrowseFormatTree();
+
+                // 如果馆代码列表发生了变化
+                if (this.GetLibraryCodeList() != strLibraryCodeList)
+                    UpdateLoanPolicyLibraryCode();
+
+                // 重新获得各种库名、列表
+                Program.MainForm.StartPrepareNames(false, false);
+                return nCount;
+            }
+            finally
+            {
+                EnableControls(true);
+            }
+        }
 
         // 重新创建数据库
         private void menu_recreateDatabase_Click(object sender, EventArgs e)
@@ -1274,6 +1465,20 @@ namespace dp2Circulation
                 strError = "尚未选定要重新创建的数据库";
                 goto ERROR1;
             }
+
+            if (this.listView_databases.SelectedItems.Count > 1)
+            {
+                // 重新创建多个数据库
+                // return:
+                //      -1  出错
+                //      0   放弃
+                //      其他  重新创建的个数
+                if (recreateDatabases(out strError) == -1)
+                    goto ERROR1;
+                return;
+            }
+
+            // 重新创建单个数据库。可以在创建前观察到数据库的参数
             ListViewItem item = this.listView_databases.SelectedItems[0];
             string strTypeName = ListViewUtil.GetItemText(item, DATABASE_COLUMN_TYPENAME);
             string strName = item.Text;
@@ -1286,7 +1491,7 @@ namespace dp2Circulation
             {
                 BiblioDatabaseDialog dlg = new BiblioDatabaseDialog();
                 MainForm.SetControlFont(dlg, this.Font, false);
-
+                dlg.HelpRequested += Dlg_recreateBiblioDatabase_HelpRequested;
                 dlg.Text = "重新创建书目库";
                 dlg.ManagerForm = this;
                 dlg.CreateMode = true;
@@ -1317,13 +1522,13 @@ namespace dp2Circulation
                 RefreshOpacBrowseFormatTree();
 
                 // 重新获得各种库名、列表
-                this.MainForm.StartPrepareNames(false, false);
+                Program.MainForm.StartPrepareNames(false, false);
             }
             else if (strType == "reader")
             {
                 ReaderDatabaseDialog dlg = new ReaderDatabaseDialog();
                 MainForm.SetControlFont(dlg, this.Font, false);
-
+                dlg.HelpRequested += ReaderDatabaseDialog_HelpRequested;
                 dlg.Text = "重新创建读者库";
                 dlg.ManagerForm = this;
                 dlg.LibraryCodeList = this.GetLibraryCodeList();
@@ -1352,7 +1557,7 @@ namespace dp2Circulation
                 SelectDatabaseLine(dlg.ReaderDatabaseName);
 
                 // 重新获得各种库名、列表
-                this.MainForm.StartPrepareNames(false, false);
+                Program.MainForm.StartPrepareNames(false, false);
 
                 RefreshOpacDatabaseList();
                 RefreshOpacBrowseFormatTree();
@@ -1400,17 +1605,21 @@ namespace dp2Circulation
                 // 选定刚修改的数据库
                 SelectDatabaseLine(dlg.DatabaseName);
 
-
                 RefreshOpacDatabaseList();
                 RefreshOpacBrowseFormatTree();
 
                 // 重新获得各种库名、列表
-                this.MainForm.StartPrepareNames(false, false);
+                Program.MainForm.StartPrepareNames(false, false);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
+        }
+
+        private void Dlg_recreateBiblioDatabase_HelpRequested(object sender, HelpEventArgs hlpevent)
+        {
+            Process.Start("https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E5%88%9B%E5%BB%BA%E6%88%96%E5%88%A0%E9%99%A4%E4%B9%A6%E7%9B%AE%E5%BA%93");
         }
 
         // 修改数据库特性
@@ -1466,13 +1675,56 @@ namespace dp2Circulation
                 RefreshOpacBrowseFormatTree();
 
                 // 重新获得各种库名、列表
-                this.MainForm.StartPrepareNames(false, false);
+                Program.MainForm.StartPrepareNames(false, false);
+            }
+            else if (strType == "authority")
+            {
+                if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "3.6") < 0)
+                {
+                    strError = "本功能只能和 dp2library 3.6 及以上版本配套使用";
+                    goto ERROR1;
+                }
+
+                BiblioDatabaseDialog dlg = new BiblioDatabaseDialog();
+                MainForm.SetControlFont(dlg, this.Font, false);
+
+                dlg.DbType = "authority";
+                dlg.Text = "修改规范库特性";
+                dlg.ManagerForm = this;
+                dlg.CreateMode = false;
+                dlg.StartPosition = FormStartPosition.CenterScreen;
+
+                nRet = dlg.Initial((string)item.Tag,
+                    out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+
+                dlg.ShowDialog(this);
+
+                if (dlg.DialogResult != DialogResult.OK)
+                    return;
+
+                // 刷新库名列表
+                nRet = ListAllDatabases(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+
+                // 选定刚修改的数据库
+                SelectDatabaseLine(dlg.BiblioDatabaseName);
+
+                RefreshOpacDatabaseList();
+                RefreshOpacBrowseFormatTree();
+
+                // 重新获得各种库名、列表
+                Program.MainForm.StartPrepareNames(false, false);
             }
             else if (strType == "reader")
             {
                 ReaderDatabaseDialog dlg = new ReaderDatabaseDialog();
                 MainForm.SetControlFont(dlg, this.Font, false);
-
+                dlg.HelpRequested += ReaderDatabaseDialog_HelpRequested;
                 dlg.Text = "修改读者库特性";
                 dlg.ManagerForm = this;
                 dlg.LibraryCodeList = this.GetLibraryCodeList();
@@ -1500,7 +1752,7 @@ namespace dp2Circulation
                 SelectDatabaseLine(dlg.ReaderDatabaseName);
 
                 // 重新获得各种库名、列表
-                this.MainForm.StartPrepareNames(false, false);
+                Program.MainForm.StartPrepareNames(false, false);
 
                 RefreshOpacDatabaseList();
                 RefreshOpacBrowseFormatTree();
@@ -1554,11 +1806,11 @@ namespace dp2Circulation
                 RefreshOpacBrowseFormatTree();
 
                 // 重新获得各种库名、列表
-                this.MainForm.StartPrepareNames(false, false);
+                Program.MainForm.StartPrepareNames(false, false);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -1629,9 +1881,16 @@ namespace dp2Circulation
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
 
+            string strText = "";
+
             // 重新创建数据库
             {
-                menuItem = new MenuItem("重新创建" + strType + "库 '" + strName + "'(&M)");
+                if (this.listView_databases.SelectedItems.Count == 1)
+                    strText = "重新创建" + strType + "库 '" + strName + "'(&M)";
+                else
+                    strText = "重新创建所选 " + this.listView_databases.SelectedItems.Count.ToString() + " 个数据库(&M)";
+
+                menuItem = new MenuItem(strText);
                 menuItem.Click += new System.EventHandler(this.menu_recreateDatabase_Click);
                 if (this.listView_databases.SelectedItems.Count == 0)
                     menuItem.Enabled = false;
@@ -1650,6 +1909,13 @@ namespace dp2Circulation
             menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createReaderDatabase_Click);
             contextMenu.MenuItems.Add(menuItem);
 
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "3.6") >= 0)
+            {
+                menuItem = new MenuItem("创建规范库(&A)");
+                menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createAuthorityDatabase_Click);
+                contextMenu.MenuItems.Add(menuItem);
+            }
+
             menuItem = new MenuItem("创建违约金库(&A)");
             menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createAmerceDatabase_Click);
             contextMenu.MenuItems.Add(menuItem);
@@ -1663,9 +1929,20 @@ namespace dp2Circulation
             menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createArrivedDatabase_Click);
             contextMenu.MenuItems.Add(menuItem);
 
-
             menuItem = new MenuItem("创建消息库(&M)");
             menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createMessageDatabase_Click);
+            contextMenu.MenuItems.Add(menuItem);
+
+            menuItem = new MenuItem("创建拼音库(&P)");
+            menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createPinyinDatabase_Click);
+            contextMenu.MenuItems.Add(menuItem);
+
+            menuItem = new MenuItem("创建著者号码库(&G)");
+            menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createGcatDatabase_Click);
+            contextMenu.MenuItems.Add(menuItem);
+
+            menuItem = new MenuItem("创建词库(&G)");
+            menuItem.Click += new System.EventHandler(this.ToolStripMenuItem_createWordDatabase_Click);
             contextMenu.MenuItems.Add(menuItem);
 
             menuItem = new MenuItem("创建种次号库(&Z)");
@@ -1688,7 +1965,6 @@ namespace dp2Circulation
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
 
-            string strText = "";
             if (this.listView_databases.SelectedItems.Count == 1)
                 strText = "删除" + strType + "库 '" + strName + "'(&D)";
             else
@@ -1780,12 +2056,11 @@ namespace dp2Circulation
             XmlViewerForm dlg = new XmlViewerForm();
 
             dlg.Text = "数据库  " + strDbNameList + " 的定义";
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.XmlString = strXml;
-            // dlg.StartPosition = FormStartPosition.CenterScreen;
-            this.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_viewXml_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_viewXml_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
             return;
         }
 
@@ -1796,7 +2071,7 @@ namespace dp2Circulation
 
             ReaderDatabaseDialog dlg = new ReaderDatabaseDialog();
             MainForm.SetControlFont(dlg, this.Font, false);
-
+            dlg.HelpRequested += ReaderDatabaseDialog_HelpRequested;
             dlg.Text = "创建新读者库";
             dlg.ManagerForm = this;
             dlg.LibraryCodeList = this.GetLibraryCodeList();
@@ -1823,9 +2098,14 @@ namespace dp2Circulation
                 UpdateLoanPolicyLibraryCode();
 
             // 重新获得各种库名、列表
-            this.MainForm.StartPrepareNames(false, false);
+            Program.MainForm.StartPrepareNames(false, false);
 
 
+        }
+
+        private void ReaderDatabaseDialog_HelpRequested(object sender, HelpEventArgs hlpevent)
+        {
+            Process.Start("https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E5%88%9B%E5%BB%BA%E6%88%96%E5%88%A0%E9%99%A4%E8%AF%BB%E8%80%85%E5%BA%93");
         }
 
         // 创建违约金库
@@ -1852,7 +2132,7 @@ namespace dp2Circulation
         {
             SimpleDatabaseDialog dlg = new SimpleDatabaseDialog();
             MainForm.SetControlFont(dlg, this.Font, false);
-
+            dlg.HelpRequested += SimpleDatabaseDialog_HelpRequested;
             string strTypeName = GetTypeName(strType);
             if (strTypeName == null)
                 strTypeName = strType;
@@ -1889,8 +2169,20 @@ namespace dp2Circulation
             SelectDatabaseLine(dlg.DatabaseName);
 
             // 重新获得各种库名、列表
-            this.MainForm.StartPrepareNames(false, false);
+            Program.MainForm.StartPrepareNames(false, false);
             return 1;
+        }
+
+        private void SimpleDatabaseDialog_HelpRequested(object sender, HelpEventArgs hlpevent)
+        {
+            SimpleDatabaseDialog dialog = (SimpleDatabaseDialog)sender;
+            switch (dialog.DatabaseType)
+            {
+                case "":
+                    break;
+            }
+
+            // Process.Start("");
         }
 
         // 创建预约到书库
@@ -1913,9 +2205,25 @@ namespace dp2Circulation
         {
             CreateSimpleDatabase("inventory", "", "");
         }
+
         private void ToolStripMenuItem_createMessageDatabase_Click(object sender, EventArgs e)
         {
             CreateSimpleDatabase("message", "", "");
+        }
+
+        private void ToolStripMenuItem_createPinyinDatabase_Click(object sender, EventArgs e)
+        {
+            CreateSimpleDatabase("pinyin", "", "");
+        }
+
+        private void ToolStripMenuItem_createGcatDatabase_Click(object sender, EventArgs e)
+        {
+            CreateSimpleDatabase("gcat", "", "");
+        }
+
+        private void ToolStripMenuItem_createWordDatabase_Click(object sender, EventArgs e)
+        {
+            CreateSimpleDatabase("word", "", "");
         }
 
         private void ToolStripMenuItem_createZhongcihaoDatabase_Click(object sender, EventArgs e)
@@ -1926,7 +2234,15 @@ namespace dp2Circulation
         // 刷新数据库名列表
         private void toolStripButton_refresh_Click(object sender, EventArgs e)
         {
-            RefreshDatabaseList();
+            this.toolStripButton_refresh.Enabled = false;
+            try
+            {
+                RefreshDatabaseList();
+            }
+            finally
+            {
+                this.toolStripButton_refresh.Enabled = true;
+            }
         }
 
         void RefreshDatabaseList()
@@ -1949,26 +2265,35 @@ namespace dp2Circulation
             strError = "";
 
             ConfirmSupervisorDialog login_dlg = new ConfirmSupervisorDialog();
-            MainForm.SetControlFont(login_dlg, this.MainForm.DefaultFont);
-            login_dlg.UserName = this.MainForm.AppInfo.GetString(
+            MainForm.SetControlFont(login_dlg, Program.MainForm.DefaultFont);
+            login_dlg.UserName = Program.MainForm.AppInfo.GetString(
                     "default_account",
                     "username",
                     "");
-            login_dlg.ServerUrl = this.MainForm.LibraryServerUrl;
+            login_dlg.ServerUrl = Program.MainForm.LibraryServerUrl;
             login_dlg.Comment = "重要操作前，需要验证您的身份";
 
             login_dlg.StartPosition = FormStartPosition.CenterScreen;
+
+            REDO_LOGIN:
             login_dlg.ShowDialog(this);
 
             if (login_dlg.DialogResult != DialogResult.OK)
                 return 0;
 
-            string strLocation = this.MainForm.AppInfo.GetString(
+            string strLocation = Program.MainForm.AppInfo.GetString(
                 "default_account",
                 "location",
                 "");
             string strParameters = "location=" + strLocation + ",type=worker";
             strParameters += ",client=dp2circulation|" + Program.ClientVersion;
+
+            if (string.IsNullOrEmpty(login_dlg.TempCode) == false)
+                strParameters += ",tempCode=" + login_dlg.TempCode;
+
+            // 以手机短信验证方式登录
+            if (string.IsNullOrEmpty(login_dlg.PhoneNumber) == false)
+                strParameters += ",phoneNumber=" + login_dlg.PhoneNumber;
 
             // return:
             //      -1  error
@@ -1983,6 +2308,21 @@ namespace dp2Circulation
 
             if (lRet == 0)
             {
+                if (this.Channel.ErrorCode == ErrorCode.TempCodeMismatch
+                    || this.Channel.ErrorCode == ErrorCode.RetryLogin)
+                {
+                    login_dlg.ActivateTempCode();
+                    login_dlg.RetryLogin = true;  // 尝试再次登录
+                    login_dlg.Comment = strError;
+                    goto REDO_LOGIN;
+                }
+                if (this.Channel.ErrorCode == ErrorCode.NeedSmsLogin)
+                {
+                    login_dlg.ActivatePhoneNumber();
+                    login_dlg.Comment = strError;
+                    goto REDO_LOGIN;
+                }
+
                 // strError = "";
                 return -1;
             }
@@ -1994,7 +2334,7 @@ namespace dp2Circulation
         //      strDbPaths  分号分割的数据库全路径列表
         void ReplaceHostName(ref string strDbPaths)
         {
-            Uri library_uri = new Uri(this.MainForm.LibraryServerDir1);
+            Uri library_uri = new Uri(Program.MainForm.LibraryServerDir1);
             if (library_uri.IsLoopback == true)
                 return; // 说明前端和图书馆服务器同在一台机器，就不用替换了
 
@@ -2016,7 +2356,7 @@ namespace dp2Circulation
 
                     strDbPath = uri.Scheme + Uri.SchemeDelimiter + library_uri.Host
                         + (uri.IsDefaultPort == true ? "" : ":" + uri.Port.ToString())  // 2012/3/30 增加冒号
-                        // + uri.PathAndQuery 本来可以这样用的，但是汉字的数据库名被escape了
+                                                                                        // + uri.PathAndQuery 本来可以这样用的，但是汉字的数据库名被escape了
                         + uri.LocalPath
                         + strQuery;
                 }
@@ -2074,10 +2414,10 @@ namespace dp2Circulation
             MainForm.SetControlFont(style_dlg, this.Font, false);
 
             // 2.38
-            if (StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.38") >= 0)
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.38") >= 0)
                 style_dlg.AutoRebuildKeysVisible = true;
 
-            if (StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.54") >= 0)
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.54") >= 0)
                 style_dlg.RecoverStateVisible = bHasReaderDatabase;
 
             style_dlg.StartPosition = FormStartPosition.CenterScreen;
@@ -2228,9 +2568,9 @@ namespace dp2Circulation
 
             // 2015/6/13
             // 重新获得各种库名、列表
-            this.MainForm.StartPrepareNames(false, false);
+            Program.MainForm.StartPrepareNames(false, false);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2283,7 +2623,7 @@ namespace dp2Circulation
 
             try
             {
-
+                List<string> initialized_databases = new List<string>();
                 for (int i = this.listView_databases.SelectedIndices.Count - 1;
                     i >= 0;
                     i--)
@@ -2292,13 +2632,17 @@ namespace dp2Circulation
 
                     string strDatabaseName = this.listView_databases.Items[index].Text;
 
-                    string strOutputInfo = "";
                     nRet = InitializeDatabase(strDatabaseName,
-                        out strOutputInfo,
+                        out string strOutputInfo,
                         out strError);
                     if (nRet == -1)
                         goto ERROR1;
+
+                    initialized_databases.Add(strDatabaseName);
                 }
+
+                if (initialized_databases.Count > 0)
+                    this.ShowMessage($"初始化数据库 {StringUtil.MakePathList(initialized_databases)} 成功", "green", true);
             }
             finally
             {
@@ -2306,13 +2650,11 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
-
         #region OPAC数据库配置管理
-
 
         // 在listview中列出所有参与OPAC的数据库
         int ListAllOpacDatabases(out string strError)
@@ -2430,14 +2772,11 @@ namespace dp2Circulation
         </database>
              * */
 
-
             XmlNodeList nodes = dom.DocumentElement.SelectNodes("database | virtualDatabase");
-            for (int i = 0; i < nodes.Count; i++)
+            foreach (XmlElement node in nodes)
             {
-                XmlNode node = nodes[i];
-
-
-                string strName = DomUtil.GetAttr(node, "name");
+                string strName = node.GetAttribute("name");
+                string strAlias = node.GetAttribute("alias");
                 string strType = node.Name;
 
                 // 对于<virtualDatabase>元素，要选出<caption>里面的中文名称
@@ -2449,7 +2788,9 @@ namespace dp2Circulation
                     nImageIndex = 1;
 
                 ListViewItem item = new ListViewItem(strName, nImageIndex);
-                item.SubItems.Add(GetOpacDatabaseTypeDisplayString(strType));
+                ListViewUtil.ChangeItemText(item, COLUMN_OPAC_TYPE, GetOpacDatabaseTypeDisplayString(strType));
+                // item.SubItems.Add(GetOpacDatabaseTypeDisplayString(strType));
+                ListViewUtil.ChangeItemText(item, COLUMN_OPAC_ALIAS, strAlias);
                 item.Tag = node.OuterXml;   // 记载XML定义片断
 
                 this.listView_opacDatabases.Items.Add(item);
@@ -2457,6 +2798,11 @@ namespace dp2Circulation
 
             return 0;
         }
+
+        const int COLUMN_OPAC_NAME = 0;
+        const int COLUMN_OPAC_TYPE = 1;
+        const int COLUMN_OPAC_ALIAS = 2;
+        const int COLUMN_OPAC_COMMENT = 3;
 
         // 获得OPAC数据库类型的显示字符串
         // 所谓显示字符串，就是“虚拟库” “普通库”
@@ -2493,11 +2839,11 @@ namespace dp2Circulation
             EnableControls(false);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
-            stop.Initial("正在获取全部OPAC数据库定义 ...");
+            stop.Initial("正在获取全部 OPAC 数据库定义 ...");
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -2520,7 +2866,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -2537,7 +2883,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -2560,7 +2906,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -2587,7 +2933,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -2610,7 +2956,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -2648,9 +2994,9 @@ namespace dp2Circulation
                 goto ERROR1;
 
             // dlg.StartPosition = FormStartPosition.CenterScreen;
-            this.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacVirtualDatabaseDialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacVirtualDatabaseDialog_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
@@ -2728,7 +3074,7 @@ namespace dp2Circulation
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2918,7 +3264,6 @@ namespace dp2Circulation
             contextMenu.MenuItems.Add(menuItem);
 
             contextMenu.Show(this.listView_opacDatabases, new Point(e.X, e.Y));
-
         }
 
         void menu_opacDatabase_up_Click(object sender, EventArgs e)
@@ -2930,7 +3275,6 @@ namespace dp2Circulation
         {
             MoveOpacDatabaseItemUpDown(false);
         }
-
 
         void MoveOpacDatabaseItemUpDown(bool bUp)
         {
@@ -2994,7 +3338,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3024,18 +3368,16 @@ namespace dp2Circulation
             if (this.listView_opacDatabases.SelectedItems.Count > 1)
                 strXml = "<virtualDatabases>" + strXml + "</virtualDatabases>";
 
-
             XmlViewerForm dlg = new XmlViewerForm();
 
             dlg.Text = "OPAC数据库  " + strDbNameList + " 的定义";
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.XmlString = strXml;
             // dlg.StartPosition = FormStartPosition.CenterScreen;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_viewXml_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_viewXml_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
-
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
             return;
         }
 
@@ -3087,9 +3429,9 @@ namespace dp2Circulation
                     goto ERROR1;
 
                 // dlg.StartPosition = FormStartPosition.CenterScreen;
-                this.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacVirtualDatabaseDialog_state");
+                Program.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacVirtualDatabaseDialog_state");
                 dlg.ShowDialog(this);
-                this.MainForm.AppInfo.UnlinkFormState(dlg);
+                Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
 
                 if (dlg.DialogResult != DialogResult.OK)
@@ -3124,7 +3466,6 @@ namespace dp2Circulation
                     item.ImageIndex = 2;    // 表示未能提交的修改请求
                     goto ERROR1;
                 }
-
 
                 // 观察这个刚修改的虚拟库的成员库，如果还没有具备OPAC显示格式定义，则提醒自动加入
                 List<string> newly_biblio_dbnames = new List<string>();
@@ -3185,17 +3526,24 @@ namespace dp2Circulation
                 dlg.Text = "普通库名";
                 dlg.ManagerForm = this;
                 dlg.DatabaseName = DomUtil.GetAttr(dom.DocumentElement, "name");
-                this.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacNormalDatabaseDialog_state");
-                dlg.ShowDialog(this);
-                this.MainForm.AppInfo.UnlinkFormState(dlg);
+                dlg.DatabaseAlias = dom.DocumentElement.GetAttribute("alias");
 
+                Program.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacNormalDatabaseDialog_state");
+                dlg.ShowDialog(this);
+                Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
                 if (dlg.DialogResult != DialogResult.OK)
                     return;
 
                 DomUtil.SetAttr(dom.DocumentElement, "name", dlg.DatabaseName);
 
-                item.Text = dlg.DatabaseName;
+                ListViewUtil.ChangeItemText(item, COLUMN_OPAC_NAME, dlg.DatabaseName);
+                // 注: type 不会修改
+                if (string.IsNullOrEmpty(dlg.DatabaseAlias))
+                    dom.DocumentElement.RemoveAttribute("alias");
+                else
+                    dom.DocumentElement.SetAttribute("alias", dlg.DatabaseAlias);
+                ListViewUtil.ChangeItemText(item, COLUMN_OPAC_ALIAS, dlg.DatabaseAlias);
                 item.Tag = dom.DocumentElement.OuterXml;   // 记载XML定义片断
 
                 // 需要立即向服务器提交修改
@@ -3205,11 +3553,10 @@ namespace dp2Circulation
                     item.ImageIndex = 2;    // 表示未能提交的修改请求
                     goto ERROR1;
                 }
-
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3227,9 +3574,9 @@ namespace dp2Circulation
 
             // 已经存在的库名
             List<string> existing_dbnames = new List<string>();
-            for (int i = 0; i < this.listView_opacDatabases.Items.Count; i++)
+            foreach (ListViewItem item in this.listView_opacDatabases.Items)
             {
-                existing_dbnames.Add(this.listView_opacDatabases.Items[i].Text);
+                existing_dbnames.Add(item.Text);
             }
 
             OpacNormalDatabaseDialog dlg = new OpacNormalDatabaseDialog();
@@ -3239,34 +3586,49 @@ namespace dp2Circulation
             dlg.ManagerForm = this;
             dlg.ExcludingDbNames = existing_dbnames;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacNormalDatabaseDialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "ManagerForm_OpacNormalDatabaseDialog_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
 
             List<ListViewItem> items = new List<ListViewItem>();
             List<string> dbnames = StringUtil.SplitList(dlg.DatabaseName);
+            List<string> aliases = StringUtil.SplitList(dlg.DatabaseAlias);
 
-            foreach (string strName in dbnames)
             {
-                XmlDocument dom = new XmlDocument();
-                dom.LoadXml("<database name='' />");
-                // 从<virtualDatabase>元素下的若干<caption>中，选出符合当前工作语言的一个名字字符串
-                // 从一个元素的下级<caption>元素中, 提取语言符合的文字值
-                //// string strName = dlg.DatabaseName;
-                string strType = "database";
+                int i = 0;
+                foreach (string strName in dbnames)
+                {
+                    // 别名
+                    string alias = "";
+                    if (i < aliases.Count)
+                        alias = aliases[i];
 
-                DomUtil.SetAttr(dom.DocumentElement, "name", strName);
+                    XmlDocument dom = new XmlDocument();
+                    dom.LoadXml("<database name='' />");
+                    // 从<virtualDatabase>元素下的若干<caption>中，选出符合当前工作语言的一个名字字符串
+                    // 从一个元素的下级<caption>元素中, 提取语言符合的文字值
+                    //// string strName = dlg.DatabaseName;
+                    string strType = "database";
 
-                ListViewItem item = new ListViewItem(strName, 0);
-                item.SubItems.Add(GetOpacDatabaseTypeDisplayString(strType));
-                item.Tag = dom.DocumentElement.OuterXml;   // 记载XML定义片断
+                    DomUtil.SetAttr(dom.DocumentElement, "name", strName);
+                    ListViewItem item = new ListViewItem(strName, 0);
+                    ListViewUtil.ChangeItemText(item, COLUMN_OPAC_TYPE, GetOpacDatabaseTypeDisplayString(strType));
 
-                this.listView_opacDatabases.Items.Add(item);
+                    if (string.IsNullOrEmpty(alias) == false)
+                        dom.DocumentElement.SetAttribute("alias", alias);
+                    ListViewUtil.ChangeItemText(item, COLUMN_OPAC_ALIAS, alias);
 
-                items.Add(item);
+                    item.Tag = dom.DocumentElement.OuterXml;   // 记载XML定义片断
+
+                    this.listView_opacDatabases.Items.Add(item);
+
+                    items.Add(item);
+
+                    i++;
+                }
             }
 
             // 需要立即向服务器提交修改
@@ -3316,7 +3678,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3429,16 +3791,23 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
 
         }
 
         private void toolStripButton_refreshOpacDatabaseList_Click(object sender, EventArgs e)
         {
-            RefreshOpacDatabaseList();
+            this.toolStripButton_refreshOpacDatabaseList.Enabled = false;
+            try
+            {
+                RefreshOpacDatabaseList();
+            }
+            finally
+            {
+                this.toolStripButton_refreshOpacDatabaseList.Enabled = true;
+            }
         }
-
 
         void RefreshOpacDatabaseList()
         {
@@ -3498,7 +3867,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3626,7 +3995,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -3649,7 +4018,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -3666,7 +4035,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -3689,7 +4058,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -3753,7 +4122,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
 
         }
@@ -3876,7 +4245,7 @@ namespace dp2Circulation
                 goto ERROR1;
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -4021,7 +4390,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -4200,7 +4569,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -4259,7 +4628,7 @@ namespace dp2Circulation
                 goto ERROR1;
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -4300,7 +4669,15 @@ namespace dp2Circulation
         // 刷新
         private void toolStripButton_opacBrowseFormats_refresh_Click(object sender, EventArgs e)
         {
-            RefreshOpacBrowseFormatTree();
+            this.toolStripButton_opacBrowseFormats_refresh.Enabled = false;
+            try
+            {
+                RefreshOpacBrowseFormatTree();
+            }
+            finally
+            {
+                this.toolStripButton_opacBrowseFormats_refresh.Enabled = true;
+            }
         }
 
         void RefreshOpacBrowseFormatTree()
@@ -4755,11 +5132,10 @@ namespace dp2Circulation
             */
 
             XmlNodeList nodes = dom.DocumentElement.SelectNodes("//item");
-            for (int i = 0; i < nodes.Count; i++)
+            foreach (XmlElement node in nodes)
             {
-                XmlNode node = nodes[i];
-
                 bool bCanBorrow = false;
+#if NO
 
                 // 获得布尔型的属性参数值
                 // return:
@@ -4773,11 +5149,23 @@ namespace dp2Circulation
                      out strError);
                 if (nRet == -1)
                     return -1;
+#endif
+                string strCanBorrow = node.GetAttribute("canborrow");
+                if (string.IsNullOrEmpty(strCanBorrow))
+                    strCanBorrow = "否";
+                else if (strCanBorrow == "yes")
+                    strCanBorrow = "是";
+                else if (strCanBorrow == "no")
+                    strCanBorrow = "否";
+
+                string strCanReturn = node.GetAttribute("canreturn");
 
                 string strText = node.InnerText;
 
+#if NO
                 if (String.IsNullOrEmpty(strText) == true)
                     continue;
+#endif
 
                 // 
                 string strLibraryCode = "";
@@ -4787,7 +5175,6 @@ namespace dp2Circulation
                     strLibraryCode = DomUtil.GetAttr(parent, "code");
                 }
 
-                bool bNullable = true;
 
                 // 获得布尔型的属性参数值
                 // return:
@@ -4797,7 +5184,7 @@ namespace dp2Circulation
                 nRet = DomUtil.GetBooleanParam(node,
                      "itemBarcodeNullable",
                      true,
-                     out bNullable,
+                     out bool bNullable,
                      out strError);
                 if (nRet == -1)
                     return -1;
@@ -4810,7 +5197,8 @@ namespace dp2Circulation
                 ListViewItem item = new ListViewItem();
                 ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_LIBRARYCODE, strLibraryCode);
                 ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_ROOM, strText);
-                ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, bCanBorrow == true ? "是" : "否");
+                ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, strCanBorrow);
+                ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANRETURN, strCanReturn);
                 ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_ITEMBARCODENULLABLE, bNullable == true ? "是" : "否");
 
                 this.listView_location_list.Items.Add(item);
@@ -4834,7 +5222,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -4857,7 +5245,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -4874,7 +5262,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -4897,7 +5285,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -4920,11 +5308,18 @@ namespace dp2Circulation
                 string strLibraryCode = ListViewUtil.GetItemText(item, LOCATION_COLUMN_LIBRARYCODE);
                 string strLocation = ListViewUtil.GetItemText(item, LOCATION_COLUMN_ROOM);
                 string strCanBorrow = ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANBORROW);
+                string strCanReturn = ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANRETURN);
                 string strNullable = ListViewUtil.GetItemText(item, LOCATION_COLUMN_ITEMBARCODENULLABLE);
 
+#if NO
                 bool bCanBorrow = false;
                 if (strCanBorrow == "是" || strCanBorrow == "yes")
                     bCanBorrow = true;
+#endif
+                if (strCanBorrow == "是")
+                    strCanBorrow = "yes";
+                else if (strCanBorrow == "否")
+                    strCanBorrow = "no";
 
                 bool bNullable = true;
                 if (strNullable == "是" || strNullable == "yes")
@@ -4934,11 +5329,13 @@ namespace dp2Circulation
 
                 if (string.IsNullOrEmpty(strLibraryCode) == true)
                 {
-                    XmlNode nodeItem = dom.CreateElement("item");
+                    XmlElement nodeItem = dom.CreateElement("item");
                     dom.DocumentElement.AppendChild(nodeItem);
 
                     nodeItem.InnerText = strLocation;
-                    DomUtil.SetAttr(nodeItem, "canborrow", bCanBorrow == true ? "yes" : "no");
+                    // DomUtil.SetAttr(nodeItem, "canborrow", bCanBorrow == true ? "yes" : "no");
+                    DomUtil.SetAttr(nodeItem, "canborrow", strCanBorrow);
+                    nodeItem.SetAttribute("canreturn", strCanReturn);
                     DomUtil.SetAttr(nodeItem, "itemBarcodeNullable", bNullable == true ? "yes" : "no");
                 }
                 else
@@ -4964,7 +5361,7 @@ namespace dp2Circulation
                 {
                     List<ListViewItem> items = (List<ListViewItem>)table[key];
 
-                    XmlNode nodeLibrary = dom.CreateElement("library");
+                    XmlElement nodeLibrary = dom.CreateElement("library");
                     dom.DocumentElement.AppendChild(nodeLibrary);
                     DomUtil.SetAttr(nodeLibrary, "code", key);
 
@@ -4972,11 +5369,18 @@ namespace dp2Circulation
                     {
                         string strLocation = ListViewUtil.GetItemText(item, LOCATION_COLUMN_ROOM);
                         string strCanBorrow = ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANBORROW);
+                        string strCanReturn = ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANRETURN);
                         string strNullable = ListViewUtil.GetItemText(item, LOCATION_COLUMN_ITEMBARCODENULLABLE);
 
+#if NO
                         bool bCanBorrow = false;
                         if (strCanBorrow == "是" || strCanBorrow == "yes")
                             bCanBorrow = true;
+#endif
+                        if (strCanBorrow == "是")
+                            strCanBorrow = "yes";
+                        else if (strCanBorrow == "否")
+                            strCanBorrow = "no";
 
                         bool bNullable = true;
                         if (strNullable == "是" || strNullable == "yes")
@@ -4984,11 +5388,13 @@ namespace dp2Circulation
                         else
                             bNullable = false;
 
-                        XmlNode nodeItem = dom.CreateElement("item");
+                        XmlElement nodeItem = dom.CreateElement("item");
                         nodeLibrary.AppendChild(nodeItem);
 
                         nodeItem.InnerText = strLocation;
-                        DomUtil.SetAttr(nodeItem, "canborrow", bCanBorrow == true ? "yes" : "no");
+                        // DomUtil.SetAttr(nodeItem, "canborrow", bCanBorrow == true ? "yes" : "no");
+                        DomUtil.SetAttr(nodeItem, "canborrow", strCanBorrow);
+                        nodeItem.SetAttribute("canreturn", strCanReturn);
                         DomUtil.SetAttr(nodeItem, "itemBarcodeNullable", bNullable == true ? "yes" : "no");
                     }
                 }
@@ -5015,18 +5421,26 @@ namespace dp2Circulation
 
             // 2014/9/4
             // library.xml 中 <locationTypes> 内容或可能与 GetValueTable() API 相关，每当修改和保存了<locationTypes> 信息，都要刷新一下值列表缓存，以便界面可以重新获得 location 列表值
-            this.MainForm.ClearValueTableCache();
+            Program.MainForm.ClearValueTableCache();
             return 0;
         }
 
         private void toolStripButton_location_refresh_Click(object sender, EventArgs e)
         {
-            // 在listview中列出所有馆藏地
-            string strError = "";
-            int nRet = ListAllLocations(out strError);
-            if (nRet == -1)
+            this.toolStripButton_location_refresh.Enabled = false;  // 防止快速点按钮时候多重装入列表内容
+            try
             {
-                MessageBox.Show(this, strError);
+                // 在listview中列出所有馆藏地
+                string strError = "";
+                int nRet = ListAllLocations(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+            }
+            finally
+            {
+                this.toolStripButton_location_refresh.Enabled = true;
             }
         }
 
@@ -5088,13 +5502,13 @@ namespace dp2Circulation
         {
             LocationItemDialog dlg = new LocationItemDialog();
             MainForm.SetControlFont(dlg, this.Font, false);
-
+            dlg.HelpRequested += DlgNewLocation_HelpRequested;
             dlg.CreateMode = true;
             dlg.LibraryCodeList = this.GetLibraryCodeList();
             dlg.ItemBarcodeNullable = true;
             dlg.StartPosition = FormStartPosition.CenterScreen;
 
-        REDO:
+            REDO:
             dlg.ShowDialog(this);
 
             if (dlg.DialogResult != DialogResult.OK)
@@ -5116,7 +5530,9 @@ namespace dp2Circulation
             ListViewItem item = new ListViewItem();
             ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_LIBRARYCODE, dlg.LibraryCode);
             ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_ROOM, dlg.LocationString);
-            ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, dlg.CanBorrow == true ? "是" : "否");
+            // ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, dlg.CanBorrow == true ? "是" : "否");
+            ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, dlg.CanBorrow);
+            ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANRETURN, dlg.CanReturn);
             ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_ITEMBARCODENULLABLE, dlg.ItemBarcodeNullable == true ? "是" : "否");
 
             this.listView_location_list.Items.Add(item);
@@ -5124,6 +5540,11 @@ namespace dp2Circulation
             item.EnsureVisible();
 
             this.LocationTypesDefChanged = true;
+        }
+
+        private void DlgNewLocation_HelpRequested(object sender, HelpEventArgs hlpevent)
+        {
+            Process.Start("https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E6%96%B0%E5%A2%9E%E9%A6%86%E8%97%8F%E5%9C%B0%E5%B9%B6%E8%AE%BE%E7%BD%AE%E6%98%AF%E5%90%A6%E5%8F%82%E4%B8%8E%E6%B5%81%E9%80%9A");
         }
 
         // 修改馆藏地点事项
@@ -5139,15 +5560,17 @@ namespace dp2Circulation
 
             LocationItemDialog dlg = new LocationItemDialog();
             MainForm.SetControlFont(dlg, this.Font, false);
-
+            dlg.HelpRequested += DlgModifyLocation_HelpRequested;
             dlg.LibraryCodeList = this.GetLibraryCodeList();
             dlg.LibraryCode = ListViewUtil.GetItemText(item, LOCATION_COLUMN_LIBRARYCODE);
             dlg.LocationString = ListViewUtil.GetItemText(item, LOCATION_COLUMN_ROOM);
-            dlg.CanBorrow = (ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANBORROW) == "是") ? true : false;
+            // dlg.CanBorrow = (ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANBORROW) == "是") ? true : false;
+            dlg.CanBorrow = ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANBORROW);
+            dlg.CanReturn = ListViewUtil.GetItemText(item, LOCATION_COLUMN_CANRETURN);
             dlg.ItemBarcodeNullable = (ListViewUtil.GetItemText(item, LOCATION_COLUMN_ITEMBARCODENULLABLE) == "是") ? true : false;
             dlg.StartPosition = FormStartPosition.CenterScreen;
 
-        REDO:
+            REDO:
             dlg.ShowDialog(this);
 
             if (dlg.DialogResult != DialogResult.OK)
@@ -5167,20 +5590,28 @@ namespace dp2Circulation
 
             ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_LIBRARYCODE, dlg.LibraryCode);
             ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_ROOM, dlg.LocationString);
-            ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, dlg.CanBorrow == true ? "是" : "否");
+            // ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, dlg.CanBorrow == true ? "是" : "否");
+            ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANBORROW, dlg.CanBorrow);
+            ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_CANRETURN, dlg.CanReturn);
             ListViewUtil.ChangeItemText(item, LOCATION_COLUMN_ITEMBARCODENULLABLE, dlg.ItemBarcodeNullable == true ? "是" : "否");
 
             ListViewUtil.SelectLine(item, true);
             this.LocationTypesDefChanged = true;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
+        }
+
+        private void DlgModifyLocation_HelpRequested(object sender, HelpEventArgs hlpevent)
+        {
+            Process.Start("https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E6%96%B0%E5%A2%9E%E9%A6%86%E8%97%8F%E5%9C%B0%E5%B9%B6%E8%AE%BE%E7%BD%AE%E6%98%AF%E5%90%A6%E5%8F%82%E4%B8%8E%E6%B5%81%E9%80%9A");
         }
 
         const int LOCATION_COLUMN_LIBRARYCODE = 0;
         const int LOCATION_COLUMN_ROOM = 1;
         const int LOCATION_COLUMN_CANBORROW = 2;
-        const int LOCATION_COLUMN_ITEMBARCODENULLABLE = 3;
+        const int LOCATION_COLUMN_CANRETURN = 3;
+        const int LOCATION_COLUMN_ITEMBARCODENULLABLE = 4;
 
         // 2014/9/6
         static string GetLocationItemName(ListViewItem item)
@@ -5226,7 +5657,8 @@ namespace dp2Circulation
                 "ManagerForm",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2);
+                MessageBoxDefaultButton.Button2,
+                0, "https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E6%96%B0%E5%A2%9E%E9%A6%86%E8%97%8F%E5%9C%B0%E5%B9%B6%E8%AE%BE%E7%BD%AE%E6%98%AF%E5%90%A6%E5%8F%82%E4%B8%8E%E6%B5%81%E9%80%9A");
             if (result != DialogResult.Yes)
                 return;
 
@@ -5245,7 +5677,7 @@ namespace dp2Circulation
 
             this.LocationTypesDefChanged = true;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -5483,7 +5915,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -5566,7 +5998,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -5589,7 +6021,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5608,7 +6040,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -5622,7 +6054,7 @@ namespace dp2Circulation
                     goto ERROR1;
 
                 // 清除内容中缓存的值列表定义
-                this.MainForm.ClearValueTableCache();
+                Program.MainForm.ClearValueTableCache();
 
                 return (int)lRet;
             }
@@ -5636,7 +6068,7 @@ namespace dp2Circulation
             }
 
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5702,19 +6134,26 @@ namespace dp2Circulation
 
             this.ValueTableChanged = false;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
 
         }
 
         private void toolStripButton_valueTable_refresh_Click(object sender, EventArgs e)
         {
-            string strError = "";
-
-            int nRet = this.ListValueTables(out strError);
-            if (nRet == -1)
+            this.toolStripButton_valueTable_refresh.Enabled = false;
+            try
             {
-                MessageBox.Show(this, strError);
+                string strError = "";
+                int nRet = this.ListValueTables(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+            }
+            finally
+            {
+                this.toolStripButton_valueTable_refresh.Enabled = true;
             }
         }
 
@@ -5787,7 +6226,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -5810,7 +6249,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5829,7 +6268,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -5853,7 +6292,7 @@ namespace dp2Circulation
                 EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5925,18 +6364,26 @@ namespace dp2Circulation
             this.ScriptChanged = false;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
         private void toolStripButton_script_refresh_Click(object sender, EventArgs e)
         {
-            string strError = "";
-
-            int nRet = this.ListScript(out strError);
-            if (nRet == -1)
+            this.toolStripButton_script_refresh.Enabled = false;
+            try
             {
-                MessageBox.Show(this, strError);
+                string strError = "";
+
+                int nRet = this.ListScript(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+            }
+            finally
+            {
+                this.toolStripButton_script_refresh.Enabled = true;
             }
         }
 
@@ -5990,7 +6437,7 @@ namespace dp2Circulation
             this.textBox_script.DisableEmSetSelMsg = true;
             OnScriptTextCaretChanged();
             return;
-        ERROR1:
+            ERROR1:
             // 发出警告性的响声
             Console.Beep();
         }
@@ -6293,7 +6740,7 @@ namespace dp2Circulation
 
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6492,7 +6939,7 @@ namespace dp2Circulation
             this.ZhongcihaoChanged = true;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6558,7 +7005,7 @@ namespace dp2Circulation
             this.ZhongcihaoChanged = true;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6874,7 +7321,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6940,7 +7387,7 @@ namespace dp2Circulation
             treeView_zhongcihao_AfterSelect(this, null);
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6963,11 +7410,19 @@ namespace dp2Circulation
 
         private void toolStripButton_zhongcihao_refresh_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = this.ListZhongcihao(out strError);
-            if (nRet == -1)
+            this.toolStripButton_zhongcihao_refresh.Enabled = false;
+            try
             {
-                MessageBox.Show(this, strError);
+                string strError = "";
+                int nRet = this.ListZhongcihao(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+            }
+            finally
+            {
+                this.toolStripButton_zhongcihao_refresh.Enabled = true;
             }
         }
 
@@ -7023,8 +7478,8 @@ namespace dp2Circulation
         // 观察XML定义代码
         private void toolStripButton_arrangement_viewXml_Click(object sender, EventArgs e)
         {
-            if (this.MainForm.CallNumberCfgDom == null
-                || this.MainForm.CallNumberCfgDom.DocumentElement == null)
+            if (Program.MainForm.CallNumberCfgDom == null
+                || Program.MainForm.CallNumberCfgDom.DocumentElement == null)
             {
                 MessageBox.Show(this, "当前内存中尚未具备排架体系XML定义代码");
                 return;
@@ -7033,8 +7488,8 @@ namespace dp2Circulation
             XmlViewerForm dlg = new XmlViewerForm();
 
             dlg.Text = "当前内存中的排架体系XML定义代码";
-            dlg.MainForm = this.MainForm;
-            dlg.XmlString = this.MainForm.CallNumberCfgDom.DocumentElement.OuterXml;
+            // dlg.MainForm = Program.MainForm;
+            dlg.XmlString = Program.MainForm.CallNumberCfgDom.DocumentElement.OuterXml;
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog();
             return;
@@ -7057,11 +7512,19 @@ namespace dp2Circulation
 
         private void toolStripButton_arrangement_refresh_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = this.ListArrangement(out strError);
-            if (nRet == -1)
+            this.toolStripButton_arrangement_refresh.Enabled = false;
+            try
             {
-                MessageBox.Show(this, strError);
+                string strError = "";
+                int nRet = this.ListArrangement(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+            }
+            finally
+            {
+                this.toolStripButton_arrangement_refresh.Enabled = true;
             }
         }
 
@@ -7096,7 +7559,7 @@ namespace dp2Circulation
             dlg.AllZhongcihaoDatabaseInfoXml = GetAllZhongcihaoDbInfoXml();
             dlg.ExcludingDbNames = used_dbnames;
             dlg.StartPosition = FormStartPosition.CenterScreen;
-        REDO_INPUT:
+            REDO_INPUT:
             dlg.ShowDialog(this);
 
             if (dlg.DialogResult != DialogResult.OK)
@@ -7170,7 +7633,7 @@ namespace dp2Circulation
 
             this.ArrangementChanged = true;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7272,7 +7735,7 @@ namespace dp2Circulation
             treeView_arrangement_AfterSelect(this, null);
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7360,7 +7823,7 @@ namespace dp2Circulation
             this.ArrangementChanged = true;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7437,7 +7900,7 @@ namespace dp2Circulation
                 dlg.AllZhongcihaoDatabaseInfoXml = GetAllZhongcihaoDbInfoXml();
                 dlg.ExcludingDbNames = used_dbnames;
                 dlg.StartPosition = FormStartPosition.CenterScreen;
-            REDO_INPUT:
+                REDO_INPUT:
                 dlg.ShowDialog(this);
 
                 if (dlg.DialogResult != DialogResult.OK)
@@ -7541,7 +8004,7 @@ namespace dp2Circulation
                 this.ArrangementChanged = true;
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7693,7 +8156,7 @@ namespace dp2Circulation
 
             dlg.CreateMode = true;
             //dlg.DupCfgDialog = this;
-            dlg.DbFromInfos = this.MainForm.BiblioDbFromInfos;
+            dlg.DbFromInfos = Program.MainForm.BiblioDbFromInfos;
             dlg.BiblioDbNames = this.GetAllBiblioDbNames();
             dlg.ProjectName = "新的查重方案";
             dlg.ProjectComment = "";
@@ -7739,7 +8202,7 @@ namespace dp2Circulation
 
             dlg.CreateMode = false;
             // dlg.DupCfgDialog = this;
-            dlg.DbFromInfos = this.MainForm.BiblioDbFromInfos;
+            dlg.DbFromInfos = Program.MainForm.BiblioDbFromInfos;
             dlg.BiblioDbNames = this.GetAllBiblioDbNames();
             dlg.ProjectName = strProjectName;
             dlg.ProjectComment = strProjectComment;
@@ -7822,7 +8285,7 @@ namespace dp2Circulation
             FillDefaultList(this.m_dup_dom); // 库名的集合可能发生改变
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7881,7 +8344,7 @@ namespace dp2Circulation
 
             this.DupChanged = true;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -8011,11 +8474,19 @@ namespace dp2Circulation
 
         private void toolStripButton_dup_refresh_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = this.ListDup(out strError);
-            if (nRet == -1)
+            this.toolStripButton_dup_refresh.Enabled = false;
+            try
             {
-                MessageBox.Show(this, strError);
+                string strError = "";
+                int nRet = this.ListDup(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+            }
+            finally
+            {
+                this.toolStripButton_dup_refresh.Enabled = true;
             }
         }
 
@@ -8216,20 +8687,28 @@ namespace dp2Circulation
                 goto ERROR1;
 
             this.LoanPolicyDefChanged = false;
-            this.MainForm.ClearValueTableCache();   // 因为 <rightsTable> 里面的 <readerTypes> 和 <bookTypes> 元素可能发生变化，影响着值列表缓存
+            Program.MainForm.ClearValueTableCache();   // 因为 <rightsTable> 里面的 <readerTypes> 和 <bookTypes> 元素可能发生变化，影响着值列表缓存
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
         private void toolStripButton_newLoanPolicy_refresh_Click(object sender, EventArgs e)
         {
-            string strError = "";
-
-            int nRet = this.NewListRightsTables(out strError);
-            if (nRet == -1)
+            this.toolStripButton_newLoanPolicy_refresh.Enabled = false;
+            try
             {
-                MessageBox.Show(this, strError);
+                string strError = "";
+
+                int nRet = this.NewListRightsTables(out strError);
+                if (nRet == -1)
+                {
+                    MessageBox.Show(this, strError);
+                }
+            }
+            finally
+            {
+                this.toolStripButton_newLoanPolicy_refresh.Enabled = true;
             }
         }
 
@@ -8255,7 +8734,7 @@ namespace dp2Circulation
                 menuItem = new MenuItem("修改 " + strName + " (&M)");
                 menuItem.Click += new System.EventHandler(this.toolStripButton_calendar_modify_Click);
                 if (this.listView_calendar.SelectedItems.Count == 0
-                || StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.29") < 0)
+                || StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.29") < 0)
                     menuItem.Enabled = false;
                 // 缺省命令
                 menuItem.DefaultItem = true;
@@ -8269,7 +8748,7 @@ namespace dp2Circulation
 
             menuItem = new MenuItem("新增(&N)");
             menuItem.Click += new System.EventHandler(this.toolStripButton_calendar_new_Click);
-            if (StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.29") < 0)
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.29") < 0)
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
@@ -8289,7 +8768,7 @@ namespace dp2Circulation
             menuItem = new MenuItem(strText);
             menuItem.Click += new System.EventHandler(this.toolStripButton_calendar_delete_Click);
             if (this.listView_calendar.SelectedItems.Count == 0
-                || StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.29") < 0)
+                || StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.29") < 0)
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
@@ -8300,7 +8779,7 @@ namespace dp2Circulation
             menuItem = new MenuItem("保存(&S)");
             menuItem.Click += new System.EventHandler(this.toolStripButton_calendar_save_Click);
             if (this.CalendarDefChanged == false
-                || StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.29") < 0)
+                || StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.29") < 0)
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
@@ -8375,9 +8854,9 @@ namespace dp2Circulation
             dlg.Range = ListViewUtil.GetItemText(item, COLUMN_CALENDAR_RANGE);
             dlg.Comment = ListViewUtil.GetItemText(item, COLUMN_CALENDAR_COMMENT);
             dlg.Content = ListViewUtil.GetItemText(item, COLUMN_CALENDAR_CONTENT);
-            this.MainForm.AppInfo.LinkFormState(dlg, "CalendarDialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "CalendarDialog_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return;
@@ -8395,7 +8874,7 @@ namespace dp2Circulation
             // 一般编辑的时候，不可能修改日历名，所以 m_nCalendarVersion++; 就不用了
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -8417,10 +8896,10 @@ namespace dp2Circulation
             dlg.Comment = "";
             dlg.Content = "";
 
-        REDO:
-            this.MainForm.AppInfo.LinkFormState(dlg, "CalendarDialog_state");
+            REDO:
+            Program.MainForm.AppInfo.LinkFormState(dlg, "CalendarDialog_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return;
@@ -8504,7 +8983,7 @@ namespace dp2Circulation
 
             m_nCalendarVersion++;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -8516,20 +8995,28 @@ namespace dp2Circulation
                 goto ERROR1;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
         private void toolStripButton_calendar_refresh_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = ListCalendars(out strError);
-            if (nRet == -1)
-                goto ERROR1;
+            this.toolStripButton_calendar_refresh.Enabled = false;
+            try
+            {
+                string strError = "";
+                int nRet = ListCalendars(out strError);
+                if (nRet == -1)
+                    goto ERROR1;
 
-            return;
-        ERROR1:
-            MessageBox.Show(this, strError);
+                return;
+                ERROR1:
+                MessageBox.Show(this, strError);
+            }
+            finally
+            {
+                this.toolStripButton_calendar_refresh.Enabled = true;
+            }
         }
 
         private void listView_calendar_DoubleClick(object sender, EventArgs e)
@@ -8553,8 +9040,25 @@ namespace dp2Circulation
             }
         }
 
+        bool _kernelInitialized = false;
+
         private void tabControl_main_SelectedIndexChanged(object sender, EventArgs e)
         {
+            ActivateHelpUrl();
+
+            if (this.tabControl_main.SelectedTab == this.tabPage_kernel
+                && _kernelInitialized == false)
+            {
+                if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.117") < 0)
+                {
+                    this.ShowMessage("内核管理功能要求当前连接的 dp2library 服务器版本为 2.117 或以上 (而现在是 " + Program.MainForm.ServerVersion + ")", "red", true);
+                    return;
+                }
+
+                if (this.kernelResTree1.Fill() == true)
+                    _kernelInitialized = true;
+            }
+
             if (this.tabControl_main.SelectedTab == this.tabPage_newLoanPolicy)
             {
                 // 同步日历名列表
@@ -8574,6 +9078,20 @@ namespace dp2Circulation
                     m_nCalendarVersion = 0;
                 }
             }
+        }
+
+        void ActivateHelpUrl()
+        {
+            if (this.tabControl_main.SelectedTab == this.tabPage_databases)
+                this.HelpUrl = "https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E5%88%9B%E5%BB%BA%E6%88%96%E5%88%A0%E9%99%A4%E4%B9%A6%E7%9B%AE%E5%BA%93";
+            else if (this.tabControl_main.SelectedTab == this.tabPage_locations)
+                this.HelpUrl = "https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E6%96%B0%E5%A2%9E%E9%A6%86%E8%97%8F%E5%9C%B0%E5%B9%B6%E8%AE%BE%E7%BD%AE%E6%98%AF%E5%90%A6%E5%8F%82%E4%B8%8E%E6%B5%81%E9%80%9A";
+            else if (this.tabControl_main.SelectedTab == this.tabPage_bookshelf)
+                this.HelpUrl = "https://github.com/DigitalPlatform/dp2/wiki/%E5%9B%BE%E4%B9%A6%E9%A6%86%E6%8E%92%E6%9E%B6%E4%BD%93%E7%B3%BB";
+            else if (this.tabControl_main.SelectedTab == this.tabPage_script)
+                this.HelpUrl = "https://github.com/DigitalPlatform/dp2/wiki/%E9%85%8D%E7%BD%AE%E6%9D%A1%E7%A0%81%E6%A0%A1%E9%AA%8C%E5%8A%9F%E8%83%BD";
+            else
+                this.HelpUrl = "";
         }
 
         // 参与排序的列号数组
@@ -8605,8 +9123,35 @@ namespace dp2Circulation
 
         #endregion
 
+        private void kernelResTree1_GetChannel(object sender, DigitalPlatform.LibraryClient.GetChannelEventArgs e)
+        {
+            e.Channel = Program.MainForm.GetChannel();
+            if (e.BeginLoop == true)
+            {
+                this.ShowMessage("正在访问服务器 ...");
+                stop.OnStop += new StopEventHandler(this.DoStop);
+                // stop.Initial(" ...");
+                stop.BeginLoop();
+            }
+        }
+
+        private void kernelResTree1_ReturnChannel(object sender, DigitalPlatform.LibraryClient.ReturnChannelEventArgs e)
+        {
+            Program.MainForm.ReturnChannel(e.Channel);
+            if (e.EndLoop == true)
+            {
+                if (stop != null)
+                {
+                    stop.EndLoop();
+                    stop.OnStop -= new StopEventHandler(this.DoStop);
+                    stop.Initial("");
+                }
+                this.ClearMessage();
+            }
+        }
+
 
     }
 
-        #endregion // 查重
+    #endregion // 查重
 }

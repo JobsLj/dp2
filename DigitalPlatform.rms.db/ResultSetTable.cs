@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 
 using DigitalPlatform.ResultSet;
+using DigitalPlatform.Text;
 
 namespace DigitalPlatform.rms
 {
@@ -176,6 +177,7 @@ namespace DigitalPlatform.rms
         // parameters:
         //      strName 全局结果集名字。如果为空，表示希望函数自动发生一个结果集名
         //      resultset   要设置的结果集对象。如果为null，表示想从全局结果集中清除这个名字的结果集对象。如果strName和resultset参数都为空，表示想清除全部全局结果集对象
+        //                  注：当 resultset 为 null 时，strName 参数值可以为 "resultset_name1,resultset_name2" 形态
         // return:
         //      返回实际设置的结果集名字
         public string SetResultset(
@@ -188,6 +190,7 @@ namespace DigitalPlatform.rms
             {
                 if (string.IsNullOrEmpty(strName) == true)
                 {
+                    // strName 为空，resultset 为 null，表示清除全部结果集对象
                     if (resultset == null)
                     {
                         foreach (string key in this.Keys)
@@ -208,15 +211,33 @@ namespace DigitalPlatform.rms
                 }
                 if (resultset == null)
                 {
-                    // 2016/1/23
-                    resultset = (DpResultSet)this[strName];
-                    if (resultset != null)
-                    {
-                        resultset.GetTempFilename -= new GetTempFilenameEventHandler(resultset_GetTempFilename);
-                        resultset.Close();
-                    }
+#if NO
+                    // 2018/9/20
+                    // 如果名字的第一个字符为 #，则要去掉 #。这样调用者可以用也可以不用 # 在名字里面
+                    if (strName.StartsWith("#"))
+                        strName = strName.Substring(1);
+#endif
+                    List<string> names = StringUtil.SplitList(strName);
 
-                    this.Remove(strName);
+                    foreach (string name in names)
+                    {
+                        string current = name;
+
+                        // 去掉全局结果集名字前面的符号 #
+                        if (string.IsNullOrEmpty(name) == false
+                            && name.StartsWith("#"))
+                            current = name.Substring(1);
+
+                        // 2016/1/23
+                        resultset = (DpResultSet)this[current];
+                        if (resultset != null)
+                        {
+                            resultset.GetTempFilename -= new GetTempFilenameEventHandler(resultset_GetTempFilename);
+                            resultset.Close();
+                        }
+
+                        this.Remove(current);
+                    }
                     return strName;
                 }
 
@@ -232,11 +253,19 @@ namespace DigitalPlatform.rms
             }
         }
 
+        public delegate void Delegate_writeToLog(string text);
+
         // 清除最近没有使用过的 ResultSet 对象
         // parameters:
         //      delta   最近一次用过的时刻距离现在的时间长度。长于这个的对象才会被清除
-        public void Clean(TimeSpan delta)
+        //      proc_writeToLog    回调函数，把操作过程记入错误日志
+        public int Clean(TimeSpan delta,
+            CancellationToken token,
+            Delegate_writeToLog proc_writeToLog = null)
         {
+
+            proc_writeToLog?.Invoke("开始清理全局结果集");
+
             List<string> remove_keys = new List<string>();
 
             // 读锁定并不阻碍一般性访问
@@ -246,6 +275,8 @@ namespace DigitalPlatform.rms
             {
                 foreach (string key in this.Keys)
                 {
+                    token.ThrowIfCancellationRequested();
+
                     DpResultSet resultset = (DpResultSet)this[key];
 
                     if (resultset == null)
@@ -265,8 +296,13 @@ namespace DigitalPlatform.rms
                 this.m_lock.ExitReadLock();
             }
 
+            proc_writeToLog?.Invoke(string.Format("搜集列表完成，总数 {0}", remove_keys.Count));
+
             if (remove_keys.Count == 0)
-                return;
+            {
+                proc_writeToLog?.Invoke("结束清理全局结果集。");
+                return 0;
+            }
 
             // 因为要删除某些元素，所以用写锁定
             List<DpResultSet> delete_resultsets = new List<DpResultSet>();
@@ -276,6 +312,8 @@ namespace DigitalPlatform.rms
             {
                 foreach (string key in remove_keys)
                 {
+                    token.ThrowIfCancellationRequested();
+
                     DpResultSet resultset = (DpResultSet)this[key];
                     if (resultset == null)
                         continue;
@@ -293,12 +331,19 @@ namespace DigitalPlatform.rms
 
             foreach (DpResultSet resultset in delete_resultsets)
             {
+                token.ThrowIfCancellationRequested();
+
                 // 2016/1/23
                 if (resultset != null)
                     resultset.GetTempFilename -= new GetTempFilenameEventHandler(resultset_GetTempFilename);
 
                 resultset.Close();
             }
+
+            proc_writeToLog?.Invoke(string.Format("结束清理全局结果集，删除结果集总数 {0}。", 
+                delete_resultsets.Count));
+
+            return delete_resultsets.Count;
         }
     }
 }

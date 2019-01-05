@@ -1,15 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using System.Drawing.Drawing2D;
 
 using DigitalPlatform;
 using DigitalPlatform.Xml;
-using DigitalPlatform.CommonControl;
 
 namespace dp2Circulation
 {
@@ -19,18 +15,28 @@ namespace dp2Circulation
     /// </summary>
     public partial class BindingForm : Form
     {
+        // 2017/12/15
+        /// <summary>
+        /// 获得宏的值
+        /// </summary>
+        public event GetMacroValueHandler GetMacroValue = null;
+
         // Ctrl+A自动创建数据
         /// <summary>
         /// 自动创建数据
         /// </summary>
         public event GenerateDataEventHandler GenerateData = null;
 
+        public event GetBiblioEventHandler GetBiblio = null;
+
         const int WM_ENSURE_VISIBLE = API.WM_USER + 200;
 
+        /*
         /// <summary>
         /// 框架窗口
         /// </summary>
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
+         * */
 
         /// <summary>
         /// 期刊控件所关联的 ApplicationInfo 对象
@@ -65,13 +71,26 @@ namespace dp2Circulation
         public BindingForm()
         {
             InitializeComponent();
+
+            this.bindingControl1.GetBiblio += bindingControl1_GetBiblio;
+            this.bindingControl1.GetMacroValue += BindingControl1_GetMacroValue;
+        }
+
+        private void BindingControl1_GetMacroValue(object sender, GetMacroValueEventArgs e)
+        {
+            this.GetMacroValue?.Invoke(sender, e);
+        }
+
+        void bindingControl1_GetBiblio(object sender, GetBiblioEventArgs e)
+        {
+            this.GetBiblio?.Invoke(sender, e);
         }
 
         private void BindingForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 
             this.bindingControl1.GetOrderInfo -= new GetOrderInfoEventHandler(bindingControl1_GetOrderInfo);
@@ -99,7 +118,7 @@ namespace dp2Circulation
 
             LoadState();
 
-            this.MainForm.LoadSplitterPos(
+            Program.MainForm.LoadSplitterPos(
 this.splitContainer_main,
 "bindingform",
 "main_splitter_pos");
@@ -177,6 +196,21 @@ this.splitContainer_main,
                 item.CallNumber = "";   // 不要给出当前的，以免影响到取号结果
 
                 item.RecPath = this.entityEditControl1.RecPath;
+
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(item.RecPath))
+                {
+                    if (string.IsNullOrEmpty(entityEditControl1.RefID) == true)
+                    {
+                        // throw new Exception("entityEditControl_editing 的 RefID 成员不应为空"); // TODO: 可以考虑增加健壮性，当时发生 RefID 字符串
+                        entityEditControl1.RefID = Guid.NewGuid().ToString();
+                    }
+
+                    item.RecPath = "@refID:" + entityEditControl1.RefID;
+                }
+#endif
+
                 item.Location = entityEditControl1.LocationString;
                 item.Barcode = entityEditControl1.Barcode;
             }
@@ -249,11 +283,13 @@ this.splitContainer_main,
                 bNeedRelayout = true;
             }
 
+#if NO
             // 验收批次号
             this.AcceptBatchNo = this.AppInfo.GetString(
                 "binding_form",
                 "accept_batchno",
                 "");
+#endif
 
             // 册格子内容行
             {
@@ -336,22 +372,22 @@ MessageBoxDefaultButton.Button2);
                 }
             }
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
                 // 分割条位置
-                this.MainForm.SaveSplitterPos(
+                Program.MainForm.SaveSplitterPos(
                     this.splitContainer_main,
                     "bindingform",
                     "main_splitter_pos");
 
                 // 显示订购信息坐标值
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
                     "binding_form",
                     "display_orderinfoxy",
                     this.bindingControl1.DisplayOrderInfoXY);
 
                 // 显示分馆外订购组
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
                     "binding_form",
                     "display_lockedOrderGroup",
                     !this.bindingControl1.HideLockedOrderGroup);
@@ -367,10 +403,12 @@ MessageBoxDefaultButton.Button2);
                     "edit_area_visible",
                     this.m_bEditAreaVisible);
 
+#if NO
                 this.AppInfo.SetString(
                     "binding_form",
                     "accept_batchno",
                     this.AcceptBatchNo);
+#endif
             }
         }
 
@@ -549,6 +587,7 @@ MessageBoxDefaultButton.Button2);
             }
         }
 
+#if NO
         /// <summary>
         /// 验收批次号
         /// </summary>
@@ -563,6 +602,7 @@ MessageBoxDefaultButton.Button2);
                 this.bindingControl1.AcceptBatchNo = value;
             }
         }
+#endif
 
         /// <summary>
         /// 验收批次号是否已经在界面被输入了
@@ -892,6 +932,7 @@ MessageBoxDefaultButton.Button2);
 
             if (m_bEditAreaVisible == bVisible)
                 return;
+
             if (bVisible == false)
             {
                 // 隐藏编辑区域。相当于把装订控件直接放到顶层
@@ -904,7 +945,8 @@ MessageBoxDefaultButton.Button2);
                 this.bindingControl1.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top | AnchorStyles.Bottom;
                 this.bindingControl1.Location = this.splitContainer_main.Location;
                 this.bindingControl1.Size = this.splitContainer_main.Size;
-                this.Controls.Add(this.bindingControl1);
+                if (this.Controls.IndexOf(this.bindingControl1) == -1)
+                    this.Controls.Add(this.bindingControl1);
 
                 this.Controls.Remove(this.splitContainer_main);
                 ControlExtention.AddFreeControl(_freeControls, this.splitContainer_main);
@@ -977,12 +1019,12 @@ MessageBoxDefaultButton.Button2);
         private void button_option1_Click(object sender, EventArgs e)
         {
             // 同步存储值
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
     "binding_form",
     "display_orderinfoxy",
     this.bindingControl1.DisplayOrderInfoXY);
 
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
 "binding_form",
 "display_lockedOrderGroup",
 !this.bindingControl1.HideLockedOrderGroup);

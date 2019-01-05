@@ -18,6 +18,8 @@ namespace DigitalPlatform.LibraryServer
     /// </summary>
     public partial class LibraryApplication
     {
+
+        // TODO: 这里要检查一下 strDbName，是否为合法的实用库名
         // 设置实用库信息
         //      strRootElementName  根元素名。如果为空，系统自会用<r>作为根元素
         //      strKeyAttrName  key属性名。如果为空，系统自动会用k
@@ -284,7 +286,6 @@ namespace DigitalPlatform.LibraryServer
                 + StringUtil.GetXmlStringSimple(strKey)
                 + "</word><match>exact</match><relation>=</relation><dataType>string</dataType><maxCount>-1</maxCount></item><lang>zh</lang></target>";
 
-            List<string> aPath = null;
             // 获得通用记录
             // 本函数可获得超过1条以上的路径
             // return:
@@ -298,7 +299,7 @@ namespace DigitalPlatform.LibraryServer
                 strQueryXml,
                 out strXml,
                 2,
-                out aPath,
+                out List<string> aPath,
                 out timestamp,
                 out strError);
             if (nRet == -1)

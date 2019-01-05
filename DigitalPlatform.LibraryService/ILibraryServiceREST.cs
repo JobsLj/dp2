@@ -185,6 +185,7 @@ SessionMode = SessionMode.NotAllowed)]
             string strBiblio,
             byte[] baTimestamp,
             string strComment,
+            string strStyle,
             out string strOutputBiblioRecPath,
             out byte[] baOutputTimestamp);
 
@@ -484,9 +485,10 @@ SessionMode = SessionMode.NotAllowed)]
 
         [OperationContract]
         LibraryServerResult ManageDatabase(string strAction,
-                    string strDatabaseName,
-                    string strDatabaseInfo,
-                    out string strOutputInfo);
+            string strDatabaseName,
+            string strDatabaseInfo,
+            string strStyle,
+            out string strOutputInfo);
 
         [OperationContract]
         LibraryServerResult GetUser(
@@ -524,8 +526,10 @@ SessionMode = SessionMode.NotAllowed)]
 
         [OperationContract]
         LibraryServerResult VerifyBarcode(
-            string strLibraryCode,
-            string strBarcode);
+    string strAction,
+    string strLibraryCode,
+    string strBarcode,
+            out string strOutputBarcode);
 
         [OperationContract]
         LibraryServerResult GetSystemParameter(
@@ -789,12 +793,13 @@ SessionMode = SessionMode.NotAllowed)]
 
         [OperationContract]
         LibraryServerResult GetFile(
-    string strCategory,
-    string strFileName,
-    long lStart,
-    long lLength,
-    out byte[] baContent,
-    out string strFileTime);
+            string strCategory,
+            string strFileName,
+            long lStart,
+            long lLength,
+            string strStyle,
+            out byte[] baContent,
+            out string strFileTime);
 
         [OperationContract]
         LibraryServerResult ListFile(
@@ -830,5 +835,34 @@ SessionMode = SessionMode.NotAllowed)]
     string strStyle,
     string strResultTypeList,
     out string[] results);
+
+        [OperationContract]
+        LibraryServerResult Dir(string strResPath,
+        long lStart,
+        long lLength,
+        string strLang,
+        string strStyle,
+        out ResInfoItem[] items,
+        out DigitalPlatform.rms.Client.rmsws_localhost.ErrorCodeValue kernel_errorcode);
+
+        [OperationContract]
+        LibraryServerResult GetAuthorNumber(
+    string strAuthor,
+    bool bSelectPinyin,
+    bool bSelectEntry,
+    bool bOutputDebugInfo,
+    ref List<Question> questions,
+    out string strNumber,
+    out string strDebugInfo);
+
+        [OperationContract]
+        LibraryServerResult GetPinyin(
+            string strType,
+            string strText,
+            out string strPinyinXml);
+
+        [OperationContract]
+        LibraryServerResult SetPinyin(
+string strPinyinXml);
     }
 }

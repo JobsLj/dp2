@@ -2,13 +2,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 using System.Threading;
-using System.Net;
 using System.Xml;
-// using System.Windows.Forms;
 using System.Diagnostics;
 using System.ServiceModel;
 using System.ServiceModel.Channels;
@@ -21,12 +18,12 @@ using System.IdentityModel.Claims;
 using System.IdentityModel.Selectors;
 using System.Security.Cryptography.X509Certificates;
 using System.Collections;
+using System.ServiceModel.Description;
+using System.Web;
 
 using DigitalPlatform.Range;
 using DigitalPlatform.Text;
 using DigitalPlatform.LibraryClient.localhost;
-using System.ServiceModel.Description;
-using System.Web;
 
 namespace DigitalPlatform.LibraryClient
 {
@@ -52,6 +49,12 @@ namespace DigitalPlatform.LibraryClient
         /// 前端版本太旧
         /// </summary>
         ClientVersionTooOld = 3,    // 前端版本太旧
+
+        NeedSmsLogin = 4,
+
+        RetryLogin = 5,
+
+        TempCodeMismatch = 6,
     }
 
     /// <summary>
@@ -67,6 +70,11 @@ namespace DigitalPlatform.LibraryClient
         /// dp2Library 服务器的 URL
         /// </summary>
         public string Url = "";
+
+        /// <summary>
+        /// 发出 dp2library 请求位置的上一个节点的 IP。格式为 节点名:IP 地址
+        /// </summary>
+        public string ClientIP { get; set; }
 
         /// <summary>
         /// RecieveTimeout
@@ -128,6 +136,7 @@ namespace DigitalPlatform.LibraryClient
 #else
                     this.m_ws.InnerChannel.OperationTimeout = value;
 #endif
+                    // RefreshContext();
                 }
             }
         }
@@ -223,6 +232,8 @@ namespace DigitalPlatform.LibraryClient
         public void Dispose()
         {
             this.Close();
+
+            // this.DisposeContext();
 
             this.BeforeLogin = null;
             this.AfterLogin = null;
@@ -393,10 +404,17 @@ out strError);
             {
                 if (channel.WcfException is System.ServiceModel.Security.MessageSecurityException)
                 {
+                    // 2017/5/5
+                    // 通讯安全性问题，时钟问题
+                    // 极少可能是很早的 dp2library 版本不具备 GetVersion() API
+                    strError = strError + "\r\n\r\n有可能是前端机器时钟和服务器时钟差异过大造成的(也有极少可能是用了很旧的 dp2library 版本)";
+                    return -1;
+#if NO
                     // 原来的dp2Library不具备GetVersion() API，会走到这里
                     strVersion = "0.0";
                     strError = "dp2 前端需要和 dp2Library 2.1 或以上版本配套使用 (而当前 dp2Library 版本号为 '2.0或以下' )。请升级 dp2Library 到最新版本。";
                     return 0;
+#endif
                 }
 
                 strError = "针对服务器 " + channel.Url + " 获得版本号的过程发生错误：" + strError;
@@ -491,6 +509,13 @@ out strError);
 
 #endif
 
+        static string USER_AGENT = "User-Agent";
+        static string DP2LIBRARYCLIENT = "dp2LibraryClient";
+
+        static string TIMEOUT_HEADER = "_timeout";
+
+        static string CLIENT_IP = "_clientip";
+
         // public localhost.LibraryWse ws
         /// <summary>
         /// 获取 localhost.dp2libraryClient 对象。这是 WCF 层的通道对象
@@ -528,6 +553,22 @@ out strError);
                             throw new Exception("当前条件编译版本不支持 basic.http 协议方式");
 #endif
 
+                        {
+                            HttpUserAgentEndpointBehavior behavior = new HttpUserAgentEndpointBehavior(
+                                () =>
+                                {
+                                    Dictionary<string, string> results = new Dictionary<string, string>();
+                                    results.Add(USER_AGENT, DP2LIBRARYCLIENT);
+                                    results.Add(TIMEOUT_HEADER, this.Timeout.ToString());
+                                    if (string.IsNullOrEmpty(this.ClientIP) == false)
+                                        results.Add(CLIENT_IP, this.ClientIP);
+                                    return results;
+                                }
+                                );
+                            this.m_ws.Endpoint.Behaviors.Add(behavior);
+                        }
+
+                        // RefreshContext();
                     }
                     else if (uri.Scheme.ToLower() == "rest.http")
                     {
@@ -546,12 +587,30 @@ out strError);
                             factory.Endpoint.Behaviors.Add(behavior);
                         }
 
+                        {
+                            HttpUserAgentEndpointBehavior behavior = new HttpUserAgentEndpointBehavior(
+                                () =>
+                                {
+                                    Dictionary<string, string> results = new Dictionary<string, string>();
+                                    results.Add(USER_AGENT, DP2LIBRARYCLIENT);
+                                    results.Add(TIMEOUT_HEADER, this.Timeout.ToString());
+                                    if (string.IsNullOrEmpty(this.ClientIP) == false)
+                                        results.Add(CLIENT_IP, this.ClientIP);
+                                    return results;
+                                }
+                                );
+                            factory.Endpoint.Behaviors.Add(behavior);
+                        }
+
+
 #if BASIC_HTTP
                         this.m_ws = factory.CreateChannel();
                         // this.m_ws = new localhost.dp2libraryRESTClient(CreateRestBinding(), address);
 #else
                             throw new Exception("当前条件编译版本不支持 rest.http 协议方式");
 #endif
+
+                        // RefreshContext();
                     }
                     else if (uri.Scheme.ToLower() == "net.tcp")
                     {
@@ -618,7 +677,12 @@ out strError);
 #endif
                      * */
 
-
+                    // 2017/7/5
+#if BASIC_HTTP
+                    SetInnerChannelOperationTimeout(this.OperationTimeout);
+#else
+                    this.m_ws.InnerChannel.OperationTimeout = this.OperationTimeout;
+#endif
                 }
                 if (String.IsNullOrEmpty(this.Url) == true)
                 {
@@ -678,9 +742,65 @@ out strError);
 #endif
 
                 this.WcfException = null;
+
                 return m_ws;
             }
         }
+
+#if NO
+        OperationContextScope _context = null;
+
+        void DisposeContext()
+        {
+            if (this._context != null)
+            {
+                this._context.Dispose();
+                this._context = null;
+            }
+        }
+
+        void RefreshContext()
+        {
+            if (this.m_ws is localhost.dp2libraryClient)
+            {
+                localhost.dp2libraryClient client = (this.m_ws as localhost.dp2libraryClient);
+                this.DisposeContext();
+                if (_context == null)
+                    _context = new OperationContextScope(client.InnerChannel);
+            }
+            else
+            {
+                IContextChannel channel = ((IContextChannel)this.m_ws);
+
+                this.DisposeContext();
+                if (_context == null)
+                    _context = new OperationContextScope(channel);
+
+                {
+                    // Add a HTTP Header to an outgoing request
+                    HttpRequestMessageProperty requestMessage = null;
+                    if (OperationContext.Current.OutgoingMessageProperties.ContainsKey(HttpRequestMessageProperty.Name))
+                        requestMessage = OperationContext.Current.OutgoingMessageProperties[HttpRequestMessageProperty.Name] as HttpRequestMessageProperty;
+                    if (requestMessage == null)
+                    {
+                        requestMessage = new HttpRequestMessageProperty();
+                        OperationContext.Current.OutgoingMessageProperties[HttpRequestMessageProperty.Name] = requestMessage;
+                    }
+                    requestMessage.Headers[USER_AGENT] = DP2LIBRARYCLIENT;
+                    requestMessage.Headers[TIMEOUT_HEADER] = this.OperationTimeout.ToString();
+                }
+#if NO
+                using (new OperationContextScope(channel))
+                {
+                    // Add a HTTP Header to an outgoing request
+                    HttpRequestMessageProperty requestMessage = new HttpRequestMessageProperty();
+                    requestMessage.Headers["timeout"] = timeout.ToString();
+                    OperationContext.Current.OutgoingMessageProperties[HttpRequestMessageProperty.Name] = requestMessage;
+                }
+#endif
+            }
+        }
+#endif
 
         /// <summary>
         /// 是否正在进行检索
@@ -900,7 +1020,7 @@ out strError);
             strOutputUserName = "";
             strLibraryCode = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginLogin(
@@ -910,13 +1030,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -1000,9 +1115,10 @@ out strError);
             strOutputUserName = "";
             strLibraryCode = "";
 
-        REDO:
+            REDO:
             TimeSpan old_timeout = this.Timeout;
-            this.Timeout = new TimeSpan(0, 0, 10);
+            if (this.Timeout < TimeSpan.FromSeconds(10))
+                this.Timeout = TimeSpan.FromSeconds(10);
             try
             {
                 LibraryServerResult result = ws.Login(out strOutputUserName,
@@ -1032,7 +1148,8 @@ out strError);
             }
             finally
             {
-                this.Timeout = old_timeout;
+                if (this.Timeout != old_timeout)
+                    this.Timeout = old_timeout;
             }
         }
 
@@ -1115,11 +1232,17 @@ out strError);
 
             this.WcfException = ex0;
 
+            // 2017/10/15
+            if (ex0 is InterruptException)
+            {
+                throw ex0;
+            }
+
             // System.TimeoutException
             if (ex0 is System.TimeoutException)
             {
                 this.ErrorCode = ErrorCode.RequestTimeOut;
-                this.AbortIt();
+                this.TryAbortIt();
                 strError = GetExceptionMessage(ex0);
                 return 0;
             }
@@ -1128,7 +1251,7 @@ out strError);
             {
                 System.ServiceModel.Security.MessageSecurityException ex = (System.ServiceModel.Security.MessageSecurityException)ex0;
                 this.ErrorCode = ErrorCode.RequestError;	// 一般错误
-                this.AbortIt();
+                this.TryAbortIt();
                 // return ex.Message + (ex.InnerException != null ? " InnerException: " + ex.InnerException.Message : "") ;
                 strError = GetExceptionMessage(ex);
                 if (this.m_nRedoCount == 0)
@@ -1143,7 +1266,7 @@ out strError);
             {
                 CommunicationObjectFaultedException ex = (CommunicationObjectFaultedException)ex0;
                 this.ErrorCode = ErrorCode.RequestError;	// 一般错误
-                this.AbortIt();
+                this.TryAbortIt();
                 strError = GetExceptionMessage(ex);
                 // 2011/7/2
                 if (this.m_nRedoCount == 0)
@@ -1158,7 +1281,7 @@ out strError);
             {
                 EndpointNotFoundException ex = (EndpointNotFoundException)ex0;
                 this.ErrorCode = ErrorCode.RequestError;	// 一般错误
-                this.AbortIt();
+                this.TryAbortIt();
                 strError = "服务器 " + this.Url + " 没有响应";
                 return 0;
             }
@@ -1168,7 +1291,7 @@ out strError);
             {
                 this.ErrorCode = ErrorCode.RequestError;	// 一般错误
                 this.MaxReceivedMessageSize *= 2;    // 下次扩大一倍
-                this.AbortIt();
+                this.TryAbortIt();
                 strError = GetExceptionMessage(ex0);
                 if (this.m_nRedoCount == 0
                     && this.MaxReceivedMessageSize < 1024 * 1024 * 10)
@@ -1184,7 +1307,7 @@ out strError);
     && ex0.InnerException is System.IO.PipeException)
             {
                 this.ErrorCode = ErrorCode.RequestError;	// 一般错误
-                this.AbortIt();
+                this.TryAbortIt();
                 strError = GetExceptionMessage(ex0);
                 if (this.m_nRedoCount == 0)
                 {
@@ -1205,7 +1328,7 @@ out strError);
             this.ErrorCode = ErrorCode.RequestError;	// 一般错误
             if (this.m_ws != null)
             {
-                this.AbortIt();
+                this.TryAbortIt();
                 // 一般来说异常都需要重新分配Client()。如果有例外，可以在前面分支
             }
             strError = GetExceptionMessage(ex0);
@@ -1290,7 +1413,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -1305,13 +1428,8 @@ out strError);
                         strOutputStyle,
                         null,
                         null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -1368,7 +1486,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetFriends(
@@ -1379,13 +1497,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -1434,19 +1547,14 @@ out strError);
             strVersion = "";
             strUID = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetVersion(
                         null,
                         null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -1501,20 +1609,15 @@ out strError);
             strError = "";
             strOldLang = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetLang(
                     strLang,
                         null,
                         null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -1605,7 +1708,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -1621,13 +1724,8 @@ out strError);
                     strOutputStyle,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -1783,7 +1881,7 @@ out strError);
             Record[] searchresults = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetSearchResult(
@@ -1794,13 +1892,9 @@ out strError);
                     "zh",
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -1877,7 +1971,7 @@ out strError);
             searchresults = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetSearchResult(
@@ -1888,13 +1982,9 @@ out strError);
                     strLang,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -1959,7 +2049,7 @@ out strError);
             searchresults = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetBrowseRecords(
@@ -1967,13 +2057,8 @@ out strError);
                     strBrowseInfoStyle,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2036,20 +2121,15 @@ out strError);
             strXml = "";
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetRecord(
                     strPath,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2126,7 +2206,7 @@ out strError);
             baNewTimestamp = null;
             kernel_errorcode = ErrorCodeValue.NoError;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetReaderInfo(
@@ -2138,13 +2218,7 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
-
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2248,7 +2322,7 @@ out strError);
             strRecPath = "";
             baTimestamp = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetReaderInfo(
@@ -2257,13 +2331,7 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
-
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2317,7 +2385,7 @@ out strError);
                 ea.FirstTry = true;
                 ea.ErrorInfo = strError;
 
-            REDOLOGIN:
+                REDOLOGIN:
                 this.BeforeLogin(this, ea);
 
                 if (ea.Cancel == true)
@@ -2359,7 +2427,7 @@ out strError);
                     ea.Password,
                     ea.Parameters,
                     out strError);
-                if (lRet == -1 || lRet == 0)
+                if (lRet != 1)   // lRet == -1 || lRet == 0 || lRet == 2
                 {
                     if (this.ErrorCode == localhost.ErrorCode.ClientVersionTooOld)
                         return -1;
@@ -2370,7 +2438,14 @@ out strError);
                         ea.ErrorInfo = "";
                     ea.ErrorInfo += strError;
                     ea.FirstTry = false;
-                    ea.LoginFailCondition = LoginFailCondition.PasswordError;
+                    if (this.ErrorCode == localhost.ErrorCode.RetryLogin)
+                        ea.LoginFailCondition = LoginFailCondition.RetryLogin;
+                    else if (this.ErrorCode == localhost.ErrorCode.NeedSmsLogin)
+                        ea.LoginFailCondition = LoginFailCondition.NeedSmsLogin;
+                    else if (this.ErrorCode == localhost.ErrorCode.TempCodeMismatch)
+                        ea.LoginFailCondition = LoginFailCondition.TempCodeMismatch;
+                    else
+                        ea.LoginFailCondition = LoginFailCondition.PasswordError;
                     goto REDOLOGIN;
                 }
 
@@ -2495,7 +2570,7 @@ out strError);
 
             item_timestamp = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetItemInfo(
@@ -2507,13 +2582,7 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
-
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2604,7 +2673,7 @@ out strError);
             strError = "";
 
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginBorrow(
@@ -2621,13 +2690,7 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
-
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2723,7 +2786,7 @@ out strError);
             strOutputReaderBarcode = "";
             return_info = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginReturn(
@@ -2739,13 +2802,7 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
-
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2815,7 +2872,7 @@ out strError);
             strError = "";
             failed_items = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginAmerce(
@@ -2825,13 +2882,7 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
-
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -2897,7 +2948,7 @@ out strError);
             entityinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetEntities(
@@ -2909,13 +2960,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -2972,7 +3018,7 @@ out strError);
             errorinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetEntities(
@@ -2981,13 +3027,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3051,7 +3092,7 @@ out strError);
             infos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginListBiblioDbFroms(
@@ -3060,13 +3101,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3150,7 +3186,7 @@ out strError);
             strError = "";
             strQueryXml = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -3168,13 +3204,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3236,7 +3267,7 @@ out strError);
             strBiblio = "";
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetBiblioInfo(
@@ -3246,13 +3277,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3306,13 +3332,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3371,7 +3392,7 @@ out strError);
             values = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetValueTable(
@@ -3380,13 +3401,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3414,6 +3430,22 @@ out strError);
                 if (nRet == 0)
                     return -1;
                 goto REDO;
+            }
+        }
+
+        void WaitComplete(IAsyncResult soapresult)
+        {
+            TimeSpan timeout = this.SendTimeout + this.Timeout;
+            DateTime start = DateTime.Now;
+            for (; ; )
+            {
+                DoIdle(); // 出让控制权，避免CPU资源耗费过度
+
+                if (soapresult.IsCompleted)
+                    break;
+
+                if (DateTime.Now - start > timeout)
+                    throw new TimeoutException("通道超时 " + timeout.ToString());
             }
         }
 
@@ -3454,7 +3486,7 @@ out strError);
             strError = "";
             records = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetOperLogs(
@@ -3467,6 +3499,9 @@ out strError);
                     null,
                     null);
 
+                WaitComplete(soapresult);
+
+#if NO
                 for (; ; )
                 {
                     DoIdle(); // 出让控制权，避免CPU资源耗费过度
@@ -3474,6 +3509,8 @@ out strError);
                     if (soapresult.IsCompleted)
                         break;
                 }
+#endif
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3503,6 +3540,82 @@ out strError);
                     return -1;
                 goto REDO;
             }
+        }
+
+        // return:
+        //      -1  出错
+        //      0   没有找到日志记录，或者附件不存在
+        //      >0  附件总长度
+        public long DownloadOperlogAttachment(
+            DigitalPlatform.Stop stop,
+            string strFileName,
+            long lIndex,
+            long lHint,
+            string strOutputFileName,
+            out long lHintNext,
+            out string strError)
+        {
+            strError = "";
+            lHintNext = -1;
+
+            long lRet = -1;
+
+            using (Stream stream = File.Create(strOutputFileName))
+            {
+                long lAttachmentFragmentStart = 0;
+                int nAttachmentFragmentLength = -1;
+                byte[] attachment_data = null;
+                long lAttachmentTotalLength = 0;
+
+                for (; ; )
+                {
+                    string strXml = "";
+                    lRet = this.GetOperLog(
+                        stop,
+                        strFileName,
+                        lIndex,
+                        lHint,
+                "dont_return_xml", // strStyle,
+                "", // strFilter,
+                out strXml,
+                out lHintNext,
+                lAttachmentFragmentStart,
+                nAttachmentFragmentLength,
+                out attachment_data,
+                out lAttachmentTotalLength,
+                out strError);
+                    if (lRet == -1)
+                    {
+                        goto DELETE_AND_RETURN;
+                    }
+                    // 日志记录不存在
+                    if (lRet == 0)
+                    {
+                        lRet = 0;
+                        goto DELETE_AND_RETURN;
+                    }
+                    // 没有附件
+                    if (lAttachmentTotalLength == 0)
+                    {
+                        lRet = 0;
+                        strError = "附件不存在";
+                        goto DELETE_AND_RETURN;
+                    }
+                    if (attachment_data == null || attachment_data.Length == 0)
+                    {
+                        lRet = -1;
+                        strError = "attachment_data == null || attachment_data.Length == 0";
+                        goto DELETE_AND_RETURN;
+                    }
+                    stream.Write(attachment_data, 0, attachment_data.Length);
+                    lAttachmentFragmentStart += attachment_data.Length;
+                    if (lAttachmentFragmentStart >= lAttachmentTotalLength)
+                        return lAttachmentTotalLength;
+                }
+            }
+            DELETE_AND_RETURN:
+            File.Delete(strOutputFileName);
+            return lRet;
         }
 
         //
@@ -3557,7 +3670,7 @@ out strError);
             attachment_data = null;
             lAttachmentTotalLength = 0;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetOperLog(
@@ -3571,13 +3684,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3642,7 +3750,7 @@ out strError);
             strError = "";
 
             contents = null;
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetCalendar(
@@ -3653,13 +3761,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3710,7 +3813,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetCalendar(
@@ -3719,13 +3822,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3779,7 +3877,7 @@ out strError);
             strError = "";
             resultInfo = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginBatchTask(
@@ -3789,13 +3887,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3849,7 +3942,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -3860,13 +3953,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -3949,13 +4037,8 @@ out strError);
                             null,
                             null);
 
-                        for (; ; )
-                        {
-                            DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                        WaitComplete(soapresult);
 
-                            if (soapresult.IsCompleted)
-                                break;
-                        }
                         if (this.m_ws == null)
                         {
                             strError = "用户中断";
@@ -4020,7 +4103,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetClock(
@@ -4028,13 +4111,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4082,20 +4160,15 @@ out strError);
             strTime = "";
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetClock(
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4147,7 +4220,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginVerifyReaderPassword(
@@ -4155,13 +4228,9 @@ out strError);
                     strReaderPassword,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4213,7 +4282,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginChangeReaderPassword(
@@ -4223,13 +4292,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4283,7 +4347,7 @@ out strError);
             strError = "";
             strMessage = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginResetPassword(
@@ -4291,13 +4355,9 @@ out strError);
                     strMessageTemplate,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4341,7 +4401,7 @@ out strError);
             strError = "";
             results = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginBindPatron(
@@ -4353,13 +4413,9 @@ out strError);
                     strResultTypeList,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4406,20 +4462,15 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginClearAllDbs(
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4448,6 +4499,26 @@ out strError);
             }
         }
 
+        // 兼容以前用法
+        public long ManageDatabase(
+    DigitalPlatform.Stop stop,
+    string strAction,
+    string strDatabaseName,
+    string strDatabaseInfo,
+    out string strOutputInfo,
+    out string strError)
+        {
+
+            return ManageDatabase(
+                stop,
+                strAction,
+                strDatabaseName,
+                strDatabaseInfo,
+                "",
+                out strOutputInfo,
+                out strError);
+        }
+
         // 管理数据库
         /// <summary>
         /// 管理数据库
@@ -4456,6 +4527,7 @@ out strError);
         /// <param name="strAction">动作参数</param>
         /// <param name="strDatabaseName">数据库名</param>
         /// <param name="strDatabaseInfo">数据库信息</param>
+        /// <param name="strStyle">风格</param>
         /// <param name="strOutputInfo">返回操作后的数据库信息</param>
         /// <param name="strError">返回出错信息</param>
         /// <returns>
@@ -4467,29 +4539,26 @@ out strError);
             string strAction,
             string strDatabaseName,
             string strDatabaseInfo,
+            string strStyle,
             out string strOutputInfo,
             out string strError)
         {
             strError = "";
             strOutputInfo = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginManageDatabase(
                     strAction,
                     strDatabaseName,
                     strDatabaseInfo,
+                    strStyle,
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4547,7 +4616,7 @@ out strError);
             strError = "";
 
             contents = null;
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetUser(
@@ -4558,13 +4627,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4615,7 +4679,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetUser(
@@ -4624,13 +4688,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4683,7 +4742,7 @@ out strError);
             strError = "";
 
             contents = null;
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetChannelInfo(
@@ -4694,13 +4753,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4756,7 +4810,7 @@ out strError);
             strError = "";
 
             results = null;
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginManageChannel(
@@ -4766,13 +4820,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4829,7 +4878,7 @@ out strError);
             strError = "";
             target_timestamp = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginMoveReaderInfo(
@@ -4838,13 +4887,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4897,7 +4941,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginDevolveReaderInfo(
@@ -4906,13 +4950,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -4963,7 +5002,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginChangeUserPassword(
@@ -4973,13 +5012,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5008,6 +5042,23 @@ out strError);
             }
         }
 
+        // 兼容以前用法
+        public long VerifyBarcode(
+    DigitalPlatform.Stop stop,
+    string strLibraryCode,
+    string strBarcode,
+    out string strError)
+        {
+            string strOutputBarcode = "";
+            return VerifyBarcode(
+    stop,
+    "",
+    strLibraryCode,
+    strBarcode,
+    out strOutputBarcode,
+    out strError);
+        }
+
         // 校验条码
         /// <summary>
         /// 校验条码号
@@ -5022,28 +5073,27 @@ out strError);
         /// </returns>
         public long VerifyBarcode(
             DigitalPlatform.Stop stop,
+            string strAction,
             string strLibraryCode,
             string strBarcode,
+            out string strOutputBarcode,
             out string strError)
         {
             strError = "";
+            strOutputBarcode = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginVerifyBarcode(
+                    strAction,
                     strLibraryCode,
                     strBarcode,
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5051,7 +5101,9 @@ out strError);
                     return -1;
                 }
 
-                LibraryServerResult result = this.ws.EndVerifyBarcode(soapresult);
+                LibraryServerResult result = this.ws.EndVerifyBarcode(
+                    out strOutputBarcode,
+                    soapresult);
                 if (result.Value == -1 && result.ErrorCode == ErrorCode.NotLogin)
                 {
                     if (DoNotLogin(ref strError) == 1)
@@ -5085,7 +5137,7 @@ out strError);
             strError = "";
             infos = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginListFile(
@@ -5097,13 +5149,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5164,6 +5211,7 @@ out strError);
             string strFileName,
             long lStart,
             long lLength,
+            string strStyle,
             out byte[] baContent,
             out string strFileTime,
             out string strError)
@@ -5172,7 +5220,7 @@ out strError);
             strFileTime = "";
             baContent = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetFile(
@@ -5180,16 +5228,12 @@ out strError);
                     strFileName,
                     lStart,
                     lLength,
+                    strStyle,
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5207,6 +5251,15 @@ out strError);
                         goto REDO;
                     return -1;
                 }
+
+                // 2017/10/7
+                if (StringUtil.IsInList("gzip", strStyle)
+                    && result.ErrorCode == localhost.ErrorCode.Compressed
+                    && baContent != null && baContent.Length > 0)
+                {
+                    baContent = ByteArray.DecompressGzip(baContent);
+                }
+
                 strError = result.ErrorInfo;
                 this.ErrorCode = result.ErrorCode;
                 this.ClearRedoCount();
@@ -5243,7 +5296,7 @@ out strError);
             strError = "";
             strValue = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetSystemParameter(
@@ -5252,13 +5305,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5309,7 +5357,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetSystemParameter(
@@ -5319,13 +5367,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5362,7 +5405,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginUrgentRecover(
@@ -5370,13 +5413,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5425,7 +5463,7 @@ out strError);
             aDupPath = null;
             strOutputReaderBarcode = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginRepairBorrowInfo(
@@ -5438,13 +5476,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5506,7 +5539,7 @@ out strError);
             baTimestamp = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetBiblioInfos(
@@ -5516,13 +5549,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5554,7 +5582,7 @@ out strError);
             }
         }
 
-        // 设置书目信息
+        // 包装后的版本，兼容以前参数
         public long SetBiblioInfo(
             DigitalPlatform.Stop stop,
             string strAction,
@@ -5567,11 +5595,39 @@ out strError);
             out byte[] baOutputTimestamp,
             out string strError)
         {
+            return SetBiblioInfo(
+            stop,
+            strAction,
+            strBiblioRecPath,
+            strBiblioType,
+            strBiblio,
+            baTimestamp,
+            strComment,
+            "",
+            out strOutputBiblioRecPath,
+            out baOutputTimestamp,
+            out strError);
+        }
+
+        // 设置书目信息
+        public long SetBiblioInfo(
+            DigitalPlatform.Stop stop,
+            string strAction,
+            string strBiblioRecPath,
+            string strBiblioType,
+            string strBiblio,
+            byte[] baTimestamp,
+            string strComment,
+            string strStyle,
+            out string strOutputBiblioRecPath,
+            out byte[] baOutputTimestamp,
+            out string strError)
+        {
             strError = "";
             strOutputBiblioRecPath = "";
             baOutputTimestamp = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetBiblioInfo(
@@ -5581,16 +5637,12 @@ out strError);
                     strBiblio,
                     baTimestamp,
                     strComment,
+                    strStyle,
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5643,7 +5695,7 @@ out strError);
             baOutputTimestamp = null;
             strOutputBiblio = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginCopyBiblioInfo(
@@ -5658,13 +5710,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5709,7 +5756,7 @@ out strError);
             strError = "";
             results = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginPassGate(
@@ -5719,13 +5766,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5773,7 +5815,7 @@ out strError);
 
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginForegift(
@@ -5782,13 +5824,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5832,7 +5869,7 @@ out strError);
             strOutputID = "";
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginHire(
@@ -5841,13 +5878,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5886,7 +5918,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSettlement(
@@ -5895,13 +5927,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -5942,7 +5969,7 @@ out strError);
             strError = "";
             strQueryXml = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSearchOneClassCallNumber(
@@ -5952,13 +5979,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6005,7 +6027,7 @@ out strError);
             strError = "";
             searchresults = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetCallNumberSearchResult(
@@ -6018,13 +6040,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6065,7 +6082,7 @@ out strError);
             strError = "";
             strTailNumber = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetOneClassTailNumber(
@@ -6074,13 +6091,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6124,7 +6136,7 @@ out strError);
             strError = "";
             strOutputNumber = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetOneClassTailNumber(
@@ -6135,13 +6147,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6184,7 +6191,7 @@ out strError);
             strError = "";
             strQueryXml = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSearchUsedZhongcihao(
@@ -6194,13 +6201,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6246,7 +6248,7 @@ out strError);
             strError = "";
             searchresults = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetZhongcihaoSearchResult(
@@ -6258,13 +6260,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6305,7 +6302,7 @@ out strError);
             strError = "";
             strTailNumber = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetZhongcihaoTailNumber(
@@ -6314,13 +6311,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6364,7 +6356,7 @@ out strError);
             strError = "";
             strOutputNumber = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetZhongcihaoTailNumber(
@@ -6375,13 +6367,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6427,7 +6414,7 @@ out strError);
             strError = "";
             strUsedProjectName = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -6439,13 +6426,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6490,7 +6472,7 @@ out strError);
             strError = "";
             results = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginListDupProjectInfos(
@@ -6498,13 +6480,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6547,7 +6524,7 @@ out strError);
             strError = "";
             searchresults = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetDupSearchResult(
@@ -6557,13 +6534,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6607,7 +6579,7 @@ out strError);
             strError = "";
             strValue = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetUtilInfo(
@@ -6619,13 +6591,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6670,7 +6637,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetUtilInfo(
@@ -6685,13 +6652,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6763,7 +6725,7 @@ out strError);
                 Debug.Assert(stop.State == -1 || stop.State == 0, "");
             }*/
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetRes(
@@ -6774,13 +6736,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -6788,6 +6745,7 @@ out strError);
                     return -1;
                 }
 
+                // soapresult.AsyncState;
                 LibraryServerResult result = this.ws.EndGetRes(
                     out baContent,
                     out strMetadata,
@@ -6800,6 +6758,15 @@ out strError);
                         goto REDO;
                     return -1;
                 }
+
+                // 2017/10/7
+                if (StringUtil.IsInList("gzip", strStyle)
+                    && result.ErrorCode == localhost.ErrorCode.Compressed
+                    && baContent != null && baContent.Length > 0)
+                {
+                    baContent = ByteArray.DecompressGzip(baContent);
+                }
+
                 strError = result.ErrorInfo;
                 this.ErrorCode = result.ErrorCode;
                 this.ClearRedoCount();
@@ -7182,6 +7149,7 @@ out strError);
         }
 #endif
 
+        // TODO: timestamp 只需要获得第一次的，和最后一次的，然后比较即可。中间次数不需要获得它。这样可以提高下载速度
         // 获得资源。包装版本 -- 写入文件的版本。特别适用于获得资源，也可用于获得主记录体。
         // parameters:
         //		fileTarget	文件。注意在调用函数前适当设置文件指针位置。函数只会在当前位置开始向后写，写入前不会主动改变文件指针。
@@ -7272,8 +7240,8 @@ out strError);
 
                 if (stop != null)
                 {
-                    strMessage = "正在下载 " + Convert.ToString(lStart) + "-"
-                        + (lTotalLength == -1 ? "?" : Convert.ToString(lTotalLength))
+                    strMessage = "正在下载 " + StringUtil.GetLengthText(lStart) + " / "
+                        + (lTotalLength == -1 ? "?" : StringUtil.GetLengthText(lTotalLength))
                         + " " + strPercent + " "
                         + strPath;
                     stop.SetMessage(strMessage);
@@ -7303,6 +7271,7 @@ out strError);
 
                 lTotalLength = lRet;
 
+                // TODO: 似乎也没有必要每轮都检查 timestamp。首尾各获得一次并对比即可
                 if (StringUtil.IsInList("timestamp", strStyle) == true)
                 {
                     if (input_timestamp != null)
@@ -7364,6 +7333,7 @@ out strError);
         // 获得资源。包装版本 -- 写入文件的版本。特别适用于获得资源，也可用于获得主记录体。
         // parameters:
         //		strOutputFileName	输出文件名。可以为null。如果调用前文件已经存在, 会被覆盖。
+        //      strStyle    风格。如果为空，函数会自动设置一个默认值
         // return:
         //		-1	出错。具体出错原因在this.ErrorCode中。this.ErrorInfo中有出错信息。
         //		0	成功
@@ -7371,6 +7341,7 @@ out strError);
             DigitalPlatform.Stop stop,
             string strPath,
             string strOutputFileName,
+            string strStyle,    // 2017/10/7
             out string strMetaData,
             out byte[] baOutputTimeStamp,
             out string strOutputPath,
@@ -7378,7 +7349,8 @@ out strError);
         {
             FileStream fileTarget = null;
 
-            string strStyle = "content,data,metadata,timestamp,outputpath";
+            if (string.IsNullOrEmpty(strStyle))
+                strStyle = "content,data,metadata,timestamp,outputpath";
 
             if (String.IsNullOrEmpty(strOutputFileName) == false)
                 fileTarget = File.Create(strOutputFileName);
@@ -7389,7 +7361,7 @@ out strError);
 
             try
             {
-                return GetRes(
+                long lRet = GetRes(
                     stop,
                     strPath,
                     fileTarget,
@@ -7399,6 +7371,19 @@ out strError);
                     out baOutputTimeStamp,
                     out strOutputPath,
                     out strError);
+                if (lRet == -1)
+                {
+                    // 2018/9/20
+                    // 出错的情况下，删除 0 byte 的文件
+                    if (fileTarget != null)
+                    {
+                        fileTarget.Close();
+                        fileTarget = null;
+                        File.Delete(strOutputFileName);
+                    }
+                }
+
+                return lRet;
             }
             finally
             {
@@ -7408,6 +7393,8 @@ out strError);
         }
 
         // 写入资源
+        // parameters:
+        //      lTotalLength    对象总尺寸。如果为 -1，表示不上传任何对象内容，而是只修改 metadata 部分
         public long WriteRes(
             DigitalPlatform.Stop stop,
             string strResPath,
@@ -7425,7 +7412,14 @@ out strError);
             strOutputResPath = "";
             baOutputTimestamp = null;
 
-        REDO:
+            // 2017/10/7
+            if (StringUtil.IsInList("gzip", strStyle)
+                && baContent != null && baContent.Length > 0)
+            {
+                baContent = ByteArray.CompressGzip(baContent);
+            }
+
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginWriteRes(
@@ -7439,20 +7433,14 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
                     this.ErrorCode = localhost.ErrorCode.RequestCanceled;
                     return -1;
                 }
-
 
                 LibraryServerResult result = this.ws.EndWriteRes(
                     out strOutputResPath,
@@ -7591,27 +7579,96 @@ out strError);
 
                 strPath = strOutputPath;	// 如果第一次的strPath中包含'?'id, 必须用outputpath才能正确继续
                 baInputTimeStamp = output_timestamp;	//baOutputTimeStamp;
-
             } // end of for
             return 0;
         }
 
-        // 2009/11/24
-        static string BuildMetadata(string strMime,
+        // 2016/9/26 增加 if xxx != null 判断
+        public static string BuildMetadata(string strMime,
             string strLocalPath)
         {
             // string strMetadata = "<file mimetype='" + strMime + "' localpath='" + strLocalPath + "'/>";
             XmlDocument dom = new XmlDocument();
             dom.LoadXml("<file />");
-            dom.DocumentElement.SetAttribute(
-                "mimetype",
-                strMime);
-            dom.DocumentElement.SetAttribute(
-                "localpath",
-                strLocalPath);
+            if (strMime != null)
+                dom.DocumentElement.SetAttribute(
+                    "mimetype",
+                    strMime);
+            if (strLocalPath != null)
+                dom.DocumentElement.SetAttribute(
+                    "localpath",
+                    strLocalPath);
             return dom.DocumentElement.OuterXml;
         }
 
+        // 2017/9/15
+        // 保存资源记录
+        // parameters:
+        //		strPath	格式: 库名/记录号/object/对象xpath
+        //      file    文件 Stream。注意：本函数调用中，文件指针会被自然改变
+        //      length  要保存部分的长度。
+        //              如果为 -1，并且 file 不为 null，在函数内会用 file.Length 代替。
+        //              如果未 -1，并且 file 为 null，表示不保存任何文件内容，是只修改 metadata 部分
+        public long SaveResObject(
+            DigitalPlatform.Stop stop,
+            string strPath,
+            Stream file,  // 该参数代表存放对象数据的本地文件
+            long length,
+#if NO
+            string strLocalPath,       // 该参数为拟放入 metadata 中的本地文件名
+            string strMime,
+#endif
+ string strMetadata,
+            string strRange,
+            byte[] timestamp,
+            string strStyle,
+            out byte[] output_timestamp,
+            out string strError)
+        {
+            strError = "";
+            output_timestamp = null;
+            long lRet = 0;
+
+            if (length == -1 && file != null)
+                length = file.Length;
+
+            byte[] baTotal = null;
+            if (file != null)
+            {
+                lRet = RangeList.CopyFragmentNew(
+                    file,
+                    length,
+                    strRange,
+                    out baTotal,
+                    out strError);
+                if (lRet == -1)
+                    return -1;
+            }
+
+
+            // string strMetadata = BuildMetadata(strMime, strLocalPath);
+
+            // 写入资源
+            lRet = WriteRes(
+                stop,
+                strPath,
+                strRange,
+                length,	// 这是整个对象文件尺寸，不是本次chunk的尺寸。因为服务器显然可以从baChunk中看出其尺寸，不必再专门用一个参数表示这个尺寸了
+                baTotal,
+                strMetadata,
+                strStyle,
+                timestamp,
+                out string strOutputResPath,
+                out output_timestamp,
+                out strError);
+            if (lRet == -1)
+                return -1;
+
+            return 0;
+        }
+
+        // TODO: 需要淘汰本函数，改用 FileStream 的版本
+        // 注：本函数的缺点是，在反复调用的过程中，要多次打开文件和移动文件指针，效率不高
         // 2014/3/6
         // 保存资源记录
         // parameters:
@@ -7668,6 +7725,114 @@ out strError);
                 out strError);
             if (lRet == -1)
                 return -1;
+
+            return 0;
+        }
+
+        // 包装后的版本。少了一个 strStyle 参数
+        public long SaveResObject(
+DigitalPlatform.Stop stop,
+string strPath,
+string strObjectFileName,  // 该参数代表存放对象数据的文件名
+string strMetadata,
+string strRange,
+bool bTailHint,
+byte[] timestamp,
+// string strStyle,
+out byte[] output_timestamp,
+out string strError)
+        {
+            return SaveResObject(
+        stop,
+        strPath,
+        strObjectFileName,  // 该参数代表存放对象数据的文件名
+        strMetadata,
+        strRange,
+        bTailHint,
+        timestamp,
+        "",
+        out output_timestamp,
+        out strError);
+        }
+
+        // 2016/10/16
+        public long SaveResObject(
+    DigitalPlatform.Stop stop,
+    string strPath,
+    string strObjectFileName,  // 该参数代表存放对象数据的文件名
+    string strMetadata,
+    string strRange,
+    bool bTailHint,
+    byte[] timestamp,
+            string strStyle,
+    out byte[] output_timestamp,
+    out string strError)
+        {
+            strError = "";
+            output_timestamp = null;
+            long lRet = 0;
+
+            byte[] baTotal = null;
+            long lTotalLength = 0;
+            if (string.IsNullOrEmpty(strObjectFileName) == false)
+            {
+                FileInfo fi = new FileInfo(strObjectFileName);
+                if (fi.Exists == false)
+                {
+                    strError = "文件 '" + strObjectFileName + "'不存在...";
+                    return -1;
+                }
+
+                lRet = RangeList.CopyFragment(
+                    strObjectFileName,
+                    strRange,
+                    out baTotal,
+                    out strError);
+                if (lRet == -1)
+                    return -1;
+
+                lTotalLength = fi.Length;
+            }
+            else
+                lTotalLength = -1;
+
+            // string strOutputPath = "";
+
+            //int nOldTimeout = -1;
+            if (bTailHint == true)
+            {
+                /*
+                nOldTimeout = this.Timeout;
+                // TODO: 建议通过文件尺寸来估算
+                this.Timeout = 40 * 60 * 1000;  // 40分钟
+                 * */
+            }
+
+            // 
+            string strOutputResPath = "";
+
+            // 写入资源
+            lRet = WriteRes(
+                stop,
+                strPath,
+                strRange,
+                lTotalLength,   // fi.Length,	// 这是整个包尺寸，不是本次chunk的尺寸。因为服务器显然可以从baChunk中看出其尺寸，不必再专门用一个参数表示这个尺寸了
+                baTotal,
+                strMetadata,
+                strStyle,
+                timestamp,
+                out strOutputResPath,
+                out output_timestamp,
+                out strError);
+            if (lRet == -1)
+                return -1;
+
+            if (bTailHint == true)
+            {
+                /*
+                this.Timeout = nOldTimeout;
+                 * */
+            }
 
             return 0;
         }
@@ -7773,17 +7938,17 @@ out strError);
         public long GetIssues(
             DigitalPlatform.Stop stop,
             string strBiblioRecPath,
-                   long lStart,
-                   long lCount,
-                   string strStyle,
-                   string strLang,
+            long lStart,
+            long lCount,
+            string strStyle,
+            string strLang,
             out EntityInfo[] issueinfos,
             out string strError)
         {
             issueinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetIssues(
@@ -7795,13 +7960,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -7846,7 +8006,7 @@ out strError);
             errorinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetIssues(
@@ -7855,13 +8015,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -7917,13 +8072,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8041,7 +8191,7 @@ out strError);
             strIssueRecPath = "";
             issue_timestamp = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetIssueInfo(
@@ -8053,13 +8203,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8128,7 +8273,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -8144,13 +8289,9 @@ out strError);
                     strOutputStyle,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8202,7 +8343,7 @@ out strError);
             orderinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetOrders(
@@ -8214,13 +8355,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8266,7 +8402,7 @@ out strError);
             errorinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetOrders(
@@ -8275,13 +8411,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8336,13 +8467,9 @@ out strError);
                     nMax,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                        WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8473,7 +8600,7 @@ out strError);
 
             strItemRecPath = "";
             item_timestamp = null;
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetOrderInfo(
@@ -8485,13 +8612,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8560,7 +8682,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -8576,13 +8698,9 @@ out strError);
                     strOutputStyle,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8634,7 +8752,7 @@ out strError);
             commentinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetComments(
@@ -8645,13 +8763,9 @@ out strError);
                     strLang,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8696,7 +8810,7 @@ out strError);
             errorinfos = null;
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetComments(
@@ -8705,13 +8819,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8838,7 +8947,7 @@ out strError);
             strCommentRecPath = "";
             comment_timestamp = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetCommentInfo(strRefID,
@@ -8848,13 +8957,9 @@ out strError);
                     strBiblioType,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8913,13 +9018,9 @@ out strError);
                     nMax,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                        WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -8969,7 +9070,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginReservation(
@@ -8978,13 +9079,9 @@ out strError);
                     strItemBarcodeList,
                     null,
                     null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
+
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9044,7 +9141,7 @@ out strError);
         {
             strError = "";
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -9061,13 +9158,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9110,7 +9202,7 @@ out strError);
             strError = "";
             messages = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetMessage(
@@ -9119,13 +9211,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9171,7 +9258,7 @@ out strError);
             messages = null;
             nTotalCount = 0;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginListMessage(
@@ -9184,13 +9271,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9245,7 +9327,6 @@ out strError);
             return nTotalCount;
         }
 
-
         public long SetMessage(string strAction,
             string strStyle,
             MessageData[] messages,
@@ -9255,7 +9336,7 @@ out strError);
             strError = "";
             output_messages = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginSetMessage(
@@ -9265,13 +9346,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9313,7 +9389,7 @@ out strError);
             info = null;
             strXml = "";
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginGetStatisInfo(
@@ -9322,13 +9398,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9367,7 +9438,7 @@ out strError);
             strError = "";
             dates = null;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginExistStatisInfo(
@@ -9375,13 +9446,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9421,7 +9487,7 @@ out strError);
             strError = "";
             lValue = 0;
 
-        REDO:
+            REDO:
             try
             {
                 IAsyncResult soapresult = this.ws.BeginHitCounter(
@@ -9431,13 +9497,8 @@ out strError);
                     null,
                     null);
 
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
+                WaitComplete(soapresult);
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
                 if (this.m_ws == null)
                 {
                     strError = "用户中断";
@@ -9482,7 +9543,7 @@ out strError);
             strError = "";
             results = null;
 
-        REDO:
+            REDO:
             this.BeginSearch();
             try
             {
@@ -9495,13 +9556,8 @@ out strError);
                         count,
                         null,
                         null);
-                for (; ; )
-                {
-                    DoIdle(); // 出让控制权，避免CPU资源耗费过度
 
-                    if (soapresult.IsCompleted)
-                        break;
-                }
+                WaitComplete(soapresult);
 
                 if (this.m_ws == null)
                 {
@@ -9604,6 +9660,221 @@ out strError);
             }
 
             return lHitCount;
+        }
+
+        // 2016/9/19
+        public long Dir(string strResPath,
+    long lStart,
+    long lLength,
+    string strLang,
+    string strStyle,
+    out ResInfoItem[] items,
+    out ErrorCodeValue kernel_errorcode,
+            out string strError)
+        {
+            strError = "";
+            items = null;
+            kernel_errorcode = ErrorCodeValue.NoError;
+
+            REDO:
+            try
+            {
+                IAsyncResult soapresult = this.ws.BeginDir(
+                    strResPath,
+                    lStart,
+                    lLength,
+                    strLang,
+                    strStyle,
+                    null,
+                    null);
+
+                WaitComplete(soapresult);
+
+                if (this.m_ws == null)
+                {
+                    strError = "用户中断";
+                    this.ErrorCode = localhost.ErrorCode.RequestCanceled;
+                    return -1;
+                }
+
+                LibraryServerResult result = this.ws.EndDir(
+                    out items,
+                    out kernel_errorcode,
+                    soapresult);
+                if (result.Value == -1 && result.ErrorCode == ErrorCode.NotLogin)
+                {
+                    if (DoNotLogin(ref strError) == 1)
+                        goto REDO;
+                    return -1;
+                }
+                strError = result.ErrorInfo;
+                this.ErrorCode = result.ErrorCode;
+                this.ClearRedoCount();
+                return result.Value;
+            }
+            catch (Exception ex)
+            {
+                int nRet = ConvertWebError(ex, out strError);
+                if (nRet == 0)
+                    return -1;
+                goto REDO;
+            }
+        }
+
+        public long GetAuthorNumber(
+    string strAuthor,
+    bool bSelectPinyin,
+    bool bSelectEntry,
+    bool bOutputDebugInfo,
+    ref Question[] questions,
+    out string strNumber,
+    out string strDebugInfo,
+            out string strError)
+        {
+            strError = "";
+            strDebugInfo = "";
+            strNumber = null;
+
+            REDO:
+            try
+            {
+                // localhost.dp2libraryClient ws1 = this.ws;
+                IAsyncResult soapresult = this.ws.BeginGetAuthorNumber(
+                    strAuthor,
+                    bSelectPinyin,
+                    bSelectEntry,
+                    bOutputDebugInfo,
+                    ref questions,
+                    null,
+                    null);
+
+                WaitComplete(soapresult);
+
+                if (this.m_ws == null)
+                {
+                    strError = "用户中断";
+                    this.ErrorCode = localhost.ErrorCode.RequestCanceled;
+                    return -1;
+                }
+
+                LibraryServerResult result = this.ws.EndGetAuthorNumber(
+                    ref questions,
+                    out strNumber,
+                    out strDebugInfo,
+                    soapresult);
+                if (result.Value == -1 && result.ErrorCode == ErrorCode.NotLogin)
+                {
+                    if (DoNotLogin(ref strError) == 1)
+                        goto REDO;
+                    return -1;
+                }
+                strError = result.ErrorInfo;
+                this.ErrorCode = result.ErrorCode;
+                this.ClearRedoCount();
+                return result.Value;
+            }
+            catch (Exception ex)
+            {
+                int nRet = ConvertWebError(ex, out strError);
+                if (nRet == 0)
+                    return -1;
+                goto REDO;
+            }
+        }
+
+        public long GetPinyin(
+            string strType,
+string strText,
+out string strPinyinXml,
+    out string strError)
+        {
+            strError = "";
+            strPinyinXml = "";
+
+            REDO:
+            try
+            {
+                IAsyncResult soapresult = this.ws.BeginGetPinyin(
+                    strType,
+                    strText,
+                    null,
+                    null);
+
+                WaitComplete(soapresult);
+
+                if (this.m_ws == null)
+                {
+                    strError = "用户中断";
+                    this.ErrorCode = localhost.ErrorCode.RequestCanceled;
+                    return -1;
+                }
+
+                LibraryServerResult result = this.ws.EndGetPinyin(
+                    out strPinyinXml,
+                    soapresult);
+                if (result.Value == -1 && result.ErrorCode == ErrorCode.NotLogin)
+                {
+                    if (DoNotLogin(ref strError) == 1)
+                        goto REDO;
+                    return -1;
+                }
+                strError = result.ErrorInfo;
+                this.ErrorCode = result.ErrorCode;
+                this.ClearRedoCount();
+                return result.Value;
+            }
+            catch (Exception ex)
+            {
+                int nRet = ConvertWebError(ex, out strError);
+                if (nRet == 0)
+                    return -1;
+                goto REDO;
+            }
+        }
+
+        public long SetPinyin(
+string strPinyinXml,
+    out string strError)
+        {
+            strError = "";
+
+            REDO:
+            try
+            {
+                IAsyncResult soapresult = this.ws.BeginSetPinyin(
+                    strPinyinXml,
+                    null,
+                    null);
+
+                WaitComplete(soapresult);
+
+                if (this.m_ws == null)
+                {
+                    strError = "用户中断";
+                    this.ErrorCode = localhost.ErrorCode.RequestCanceled;
+                    return -1;
+                }
+
+                LibraryServerResult result = this.ws.EndSetPinyin(
+                    soapresult);
+                if (result.Value == -1 && result.ErrorCode == ErrorCode.NotLogin)
+                {
+                    if (DoNotLogin(ref strError) == 1)
+                        goto REDO;
+                    return -1;
+                }
+                strError = result.ErrorInfo;
+                this.ErrorCode = result.ErrorCode;
+                this.ClearRedoCount();
+                return result.Value;
+            }
+            catch (Exception ex)
+            {
+                int nRet = ConvertWebError(ex, out strError);
+                if (nRet == 0)
+                    return -1;
+                goto REDO;
+            }
         }
 
         public void DoStop()
@@ -9711,7 +9982,7 @@ Stack:
         /// <summary>
         /// 立即放弃通讯。而 Abort() 要文雅一些
         /// </summary>
-        public void AbortIt()
+        public void TryAbortIt()
         {
             lock (syncRoot)
             {
@@ -9726,14 +9997,35 @@ Stack:
 
         void WsAbort()
         {
-            if (this.m_ws is IClientChannel)
-                ((IClientChannel)this.m_ws).Abort();
-            else
-                this.m_ws.Abort();
+            try // 2017/10/14
+            {
+                if (this.m_ws is IClientChannel)
+                    ((IClientChannel)this.m_ws).Abort();
+                else
+                    this.m_ws.Abort();
+            }
+            catch
+            {
+
+            }
         }
 
         void WsClose()
         {
+            // 2016/11/19
+            // rest 和 basic 协议，都要明确 Logout()，才不会在 dp2library 一侧残留通道
+            if (this.m_ws != null && this.m_ws is localhost.dp2libraryRESTClient)
+            {
+                try
+                {
+                    IAsyncResult soapresult = this.ws.BeginLogout(null, null);
+                    Thread.Sleep(100);
+                }
+                catch
+                {
+                }
+            }
+
             if (this.m_ws is IClientChannel)
                 ((IClientChannel)this.m_ws).Close();
             else
@@ -9744,8 +10036,10 @@ Stack:
         {
             if (this.m_ws is localhost.dp2libraryClient)
                 (this.m_ws as localhost.dp2libraryClient).InnerChannel.OperationTimeout = timeout;
+#if BASIC_HTTP
             else if (this.m_ws is localhost.dp2libraryRESTClient)
                 (this.m_ws as localhost.dp2libraryRESTClient).InnerChannel.OperationTimeout = timeout;
+#endif
             else
             {
                 // http://stackoverflow.com/questions/4695656/add-operationtimeout-to-channel-implemented-in-code
@@ -9757,22 +10051,34 @@ Stack:
         {
             if (this.m_ws is localhost.dp2libraryClient)
                 return (this.m_ws as localhost.dp2libraryClient).InnerChannel.OperationTimeout;
+#if BASIC_HTTP
             else if (this.m_ws is localhost.dp2libraryRESTClient)
                 return (this.m_ws as localhost.dp2libraryRESTClient).InnerChannel.OperationTimeout;
+#endif
 
             return ((IContextChannel)this.m_ws).OperationTimeout;
         }
+
+        long _uploadResChunkSize = 0;
 
         public long UploadResChunkSize
         {
             get
             {
-                if (this.m_ws is localhost.dp2libraryClient)
-                    return 500 * 1024;  // other
-                else if (this.m_ws is localhost.dp2libraryRESTClient)
-                    return 500 * 1024;  // basic.http
+                if (_uploadResChunkSize == 0)
+                {
+                    if (this.m_ws is localhost.dp2libraryClient)
+                        return 500 * 1024;  // other
+                    else if (this.m_ws is localhost.dp2libraryRESTClient)
+                        return 500 * 1024;  // basic.http
 
-                return 250 * 1024;  // restful
+                    return 250 * 1024;  // restful
+                }
+                return _uploadResChunkSize;
+            }
+            set
+            {
+                _uploadResChunkSize = value;    // 如果设置为 0，则表示软件自动决定 chunksize
             }
         }
 
@@ -9825,73 +10131,159 @@ Stack:
     {
         public override bool CheckAccess(EndpointIdentity identity, AuthorizationContext authContext)
         {
-            foreach (ClaimSet claimset in authContext.ClaimSets)
+            LibraryChannelManager.Log?.Debug("Enter CheckAccess().");
+            try
             {
-                if (claimset.ContainsClaim(identity.IdentityClaim))
-                    return true;
-
-                // string expectedSpn = null;
-                if (ClaimTypes.Dns.Equals(identity.IdentityClaim.ClaimType))
+                foreach (ClaimSet claimset in authContext.ClaimSets)
                 {
-                    string strHost = (string)identity.IdentityClaim.Resource;
+                    LibraryChannelManager.Log?.Debug("loop.");
 
-                    /*
-                    expectedSpn = string.Format(CultureInfo.InvariantCulture, "host/{0}",
-                        strHost);
-                     * */
-                    Claim claim = CheckDnsEquivalence(claimset, strHost);
-                    if (claim != null)
+                    if (claimset.ContainsClaim(identity.IdentityClaim))
                     {
+                        LibraryChannelManager.Log?.Debug("ContainsClaim.");
                         return true;
                     }
+
+                    // string expectedSpn = null;
+                    if (ClaimTypes.Dns.Equals(identity.IdentityClaim.ClaimType))
+                    {
+                        string strHost = (string)identity.IdentityClaim.Resource;
+                        LibraryChannelManager.Log?.Debug("strHost='" + strHost + "'");
+
+                        /*
+                        expectedSpn = string.Format(CultureInfo.InvariantCulture, "host/{0}",
+                            strHost);
+                         * */
+                        Claim claim = CheckDnsEquivalence(claimset, strHost);
+                        if (claim != null)
+                        {
+                            LibraryChannelManager.Log?.Debug("CheckDnsEquivalence() return not null.");
+                            return true;
+                        }
+                    }
                 }
+
+                //Stopwatch stopwath = new Stopwatch();
+                //stopwath.Start();
+
+                LibraryChannelManager.Log?.Debug("IdentityVerifier.CreateDefault().CheckAccess()");
+
+                bool bRet = IdentityVerifier.CreateDefault().CheckAccess(identity, authContext);
+
+                LibraryChannelManager.Log?.Debug("return bRet='" + bRet + "'");
+
+                //stopwath.Stop();
+                //Debug.WriteLine("CheckAccess " + stopwath.Elapsed.ToString());
+
+                if (bRet == true)
+                    return true;
+
+                return false;
             }
-
-            //Stopwatch stopwath = new Stopwatch();
-            //stopwath.Start();
-
-            bool bRet = IdentityVerifier.CreateDefault().CheckAccess(identity, authContext);
-
-            //stopwath.Stop();
-            //Debug.WriteLine("CheckAccess " + stopwath.Elapsed.ToString());
-
-            if (bRet == true)
-                return true;
-
-            return false;
+            finally
+            {
+                LibraryChannelManager.Log?.Debug("Exit CheckAccess().");
+            }
         }
 
-        Claim CheckDnsEquivalence(ClaimSet claimSet, string expedtedDns)
+        static string ToString(ClaimSet claimSet)
         {
-            IEnumerable<Claim> claims = claimSet.FindClaims(ClaimTypes.Dns, Rights.PossessProperty);
-            foreach (Claim claim in claims)
+            StringBuilder text = new StringBuilder();
+            int i = 0;
+            foreach (Claim claim in claimSet)
             {
-                // 格外允许"localhost"
-                if (expedtedDns.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+                text.Append((i + 1).ToString() + "\r\n");
+                text.Append("ClaimType=" + claim.ClaimType + "\r\n");
+                text.Append("Right=" + claim.Right + "\r\n");
+                try
                 {
-                    return claim;
+                    text.Append("Resource=" + claim.Resource.ToString() + "\r\n");
                 }
-
-                string strCurrent = (string)claim.Resource;
-
-                // 格外允许"DigitalPlatform"和任意出发字符串匹配
-                if (strCurrent.Equals("DigitalPlatform", StringComparison.OrdinalIgnoreCase))
-                    return claim;
-
-                if (expedtedDns.Equals(strCurrent, StringComparison.OrdinalIgnoreCase))
+                catch
                 {
-                    return claim;
+
                 }
+                i++;
             }
-            return null;
+
+            return text.ToString();
+        }
+
+        Claim CheckDnsEquivalence(ClaimSet claimSet, string expectedDns)
+        {
+            LibraryChannelManager.Log?.Debug("Enter CheckDnsEquivalence(). expectedDns='" + expectedDns + "'");
+            try
+            {
+                LibraryChannelManager.Log?.Debug("claimSet.Count='" + claimSet.Count + "' elements:\r\n" + ToString(claimSet));
+                IEnumerable<Claim> claims = claimSet.FindClaims(ClaimTypes.Dns, Rights.PossessProperty);
+                // 可能找不到结果
+                foreach (Claim claim in claims)
+                {
+                    // 格外允许"localhost"
+                    if (expectedDns.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LibraryChannelManager.Log?.Debug("expectedDns Match 'localhost'");
+                        return claim;
+                    }
+
+                    string strCurrentDns = (string)claim.Resource;
+
+                    LibraryChannelManager.Log?.Debug("strCurrentDns='" + strCurrentDns + "'");
+
+                    // 格外允许"DigitalPlatform"和任意出发字符串匹配
+                    if (strCurrentDns.Equals("DigitalPlatform", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LibraryChannelManager.Log?.Debug("strCurrentDns Match 'DigitalPlatform'");
+                        return claim;
+                    }
+
+                    if (expectedDns.Equals(strCurrentDns, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LibraryChannelManager.Log?.Debug("strCurrentDns Match expectedDns");
+                        return claim;
+                    }
+                }
+
+                // 2018/6/26
+                // 如果 Dns 事项没有找到，再尝试找 Name 事项。这一般是有问题的 Windows 7 换进该
+                claims = claimSet.FindClaims(ClaimTypes.Name, Rights.PossessProperty);
+                foreach (Claim claim in claims)
+                {
+                    string strCurrentName = (string)claim.Resource;
+
+                    LibraryChannelManager.Log?.Debug("strCurrentName='" + strCurrentName + "'");
+
+                    // 格外允许"DigitalPlatform"和任意出发字符串匹配
+                    if (strCurrentName.Equals("DigitalPlatform", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LibraryChannelManager.Log?.Debug("strCurrentName Match 'DigitalPlatform'");
+                        return claim;
+                    }
+                }
+
+                return null;
+            }
+            finally
+            {
+                LibraryChannelManager.Log?.Debug("Exit CheckDnsEquivalence().");
+            }
         }
 
         public override bool TryGetIdentity(EndpointAddress reference, out EndpointIdentity identity)
         {
-            return IdentityVerifier.CreateDefault().TryGetIdentity(reference, out identity);
+            LibraryChannelManager.Log?.Debug("Enter TryGetIdentity().");
+            try
+            {
+                return IdentityVerifier.CreateDefault().TryGetIdentity(reference, out identity);
+            }
+            finally
+            {
+                LibraryChannelManager.Log?.Debug("Exit TryGetIdentity().");
+            }
         }
     }
 
+#if NO
     public class OrgEndpointIdentity : EndpointIdentity
     {
         private string orgClaim;
@@ -9906,7 +10298,7 @@ Stack:
             set { orgClaim = value; }
         }
     }
-
+#endif
 
     /// <summary>
     /// 登录前的事件

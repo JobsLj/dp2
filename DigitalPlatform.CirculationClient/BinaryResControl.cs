@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Collections;   // Hashtable
 using System.ComponentModel;
 using System.Drawing;
-using System.Data;
-using System.Text;
 using System.Windows.Forms;
 using System.Xml;
 using System.Diagnostics;
@@ -12,7 +10,6 @@ using System.IO;
 
 using DigitalPlatform.GUI;
 using DigitalPlatform.Xml;
-using DigitalPlatform.Range;
 using DigitalPlatform.Text;
 using DigitalPlatform.IO;
 using DigitalPlatform.LibraryClient;
@@ -344,7 +341,7 @@ namespace DigitalPlatform.CirculationClient
                             //Debug.Assert(baMetadataTimestamp != null, "");
 
                             // 取metadata值
-                            Hashtable values = StringUtil.ParseMedaDataXml(strMetadataXml,
+                            Hashtable values = StringUtil.ParseMetaDataXml(strMetadataXml,
                                 out strError);
                             if (values == null)
                             {
@@ -416,7 +413,7 @@ namespace DigitalPlatform.CirculationClient
                         }
 
                         // 取metadata值
-                        Hashtable values = StringUtil.ParseMedaDataXml(strMetadataXml,
+                        Hashtable values = StringUtil.ParseMetaDataXml(strMetadataXml,
                             out strError);
                         if (values == null)
                         {
@@ -854,6 +851,20 @@ bool bChanged)
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
+            //
+            string strMime = "";
+
+            if (this.ListView.SelectedItems.Count > 0)
+                strMime = ListViewUtil.GetItemText(this.ListView.SelectedItems[0], COLUMN_MIME);
+
+            menuItem = new MenuItem("查看(&V)");
+            menuItem.Click += new System.EventHandler(this.menu_view_Click);
+            if (this.ListView.SelectedItems.Count == 0
+                || (StringUtil.MatchMIME(strMime, "image") == false /*&& strMime != "application/pdf"*/))
+                menuItem.Enabled = false;
+            contextMenu.MenuItems.Add(menuItem);
+
+
             // TODO: 这两个菜单项其实可以由 EntityForm 负责追加，处理函数也写在 EntityForm 中
             if (this.GenerateData != null)
             {
@@ -1004,12 +1015,11 @@ bool bChanged)
 
             foreach (string filename in expanded_filenames)
             {
-                ListViewItem item = null;
                 int nRet = this.AppendNewItem(
     filename,
     strUsage,
     "",
-    out item,
+    out ListViewItem item,
     out strError);
                 if (nRet == -1)
                     return -1;
@@ -1182,6 +1192,29 @@ bool bChanged)
             return results;
         }
 
+        // 2016/10/17
+        public bool MaskDeleteCoverImageObject()
+        {
+            List<ListViewItem> results = new List<ListViewItem>();
+            foreach (ListViewItem item in this.ListView.Items)
+            {
+                string strCurrentUsage = ListViewUtil.GetItemText(item, COLUMN_USAGE);
+
+                // . 分隔 FrontCover.MediumImage
+                if (StringUtil.HasHead(strCurrentUsage, "FrontCover.") == true
+                    || strCurrentUsage == "FrontCover")
+                    results.Add(item);
+            }
+
+            if (results.Count > 0)
+            {
+                this.MaskDelete(results);
+                return true;
+            }
+
+            return false;
+        }
+
         // TODO: findItemByRights 可以用一个或者多个 right 值进行搜寻
 
         // 返回全部已经标记删除的事项
@@ -1209,6 +1242,21 @@ bool bChanged)
                 ListViewItem item = this.ListView.Items[i];
                 string strCurrentID = ListViewUtil.GetItemText(item, COLUMN_ID);
                 if (strID == "*" || strCurrentID == strID)
+                    results.Add(item);
+            }
+
+            return results;
+        }
+
+        // 按照尺寸搜寻事项
+        public List<ListViewItem> FindItemBySize(string strSize)
+        {
+            List<ListViewItem> results = new List<ListViewItem>();
+            for (int i = 0; i < this.ListView.Items.Count; i++)
+            {
+                ListViewItem item = this.ListView.Items[i];
+                string strCurrentSize = ListViewUtil.GetItemText(item, COLUMN_SIZE);
+                if (strSize == "*" || strCurrentSize == strSize)
                     results.Add(item);
             }
 
@@ -1611,6 +1659,89 @@ bool bChanged)
             this.ReturnChannel(this, e);
         }
 
+        ObjectViewerDialog _dlg = null;
+
+        public void TriggerStreamProgressChanged(string path, long current, long length)
+        {
+            if (_dlg != null)
+                _dlg.TriggerStreamProgressChanged(path, current, length);
+        }
+
+        string _uiState = "";
+
+        // 查看图片对象
+        void menu_view_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            if (this.ListView.SelectedItems.Count == 0)
+            {
+                strError = "尚未选择要查看的行...";
+                goto ERROR1;
+            }
+
+            ListViewItem item = this.ListView.SelectedItems[0];
+
+            string strID = ListViewUtil.GetItemText(item, COLUMN_ID);
+
+            string strResPath = this.BiblioRecPath + "/object/" + strID;
+            strResPath = strResPath.Replace(":", "/");
+
+            string strMime = ListViewUtil.GetItemText(item, COLUMN_MIME);
+            if (strMime == "application/pdf")
+            {
+                try
+                {
+                    using (ObjectViewerDialog dlg = new ObjectViewerDialog())
+                    {
+                        _dlg = dlg;
+                        dlg.Text = "查看 " + strResPath;
+                        dlg.Url = "dpres:" + strResPath;
+                        dlg.UiState = _uiState;
+
+                        if (string.IsNullOrEmpty(_uiState))
+                            dlg.StartPosition = FormStartPosition.CenterScreen;
+                        dlg.ShowDialog(this);
+
+                        _uiState = dlg.UiState;
+                    }
+                }
+                finally
+                {
+                    _dlg = null;
+                }
+            }
+            else
+            {
+                // var html = @"<html><body style=""background-image: url(dpres:"+strResPath+@")""></body></html>";
+                var html = @"<html><body><img src='dpres:" + strResPath + "' alt='image'></img></body></html>";
+
+                try
+                {
+                    using (ObjectViewerDialog dlg = new ObjectViewerDialog())
+                    {
+                        _dlg = dlg;
+                        dlg.Text = "查看图像 " + strResPath;
+                        dlg.HtmlString = html;
+                        dlg.UiState = _uiState;
+
+                        if (string.IsNullOrEmpty(_uiState))
+                            dlg.StartPosition = FormStartPosition.CenterScreen;
+                        dlg.ShowDialog(this);
+
+                        _uiState = dlg.UiState;
+                    }
+                }
+                finally
+                {
+                    _dlg = null;
+                }
+            }
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
         // 导出对象到文件
         void menu_export_Click(object sender, EventArgs e)
         {
@@ -1678,20 +1809,18 @@ bool bChanged)
 
             try
             {
-                byte[] baOutputTimeStamp = null;
 
                 // EnableControlsInLoading(true);
 
-                string strMetaData;
-                string strOutputPath = "";
 
                 long lRet = channel.GetRes(
                     Stop,
                     strResPath,
                     dlg.FileName,
-                    out strMetaData,
-                    out baOutputTimeStamp,
-                    out strOutputPath,
+                    "content,data,metadata,timestamp,outputpath,gzip",  // 2017/10/7 增加 gzip
+                    out string strMetaData,
+                    out byte[] baOutputTimeStamp,
+                    out string strOutputPath,
                     out strError);
                 // EnableControlsInLoading(false);
                 if (lRet == -1)
@@ -1994,8 +2123,14 @@ bool bChanged)
 
                     nUploadCount++;
 
+                    string strMetadata = LibraryChannel.BuildMetadata(strMime,
+                        // Path.GetFileName(strLocalFilename)
+                        strLocalFilename
+                        );
+
                     if (bOnlyChangeMetadata)
                     {
+#if NO
                         long lRet = channel.SaveResObject(
     Stop,
     strResPath,
@@ -2007,6 +2142,18 @@ bool bChanged)
     timestamp,
     out output_timestamp,
     out strError);
+#endif
+
+                        long lRet = channel.UploadFile(
+Stop,
+"", // strLocalFilename,
+strResPath,
+strMetadata,
+(StringUtil.CompareVersion(dp2library_version, "2.117") >= 0) ? "gzip" : "",
+timestamp,   // timestamp,
+false,
+out output_timestamp,
+out strError);
                         timestamp = output_timestamp;
                         if (timestamp != null)
                             ListViewUtil.ChangeItemText(item,
@@ -2020,14 +2167,48 @@ bool bChanged)
                     else
                     {
                         // 检测文件尺寸
-                        FileInfo fi = new FileInfo(strLocalFilename);
+                        // FileInfo fi = new FileInfo(strLocalFilename);
 
-                        if (fi.Exists == false)
+                        if (File.Exists(strLocalFilename) == false)
                         {
                             strError = "文件 '" + strLocalFilename + "' 不存在...";
                             return -1;
                         }
 
+                        long lRet = 0;
+                        TimeSpan old_timeout = channel.Timeout;
+                        channel.Timeout = new TimeSpan(0, 5, 0);
+                        try
+                        {
+                            lRet = channel.UploadFile(
+Stop,
+strLocalFilename,
+strResPath,
+strMetadata,
+(StringUtil.CompareVersion(dp2library_version, "2.117") >= 0) ? "gzip" : "",
+timestamp,   // timestamp,
+false,
+out output_timestamp,
+out strError);
+
+
+                        }
+                        finally
+                        {
+                            channel.Timeout = old_timeout;
+                        }
+                        timestamp = output_timestamp;
+
+                        // 2018/8/29
+                        if (timestamp != null)
+                            ListViewUtil.ChangeItemText(item,
+                            COLUMN_TIMESTAMP,
+                            ByteArray.GetHexTimeStampString(timestamp));
+
+                        if (lRet == -1)
+                            goto ERROR1;
+
+#if NO
                         string[] ranges = null;
 
                         if (fi.Length == 0)
@@ -2096,6 +2277,7 @@ bool bChanged)
                                     timestamp,
                                     out output_timestamp,
                                     out strError);
+
                             }
                             finally
                             {
@@ -2160,6 +2342,7 @@ bool bChanged)
                                 goto ERROR1;
                             }
                         }
+#endif
                     }
 
                     SetLineInfo(item,

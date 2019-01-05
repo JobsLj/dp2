@@ -65,7 +65,6 @@ namespace dp2Circulation
                 return -1;
             }
 
-
             XmlNodeList nodes = _cfgDom.DocumentElement.SelectNodes("columns/column");
 
             if (nodes.Count > 0)
@@ -308,7 +307,7 @@ namespace dp2Circulation
             else
             {
                 // 确保目录被创建
-                PathUtil.CreateDirIfNeed(Path.GetDirectoryName(strOutputFileName));
+                PathUtil.TryCreateDir(Path.GetDirectoryName(strOutputFileName));
             }
 
 #if NO
@@ -607,6 +606,7 @@ namespace dp2Circulation
                         && column.Sum == true
                         && column.ColumnNumber != -1)
                     {
+                        string strDebugInfo = "";
                         try
                         {
                             // if (column.DataType != DataType.Currency)
@@ -636,6 +636,9 @@ namespace dp2Circulation
                                     sums[j] = v;
                                 else
                                 {
+                                    strDebugInfo = GetDebugInfo(column.DataType,
+            sums[j],
+            v);
                                     sums[j] = AddValue(column.DataType,
             sums[j],
             v);
@@ -645,7 +648,7 @@ namespace dp2Circulation
                         }
                         catch (Exception ex)	// 俘获可能因字符串转换为整数抛出的异常
                         {
-                            throw new Exception("在累加 行 " + i.ToString() + " 列 " + column.ColumnNumber.ToString() + " 值的时候，出现异常: " + ExceptionUtil.GetAutoText(ex));
+                            throw new Exception("在累加 行 " + i.ToString() + " 列 " + column.ColumnNumber.ToString() + " 值的时候，出现异常(strDebugInfo='"+strDebugInfo+"'): " + ExceptionUtil.GetAutoText(ex));
                         }
                     }
                 }
@@ -754,6 +757,15 @@ namespace dp2Circulation
             writer.WriteEndElement();   // </table>
         }
 
+        static string GetDebugInfo(ColumnDataType datatype,
+object o1,
+object o2)
+        {
+            return "datatype=" + datatype.ToString()
+                + ",o1=" + (o1 == null ? "<null>" : o1.GetType().ToString())
+                + ",o2=" + (o2 == null ? "<null>" : o2.GetType().ToString());
+        }
+
         object AddValue(ColumnDataType datatype,
 object o1,
 object o2)
@@ -767,7 +779,7 @@ object o2)
             if (datatype == ColumnDataType.Auto)
             {
                 if (o1 is Int64)
-                    return (Int64)o1 + (Int64)o2;
+                    return (Int64)o1 + Convert.ToInt64(o2); // 2016/11/24
                 if (o1 is Int32)
                     return (Int32)o1 + (Int32)o2;
                 if (o1 is double)

@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="12.0">
   <PropertyGroup>
     <ProjectType>Local</ProjectType>
     <ProductVersion>8.0.50727</ProductVersion>
@@ -35,7 +35,7 @@
     </FileUpgradeFlags>
     <UpgradeBackupLocation>
     </UpgradeBackupLocation>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <OldToolsVersion>2.0</OldToolsVersion>
     <PublishUrl>publish\</PublishUrl>
     <Install>true</Install>
@@ -75,6 +75,7 @@
     <DebugType>full</DebugType>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <OutputPath>bin\Release\</OutputPath>
@@ -99,8 +100,12 @@
     <DebugType>none</DebugType>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.11.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System">
       <Name>System</Name>
     </Reference>
@@ -119,11 +124,6 @@
     <ProjectReference Include="..\DigitalPlatform.CommonControl\DigitalPlatform.CommonControl.csproj">
       <Project>{334E1B2B-5373-4C80-A971-BFF213FF304B}</Project>
       <Name>DigitalPlatform.CommonControl</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\DigitalPlatform.Drawing\DigitalPlatform.Drawing.csproj">
-      <Name>DigitalPlatform.Drawing</Name>
-      <Project>{C2468F93-69AC-4BBA-94AE-678ED5C21542}</Project>
-      <Package>{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</Package>
     </ProjectReference>
     <ProjectReference Include="..\DigitalPlatform.IO\DigitalPlatform.IO.csproj">
       <Name>DigitalPlatform.IO</Name>
@@ -171,9 +171,6 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="FieldCollection.cs" />
-    <Compile Include="FieldNameDlg.cs">
-      <SubType>Form</SubType>
-    </Compile>
     <Compile Include="IndicatorNameDlg.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -261,10 +258,6 @@
       <SubType>Designer</SubType>
       <DependentUpon>DeleteFieldDlg.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="FieldNameDlg.resx">
-      <DependentUpon>FieldNameDlg.cs</DependentUpon>
-      <SubType>Designer</SubType>
-    </EmbeddedResource>
     <EmbeddedResource Include="IndicatorNameDlg.resx">
       <DependentUpon>IndicatorNameDlg.cs</DependentUpon>
       <SubType>Designer</SubType>
@@ -295,7 +288,9 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.config" />
     <None Include="log\ve-279.tmp" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">

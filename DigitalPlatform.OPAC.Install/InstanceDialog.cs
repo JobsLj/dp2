@@ -336,7 +336,7 @@ namespace DigitalPlatform.OPAC
                 {
                     strPhysicalPath = GetAppPhysicalPath(strSite,
                         strVirtualDir);
-                    PathUtil.CreateDirIfNeed(strPhysicalPath);
+                    PathUtil.TryCreateDir(strPhysicalPath);
                 }
 
                 // 创建程序目录，并复制进基本内容
@@ -395,17 +395,16 @@ namespace DigitalPlatform.OPAC
             {
                 // 进行升级检查
 
+                // TODO: 是否要为数据目录增配权限
 
             }
             else
             {
                 // 需要进行最新安装，创建数据目录
-                nRet = CreateNewDataDir(strDataDir,
-out strError);
+                nRet = CreateNewDataDir(strDataDir, out strError);
                 if (nRet == -1)
                     return -1;
             }
-
 
             // 兑现修改
             if (line_info.Changed == true)
@@ -710,16 +709,24 @@ out strError);
         {
             strError = "";
 
-            DirectoryInfo di = new DirectoryInfo(strDataDir);
-            if (di.Exists == false)
-                return 0;
+            try
+            {
+                DirectoryInfo di = new DirectoryInfo(strDataDir);
+                if (di.Exists == false)
+                    return 0;
 
-            string strExistingFileName = Path.Combine(strDataDir,
-                "opac.xml");
-            if (File.Exists(strExistingFileName) == true)
-                return 2;
+                string strExistingFileName = Path.Combine(strDataDir,
+                    "opac.xml");
+                if (File.Exists(strExistingFileName) == true)
+                    return 2;
 
-            return 1;
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                strError = "检测数据目录名 '" + strDataDir + "' 时出现异常: " + ex.Message;
+                return -1;
+            }
         }
 
         // 创建数据目录，并复制进基本内容
@@ -728,7 +735,16 @@ out strError);
         {
             strError = "";
 
-            PathUtil.CreateDirIfNeed(strDataDir);
+            try
+            {
+                PathUtil.TryCreateDir(strDataDir);
+            }
+            catch (Exception ex)
+            {
+                // 2018/1/27
+                strError = ex.Message;
+                return -1;
+            }
 
             Debug.Assert(this.CopyFiles != null, "");
 
@@ -754,7 +770,7 @@ out strError);
         {
             strError = "";
 
-            PathUtil.CreateDirIfNeed(strAppDir);
+            PathUtil.TryCreateDir(strAppDir);
 
             Debug.Assert(this.CopyFiles != null, "");
 
@@ -774,6 +790,18 @@ out strError);
                         out strError);
             if (nRet == -1)
                 return -1;
+
+            // 创建 EventLog 2016/11/26
+            {
+                // 创建事件日志目录
+                if (!EventLog.SourceExists("dp2opac"))
+                    EventLog.CreateEventSource("dp2opac", "DigitalPlatform");
+
+                EventLog Log = new EventLog();
+                Log.Source = "dp2opac";
+
+                Log.WriteEntry("dp2OPAC 安装成功。", EventLogEntryType.Information);
+            }
 
             return 0;
         }
@@ -866,7 +894,7 @@ out strError);
                 this._floatingMessage.Text = "";
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -932,7 +960,7 @@ out strError);
                 this.Enabled = true;
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -1080,7 +1108,7 @@ out strError);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return;
         }

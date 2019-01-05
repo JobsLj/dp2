@@ -1,16 +1,9 @@
 ﻿#define FILTER
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Web;
-using System.Web.UI;
-using System.Web.UI.WebControls;
-using System.Threading;
 using System.Xml;
-using System.Globalization;
 using System.IO;
-using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Collections;
 
@@ -180,17 +173,10 @@ ref sessioninfo) == false)
         if (String.IsNullOrEmpty(strWord) == false
             && this.IsPostBack == false)
         {
-            string strXml = "";
-
-            // string strWord = "";
-            string strDbName = "";
-            string strFrom = "";
-            string strMatchStyle = "";
-
             GetSearchParams(out strWord,
-                out strDbName,
-                out strFrom,
-                out strMatchStyle);
+                out string strDbName,
+                out string strFrom,
+                out string strMatchStyle);
 
             // 根据检索参数创建XML检索式
             nRet = OpacApplication.BuildQueryXml(
@@ -203,7 +189,7 @@ ref sessioninfo) == false)
                 null,
                 app.SearchMaxResultCount,
                 this.BiblioSearchControl1.SearchStyle, // strSearchStyle
-                out strXml,
+                out string strXml,
                 out strError);
             if (nRet == -1)
                 goto ERROR1;
@@ -375,7 +361,7 @@ ref sessioninfo) == false)
 
         // this.HeadBarControl1.CurrentColumn = HeaderColumn.Search;
         return;
-    ERROR1:
+        ERROR1:
         Response.Write(HttpUtility.HtmlEncode(strError));
         Response.End();
     }
@@ -440,7 +426,6 @@ ref sessioninfo) == false)
         strDbName = HttpUtility.UrlDecode((string)table["dbname"], encoding);
         strFrom = HttpUtility.UrlDecode((string)table["from"], encoding);
         strMatchStyle = HttpUtility.UrlDecode((string)table["matchstyle"], encoding);
-
     }
 
     static string MakeSelectedPath(string strResultsetName, string strOffset)
@@ -599,7 +584,7 @@ ref sessioninfo) == false)
             sessioninfo.ReturnChannel(channel);
         }
         return;
-    ERROR1:
+        ERROR1:
         e.ErrorInfo = strError;
         this.BrowseSearchResultControl1.ResultSetName = "";
         this.BrowseSearchResultControl1.ResultCount = 0;
@@ -668,7 +653,7 @@ ref sessioninfo) == false)
         // 确保上一级被选定。但此时和右边的 browselist 内容就不对应了
         this.filter.SelectedNodePath = GetParentResultsetName(this.filter.SelectedNodePath) + "/nav";
         return;
-    ERROR1:
+        ERROR1:
         Response.Write(HttpUtility.HtmlEncode(strError));
         Response.End();
     }

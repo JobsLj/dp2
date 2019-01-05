@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
@@ -10,11 +8,10 @@ using System.Diagnostics;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
-using DigitalPlatform.CirculationClient;
-using DigitalPlatform.Xml;
-using DigitalPlatform.Text;
 
 using DigitalPlatform.LibraryClient.localhost;
+using DigitalPlatform.LibraryClient;
+using DigitalPlatform.CommonControl;
 
 namespace dp2Circulation
 {
@@ -25,14 +22,6 @@ namespace dp2Circulation
     {
         // 参与排序的列号数组
         SortColumns SortColumns = new SortColumns();
-
-        /*
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        public MainForm MainForm = null;
-        DigitalPlatform.Stop stop = null;
-         * */
 
         string m_strXmlRecord = "";
 
@@ -159,7 +148,7 @@ namespace dp2Circulation
         void prop_GetColumnTitles(object sender, GetColumnTitlesEventArgs e)
         {
             e.ColumnTitles = new ColumnPropertyCollection();
-            ColumnPropertyCollection temp = this.MainForm.GetBrowseColumnProperties(e.DbName);
+            ColumnPropertyCollection temp = Program.MainForm.GetBrowseColumnProperties(e.DbName);
             if (temp != null)
                 e.ColumnTitles.AddRange(temp);  // 要复制，不要直接使用，因为后面可能会修改。怕影响到原件
 
@@ -174,13 +163,13 @@ namespace dp2Circulation
 
         private void DupForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 
 #if NO
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -189,24 +178,28 @@ namespace dp2Circulation
             stop.Register(MainForm.stopManager, true);	// 和容器关联
 #endif
 
-            this.checkBox_includeLowCols.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_includeLowCols.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "dup_form",
                 "include_low_cols",
                 true);
-            this.checkBox_returnAllRecords.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_returnAllRecords.Checked = Program.MainForm.AppInfo.GetBoolean(
     "dup_form",
     "return_all_records",
     true);
+            this.checkBox_returnSearchDetail.Checked = Program.MainForm.AppInfo.GetBoolean(
+"dup_form",
+"return_search_detail",
+false);
 
             if (String.IsNullOrEmpty(this.comboBox_projectName.Text) == true)
             {
-                this.comboBox_projectName.Text = this.MainForm.AppInfo.GetString(
+                this.comboBox_projectName.Text = Program.MainForm.AppInfo.GetString(
                         "dup_form",
                         "projectname",
                         "");
             }
 
-            string strWidths = this.MainForm.AppInfo.GetString(
+            string strWidths = Program.MainForm.AppInfo.GetString(
     "dup_form",
     "browse_list_column_width",
     "");
@@ -216,6 +209,8 @@ namespace dp2Circulation
                     strWidths,
                     true);
             }
+
+            this.Channel = null;
 
             // 自动启动查重
             if (this.AutoBeginSearch == true)
@@ -273,24 +268,28 @@ namespace dp2Circulation
                 stop = null;
             }
 #endif
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
         "dup_form",
         "include_low_cols",
         this.checkBox_includeLowCols.Checked);
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
         "dup_form",
         "return_all_records",
         this.checkBox_returnAllRecords.Checked);
+                Program.MainForm.AppInfo.SetBoolean(
+"dup_form",
+"return_search_detail",
+this.checkBox_returnSearchDetail.Checked);
 
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "dup_form",
                     "projectname",
                     this.comboBox_projectName.Text);
 
                 string strWidths = ListViewUtil.GetColumnWidthListString(this.listView_browse);
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "dup_form",
                     "browse_list_column_width",
                     strWidths);
@@ -355,7 +354,7 @@ namespace dp2Circulation
             this.textBox_recordPath.Enabled = bEnable;
         }
 
- 
+
         // 检索
         // return:
         //      -1  error
@@ -386,12 +385,16 @@ namespace dp2Circulation
 
             EnableControls(false);
 
+            LibraryChannel channel = this.GetChannel();
+            TimeSpan old_timeout = channel.Timeout;
+            channel.Timeout = TimeSpan.FromMinutes(2);
+
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在进行查重 ...");
             stop.BeginLoop();
 
-            this.Update();
-            this.MainForm.Update();
+            //this.Update();
+            //Program.MainForm.Update();
 
             try
             {
@@ -405,8 +408,10 @@ namespace dp2Circulation
                 string strBrowseStyle = "cols";
                 if (this.checkBox_includeLowCols.Checked == false)
                     strBrowseStyle += ",excludecolsoflowthreshold";
+                if (this.checkBox_returnSearchDetail.Checked == true)
+                    strBrowseStyle += ",detail";
 
-                long lRet = Channel.SearchDup(
+                long lRet = channel.SearchDup(
                     stop,
                     strRecPath,
                     strXml,
@@ -442,7 +447,7 @@ namespace dp2Circulation
 
                     DupSearchResult[] searchresults = null;
 
-                    lRet = Channel.GetDupSearchResult(
+                    lRet = channel.GetDupSearchResult(
                         stop,
                         lStart,
                         lPerCount,
@@ -475,6 +480,7 @@ namespace dp2Circulation
 
                         ListViewItem item = new ListViewItem();
                         item.Text = result.Path;
+                        item.Tag = result;
                         item.SubItems.Add(result.Weight.ToString());
                         if (result.Cols != null)
                         {
@@ -484,8 +490,6 @@ namespace dp2Circulation
                             }
                         }
                         this.listView_browse.Items.Add(item);
-
-
 
                         if (item.Text == this.RecordPath)
                         {
@@ -514,7 +518,7 @@ namespace dp2Circulation
 
                 }
 
-            END1:
+                END1:
                 this.SetDupState();
 
                 return (int)lHitCount;
@@ -528,11 +532,14 @@ namespace dp2Circulation
 
                 EventFinish.Set();
 
+                channel.Timeout = old_timeout;
+                this.ReturnChannel(channel);
+
                 EnableControls(true);
             }
 
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -558,7 +565,7 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
 
         }
@@ -572,13 +579,15 @@ namespace dp2Circulation
         /// <param name="strError">返回出错信息</param>
         /// <returns>-1: 出错; >=0: 成功</returns>
         public int ListProjectNames(string strRecPath,
-            out string [] projectnames,
+            out string[] projectnames,
             out string strError)
         {
             strError = "";
             projectnames = null;
 
             EnableControls(false);
+
+            LibraryChannel channel = this.GetChannel();
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在获取可用的查重方案名 ...");
@@ -590,7 +599,7 @@ namespace dp2Circulation
 
                 string strBiblioDbName = Global.GetDbName(strRecPath);
 
-                long lRet = Channel.ListDupProjectInfos(
+                long lRet = channel.ListDupProjectInfos(
                     stop,
                     strBiblioDbName,
                     out dpis,
@@ -612,11 +621,13 @@ namespace dp2Circulation
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
 
+                this.ReturnChannel(channel);
+
                 EnableControls(true);
             }
 
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -646,7 +657,7 @@ namespace dp2Circulation
             XmlViewerForm dlg = new XmlViewerForm();
 
             dlg.Text = "当前XML数据";
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.XmlString = this.XmlRecord;
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog(this);   // ?? this
@@ -725,9 +736,9 @@ namespace dp2Circulation
 
             EntityForm form = new EntityForm();
 
-            form.MdiParent = this.MainForm;
+            form.MdiParent = Program.MainForm;
 
-            form.MainForm = this.MainForm;
+            form.MainForm = Program.MainForm;
             form.Show();
             form.LoadRecordOld(strPath, "", true);
         }
@@ -760,7 +771,7 @@ namespace dp2Circulation
         {
 #if NO
             // 2009/8/13 
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 #endif
 
         }
@@ -841,7 +852,7 @@ namespace dp2Circulation
             menuItem = new MenuItem("装入已经打开的种册窗(&E)");
             menuItem.Click += new System.EventHandler(this.menu_loadToExistDetailWindow_Click);
             if (this.listView_browse.SelectedItems.Count == 0
-                || this.MainForm.GetTopChildWindow<EntityForm>() == null)
+                || Program.MainForm.GetTopChildWindow<EntityForm>() == null)
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
@@ -857,7 +868,32 @@ namespace dp2Circulation
              * */
             contextMenu.MenuItems.Add(menuItem);
 
+            // ---
+            menuItem = new MenuItem("-");
+            contextMenu.MenuItems.Add(menuItem);
+
+            menuItem = new MenuItem("查看检索过程(&D)");
+            menuItem.Click += new System.EventHandler(this.menu_viewSearchDetail_Click);
+            if (this.listView_browse.SelectedItems.Count == 0)
+                menuItem.Enabled = false;
+            contextMenu.MenuItems.Add(menuItem);
+
             contextMenu.Show(this.listView_browse, new Point(e.X, e.Y));
+        }
+
+        void menu_viewSearchDetail_Click(object sender, EventArgs e)
+        {
+            StringBuilder text = new StringBuilder();
+
+            foreach (ListViewItem item in this.listView_browse.SelectedItems)
+            {
+                DupSearchResult result = (DupSearchResult)item.Tag;
+                if (result == null)
+                    text.Append("(null)");
+                text.Append($"{result.Path}\t{(result == null ? "(null)" : result.Detail)}\r\n");
+            }
+
+            MessageDialog.Show(this, text.ToString());
         }
 
         void menu_loadToNewDetailWindow_Click(object sender, EventArgs e)
@@ -871,8 +907,8 @@ namespace dp2Circulation
 
             EntityForm form = new EntityForm();
 
-            form.MdiParent = this.MainForm;
-            form.MainForm = this.MainForm;
+            form.MdiParent = Program.MainForm;
+            form.MainForm = Program.MainForm;
             form.Show();
             form.LoadRecordOld(strPath, "", true);
         }
@@ -886,7 +922,7 @@ namespace dp2Circulation
             }
             string strPath = this.listView_browse.SelectedItems[0].SubItems[0].Text;
 
-            EntityForm form = this.MainForm.GetTopChildWindow<EntityForm>();
+            EntityForm form = Program.MainForm.GetTopChildWindow<EntityForm>();
             if (form == null)
             {
                 MessageBox.Show(this, "目前并没有已经打开的种册窗");
@@ -929,17 +965,17 @@ namespace dp2Circulation
 
             EnableControls(false);
 
+            LibraryChannel channel = this.GetChannel();
+
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在填充浏览列 ...");
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
-
-
                 int nStart = 0;
                 int nCount = 0;
                 for (; ; )
@@ -952,26 +988,20 @@ namespace dp2Circulation
 
                     Application.DoEvents();	// 出让界面控制权
 
-                    if (stop != null)
+                    if (stop != null && stop.State != 0)
                     {
-                        if (stop.State != 0)
-                        {
-                            strError = "用户中断";
-                            return -1;
-                        }
+                        strError = "用户中断";
+                        return -1;
                     }
 
                     stop.SetMessage("正在装入浏览信息 " + (nStart + 1).ToString() + " - " + (nStart + nCount).ToString());
-
-
-
 
                     string[] paths = new string[nCount];
                     pathlist.CopyTo(nStart, paths, 0, nCount);
 
                     Record[] searchresults = null;
 
-                    long lRet = this.Channel.GetBrowseRecords(
+                    long lRet = channel.GetBrowseRecords(
                         this.stop,
                         paths,
                         "id,cols",
@@ -1005,7 +1035,6 @@ namespace dp2Circulation
                         }
                     }
 
-
                     nStart += searchresults.Length;
                 }
             }
@@ -1014,6 +1043,8 @@ namespace dp2Circulation
                 stop.EndLoop();
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
+
+                this.ReturnChannel(channel);
 
                 EnableControls(true);
             }

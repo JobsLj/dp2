@@ -548,6 +548,25 @@ namespace DigitalPlatform.LibraryServer
             return 0;
         }
 
+        // 包装后的版本
+        public int ConvertBiblioXmlToHtml(
+    string strFilterFileName,
+    string strBiblioXml,
+    string strSyntax,
+    string strRecPath,
+    out string strBiblio,
+    out string strError)
+        {
+            return ConvertBiblioXmlToHtml(
+            strFilterFileName,
+            strBiblioXml,
+            strSyntax,
+            strRecPath,
+            "",
+            out strBiblio,
+            out strError);
+        }
+
         // 将种记录数据从XML格式转换为HTML格式
         // parameters:
         //      strBiblioXml    XML记录，或者 MARC 记录
@@ -557,6 +576,7 @@ namespace DigitalPlatform.LibraryServer
             string strBiblioXml,
             string strSyntax,
             string strRecPath,
+            string strStyle,
             out string strBiblio,
             out string strError)
         {
@@ -568,6 +588,7 @@ namespace DigitalPlatform.LibraryServer
 
             FilterHost host = new FilterHost();
             host.RecPath = strRecPath;
+            host.Style = strStyle;
             host.App = this;
 
             string strMarc = "";
@@ -638,14 +659,45 @@ namespace DigitalPlatform.LibraryServer
             return -1;
         }
 
+        /*
+         * https://en.wikipedia.org/wiki/International_Standard_Bibliographic_Description#Structure_of_an_ISBD_record
+ISBD Structure
+0: Content form and media type area
+1: Title and statement of responsibility area, consisting of 
+1.1 Title proper
+1.2 Parallel title
+1.3 Other title information
+1.4 Statement of responsibility
+2: Edition area
+3: Material or type of resource specific area (e.g., the scale of a map or the numbering of a periodical)
+4: Publication, production, distribution, etc., area
+5: Material description area (e.g., number of pages in a book or number of CDs issued as a unit)
+6: Series area
+7: Notes area
+8: Resource identifier and terms of availability area (e.g., ISBN, ISSN)
+         * 
+         * 按照上述结构名称，大项的 type 命名为：
+         * content_form_area
+         * title_area
+         * edition_area
+         * material_specific_area
+         * publication_area
+         * material_description_area
+         * series_area
+         * notes_area
+         * resource_identifier_area
+         * */
         // 将书目 XML 转换为 table 格式
         // parameters:
         //      strBiblioXml    XML记录，或者 MARC 记录
         //      strSyntax   MARC格式 usmarc/unimarc。如果strBiblioXml 第一字符为 '<' 则本参数可以为空
+        //      strStyle    创建风格。
         public int ConvertBiblioXmlToTable(
             string strBiblioXml,
             string strSyntax,
             string strRecPath,
+            string strStyle,
+            XmlElement maps_container,
             out string strBiblio,
             out string strError)
         {
@@ -686,6 +738,7 @@ namespace DigitalPlatform.LibraryServer
             strBiblioXml,
             null,
             strRecPath,
+            strStyle,
             out strBiblio,
             out strError);
                     if (nRet == -1)
@@ -699,6 +752,8 @@ namespace DigitalPlatform.LibraryServer
                         nRet = MarcTable.ScriptMarc21(
                             strRecPath,
                             strMarc,
+                            strStyle,
+                            maps_container,
                             out results,
                             out strError);
                         if (nRet == -1)
@@ -709,6 +764,8 @@ namespace DigitalPlatform.LibraryServer
                         nRet = MarcTable.ScriptUnimarc(
     strRecPath,
     strMarc,
+    strStyle,
+    maps_container,
     out results,
     out strError);
                         if (nRet == -1)
@@ -716,11 +773,11 @@ namespace DigitalPlatform.LibraryServer
                     }
                     else
                     {
-                        strError = "无法识别的 MARC 格式 '"+strSyntax+"'";
+                        strError = "无法识别的 MARC 格式 '" + strSyntax + "'";
                         return -1;
                     }
 
-                    strBiblio = BuildTableXml(results);
+                    strBiblio = NameValueLine.BuildTableXml(results);
                     return 0;
                 }
             }
@@ -728,20 +785,5 @@ namespace DigitalPlatform.LibraryServer
             return 0;
         }
 
-        // 创建 Table Xml
-        public static string BuildTableXml(List<NameValueLine> lines)
-        {
-            XmlDocument dom = new XmlDocument();
-            dom.LoadXml("<root />");
-            foreach (NameValueLine line in lines)
-            {
-                XmlElement new_line = dom.CreateElement("line");
-                dom.DocumentElement.AppendChild(new_line);
-                new_line.SetAttribute("name", line.Name);
-                new_line.SetAttribute("value", line.Value);
-            }
-
-            return dom.OuterXml;
-        }
     }
 }

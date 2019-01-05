@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Text;
 using System.Web;
 using System.Web.UI;
 using System.Web.UI.WebControls;
@@ -15,7 +14,6 @@ using System.Xml;
 
 using DigitalPlatform.Text;
 using DigitalPlatform.OPAC.Server;
-using DigitalPlatform.LibraryClient.localhost;
 using DigitalPlatform.Xml;
 
 namespace DigitalPlatform.OPAC.Web
@@ -303,10 +301,12 @@ namespace DigitalPlatform.OPAC.Web
                 }
                 else
                 {
-                    list = new DropDownList();
-                    list.ID = "logic" + Convert.ToString(i);
-                    list.Width = new Unit("100%");
-                    list.CssClass = "logic";
+                    list = new DropDownList
+                    {
+                        ID = "logic" + Convert.ToString(i),
+                        Width = new Unit("100%"),
+                        CssClass = "logic"
+                    };
                     line.Controls.Add(list);
                     FillLogicOperList(list);
                 }
@@ -878,7 +878,6 @@ namespace DigitalPlatform.OPAC.Web
             int nUsed = 0;
             for (int i = 0; i < ((bSimple == true || bSimplest == true) ? 1 : this.LineCount); i++)
             {
-
                 DropDownList list = null;
 
                 // 数据库名
@@ -1131,6 +1130,21 @@ namespace DigitalPlatform.OPAC.Web
             {
                 string strLocationQueryXml = "<item resultset='#" + strLocationFilter + "' />";
                 strXml = "<group>" + strXml + "<operator value='AND'/>" + strLocationQueryXml + "</group>";
+            }
+
+            // 2018/12/5
+            // 对书目检索的额外过滤
+            if (string.IsNullOrEmpty(app.BiblioFilter) == false)
+            {
+                string strOperator = "AND";
+                string strFilter = app.BiblioFilter;
+                if (strFilter.StartsWith("-"))
+                {
+                    strFilter = strFilter.Substring(1);
+                    strOperator = "SUB";
+                }
+                string strSubQueryXml = "<item resultset='#" + strFilter + "' />";
+                strXml = $"<group>{strXml}<operator value='{strOperator}'/>{strSubQueryXml}</group>";
             }
 
             return 0;

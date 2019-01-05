@@ -103,7 +103,8 @@ namespace dp2Circulation
             }
 
             // webbrowser
-            this.m_webExternalHost_readerInfo.Initial(this.MainForm, this.webBrowser_reader);
+            this.m_webExternalHost_readerInfo.Initial(// Program.MainForm,
+                this.webBrowser_reader);
             this.m_webExternalHost_readerInfo.OutputDebugInfo += new OutputDebugInfoEventHandler(m_webExternalHost_readerInfo_OutputDebugInfo);
             // this.m_webExternalHost_readerInfo.WebBrowser = this.webBrowser_reader;  //
             this.webBrowser_reader.ObjectForScripting = this.m_webExternalHost_readerInfo;
@@ -112,13 +113,15 @@ namespace dp2Circulation
             this.commander.IsBusy -= new IsBusyEventHandler(commander_IsBusy);
             this.commander.IsBusy += new IsBusyEventHandler(commander_IsBusy);
 
-            this._summaryChannel.Initial(this.MainForm);
-            this._barcodeChannel.Initial(this.MainForm);
+            this._summaryChannel.Initial(/*Program.MainForm*/);
+            this._barcodeChannel.Initial(/*Program.MainForm*/);
 
             this.FuncState = this.FuncState;
 
+#if OLD_CHARGING_CHANNEL
             this._taskList.Channel = this.Channel;
             this._taskList.stop = this.stop;
+#endif
             this._taskList.Container = this;
             this._taskList.BeginThread();
 
@@ -126,32 +129,16 @@ namespace dp2Circulation
             // this._summaryList.stop = this.stop;
             this._summaryList.Container = this;
             this._summaryList.BeginThread();
-#if NO
-            {
-                _floatingMessage = new FloatingMessageForm(this);
-                _floatingMessage.Font = new System.Drawing.Font(this.Font.FontFamily, this.Font.Size * 2, FontStyle.Bold);
-                // _floatingMessage.TopMost = true;
-                // _floatingMessage.Text = "正在处理，请不要让读者离开 ...";
-                _floatingMessage.Opacity = 0.7;
-                _floatingMessage.Show(this);
-            }
-#endif
             this._floatingMessage.RectColor = Color.Purple;
 
-#if NO
-            this.MainForm.Move += new EventHandler(MainForm_Move);
-#endif
-
-            this.toolStripButton_enableHanzi.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.toolStripButton_enableHanzi.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "quickchargingform",
-                "eanble_hanzi",
+                "enable_hanzi",
                 false);
-            this.toolStripButton_upperInput.Checked = this.MainForm.AppInfo.GetBoolean(
-                "quickchargingform",
-                "upper_input",
-                true);
+            this.toolStripButton_upperInput.Checked = Program.MainForm.UpperInputBarcode;
+
             {   // 恢复列宽度
-                string strWidths = this.MainForm.AppInfo.GetString(
+                string strWidths = Program.MainForm.AppInfo.GetString(
                                "quickchargingform",
                                 "tasklist_column_width",
                                "");
@@ -271,8 +258,8 @@ namespace dp2Circulation
         private void QuickChargingForm_FormClosed(object sender, FormClosedEventArgs e)
         {
 #if NO
-            if (this.MainForm != null)
-                this.MainForm.Move -= new EventHandler(MainForm_Move);
+            if (Program.MainForm != null)
+                Program.MainForm.Move -= new EventHandler(MainForm_Move);
 #endif
 
             this.commander.Destroy();
@@ -304,19 +291,23 @@ namespace dp2Circulation
 
             // this.Channel.Idle -= new IdleEventHandler(Channel_Idle);
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
                     "quickchargingform",
-                    "eanble_hanzi",
+                    "enable_hanzi",
                     this.toolStripButton_enableHanzi.Checked);
-                this.MainForm.AppInfo.SetBoolean(
+
+#if NO
+                Program.MainForm.AppInfo.SetBoolean(
                     "quickchargingform",
                     "upper_input",
                     this.toolStripButton_upperInput.Checked);
+#endif
+
                 {   // 保存列宽度
                     string strWidths = DpTable.GetColumnWidthListString(this.dpTable_tasks);
-                    this.MainForm.AppInfo.SetString(
+                    Program.MainForm.AppInfo.SetString(
                         "quickchargingform",
                         "tasklist_column_width",
                         strWidths);
@@ -491,18 +482,16 @@ namespace dp2Circulation
             dlg.MessageVisible = false;
             dlg.Overflow = StringUtil.SplitList(strRecPath).Count < lRet;
             int nRet = dlg.Initial(
-                this.MainForm,
-                //this.Channel,
-                //this.stop,
+                // Program.MainForm,
                 StringUtil.SplitList(strRecPath),
                 "请选择一个读者记录",
                 out strError);
             if (nRet == -1)
                 return -1;
             // TODO: 保存窗口内的尺寸状态
-            this.MainForm.AppInfo.LinkFormState(dlg, "QuickChargingForm_SelectPatronDialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "QuickChargingForm_SelectPatronDialog_state");
             dlg.ShowDialog(this.SafeWindow);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return 0;
@@ -595,36 +584,48 @@ namespace dp2Circulation
                 dlg.VerifyBorrower = this._taskList.CurrentReaderBarcode;
                 dlg.Text = "请选择要读过的册";
             }
+            else if (func == dp2Circulation.FuncState.Boxing)
+            {
+                dlg.FunctionType = "boxing";
+                dlg.VerifyBorrower = this._taskList.CurrentReaderBarcode;
+                dlg.Text = "请选择要配书的册";
+            }
+            else if (func == dp2Circulation.FuncState.Move)
+            {
+                dlg.FunctionType = "move";
+                dlg.Text = "请选择要调拨的册";
+            }
+
 
             dlg.AutoOperSingleItem = this.AutoOperSingleItem;
             dlg.AutoSearch = true;
-            dlg.MainForm = this.MainForm;
+            dlg.MainForm = Program.MainForm;
             dlg.From = "ISBN";
             dlg.QueryWord = strText;
 
-            string strUiState = this.MainForm.AppInfo.GetString(
+            string strUiState = Program.MainForm.AppInfo.GetString(
         "QuickChargingForm",
         "SelectItemDialog_uiState",
         "");
             dlg.UiState = strUiState;
 
             if (string.IsNullOrEmpty(strUiState) == false
-                || this.MainForm.PanelFixedVisible == true)
-                this.MainForm.AppInfo.LinkFormState(dlg, "QuickChargingForm_SelectItemDialog_state");
+                || Program.MainForm.PanelFixedVisible == true)
+                Program.MainForm.AppInfo.LinkFormState(dlg, "QuickChargingForm_SelectItemDialog_state");
             else
             {
-                dlg.Size = this.MainForm.panel_fixed.Size;
+                dlg.Size = Program.MainForm.panel_fixed.Size;
                 dlg.StartPosition = FormStartPosition.Manual;
-                dlg.Location = this.MainForm.PointToScreen(this.MainForm.panel_fixed.Location);
+                dlg.Location = Program.MainForm.PointToScreen(Program.MainForm.panel_fixed.Location);
             }
 
             dlg.ShowDialog(this.SafeWindow);
 
             if (string.IsNullOrEmpty(strUiState) == false
-                || this.MainForm.PanelFixedVisible == true)
-                this.MainForm.AppInfo.UnlinkFormState(dlg);
+                || Program.MainForm.PanelFixedVisible == true)
+                Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
 "QuickChargingForm",
 "SelectItemDialog_uiState",
 dlg.UiState);
@@ -707,7 +708,7 @@ dlg.UiState);
                 else
                     strTitle = strSummary.Trim();
 
-                this.MainForm.Speak(strTitle);
+                Program.MainForm.Speak(strTitle);
             }
         }
 #endif
@@ -748,15 +749,28 @@ dlg.UiState);
                 else
                     strTitle = strSummary.Trim();
 
-                this.MainForm.Speak(strTitle);
+                Program.MainForm.Speak(strTitle);
             }
         }
 
         internal void WriteErrorLog(string strText)
         {
             if (this.LogOperTime)
-                this.MainForm.WriteErrorLog(strText);
+            {
+                try
+                {
+                    MainForm.WriteErrorLog(strText);
+                }
+                catch (Exception ex)
+                {
+                    // 这样在 dp2003.com 的异常汇报里面就能看到 strText 内容了
+                    throw new Exception("在 QuickChargingForm::WriteErrorLog() 中尝试写入错误日志时出错。"
+                        + "拟写入错误日志的内容为 '" + strText + "'",
+                        ex);
+                }
+            }
         }
+
         /// <summary>
         /// 允许或者禁止界面控件。在长操作前，一般需要禁止界面控件；操作完成后再允许
         /// </summary>
@@ -817,7 +831,7 @@ dlg.UiState);
             try
             {
                 // TODO: 使用回调函数，以决定是否 disable textbox
-                return this.MainForm.VerifyBarcode(
+                return Program.MainForm.VerifyBarcode(
                     this._barcodeChannel.stop,
                     this._barcodeChannel.Channel,
                     strLibraryCodeList,
@@ -845,7 +859,7 @@ dlg.UiState);
     out string strError)
         {
             string strBiblioRecPath = "";
-            int nRet = this.MainForm.GetCachedBiblioSummary(strItemBarcode,
+            int nRet = Program.MainForm.GetCachedBiblioSummary(strItemBarcode,
 strConfirmItemRecPath,
 out strSummary,
 out strError);
@@ -872,7 +886,7 @@ out strError);
                 }
                 else
                 {
-                    this.MainForm.SetBiblioSummaryCache(strItemBarcode,
+                    Program.MainForm.SetBiblioSummaryCache(strItemBarcode,
                          strConfirmItemRecPath,
                          strSummary);
                 }
@@ -953,13 +967,13 @@ out strError);
             if (strText == "(空)")
             {
                 Global.ClearHtmlPage(this.webBrowser_reader,
-                    this.MainForm.DataDir);
+                    Program.MainForm.DataDir);
                 return;
             }
 
             Global.StopWebBrowser(this.webBrowser_reader);
 
-            string strTempFilename = this.MainForm.DataDir + "\\~charging_temp_reader.html";
+            string strTempFilename = Program.MainForm.DataDir + "\\~charging_temp_reader.html";
             using (StreamWriter sw = new StreamWriter(strTempFilename, false, Encoding.UTF8))
             {
                 sw.Write(strText);
@@ -992,7 +1006,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
             }
 #endif
             int nRedoCount = 0;
-        REDO:
+            REDO:
             try
             {
                 if (strHtml == "(空)")
@@ -1039,7 +1053,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
             }
 
             int nRedoCount = 0;
-        REDO:
+            REDO:
             try
             {
                 this.m_webExternalHost_readerInfo.SetTextString(strText, "reader_text");
@@ -1116,7 +1130,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
         {
             get
             {
-                return (double)this.MainForm.AppInfo.GetInt(
+                return (double)Program.MainForm.AppInfo.GetInt(
                     "charging_form",
                     "info_dlg_opacity",
                     100) / (double)100;
@@ -1130,7 +1144,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
     "charging_form",
     "stop_filling_when_close_infodlg",
     true);
@@ -1144,7 +1158,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "quickcharging_form",
                     "auto_oper_single_item",
                     false);
@@ -1158,7 +1172,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "quickcharging_form",
                     "isbn_borrow",
                     true);
@@ -1183,7 +1197,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                 color,
                 strCaption,
                 this.InfoDlgOpacity,
-                this.MainForm.DefaultFont);
+                Program.MainForm.DefaultFont);
 
             // this.SwitchFocus(nTarget, strFastInputText);
             if (string.IsNullOrEmpty(strFastInputText) == false)
@@ -1260,7 +1274,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                     {
                         string strContent = task.GetSpeakContent(line, this.StateSpeak);
                         if (string.IsNullOrEmpty(strContent) == false)
-                            this.MainForm.Speak(strContent);
+                            Program.MainForm.Speak(strContent);
                     }
 
                     if (task.Action == "load_reader_info" && string.IsNullOrEmpty(task.ReaderXml) == false)
@@ -1362,9 +1376,9 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                 {
                     /*
                     if (value == true)
-                        this.MainForm.EnterPatronIdEdit(InputType.PQR);
+                        Program.MainForm.EnterPatronIdEdit(InputType.PQR);
                     else
-                        this.MainForm.LeavePatronIdEdit();
+                        Program.MainForm.LeavePatronIdEdit();
                      * */
                     SetInputMessage(value);
 
@@ -1389,12 +1403,12 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                 return;
             }
 
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
                 if (bEnter == true)
-                    this.MainForm.EnterPatronIdEdit(input_type);
+                    Program.MainForm.EnterPatronIdEdit(input_type);
                 else
-                    this.MainForm.LeavePatronIdEdit();
+                    Program.MainForm.LeavePatronIdEdit();
             }
         }
 
@@ -1410,6 +1424,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
         /// <param name="func">出纳功能</param>
         /// <param name="strText">字符串。可能是证条码号，也可能是册条码号</param>
         /// <param name="strTaskID">任务 ID，用于管理和查询任务状态</param>
+        /// <param name="strParameters"></param>
         public void AsyncDoAction(FuncState func,
             string strText,
             string strTaskID = "",
@@ -1458,7 +1473,16 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
             int nRet = IsbnSplitter.VerifyISBN(strText,
                 out strError);
             if (nRet == 0)
+            {
+                // 2016/12/15
+                if (strText.Length == 10 && strText[0] != '7')
+                {
+                    // 10 位 ISBN，不是中国的出版物，则当作不是 ISBN 字符串。
+                    // 如果确实需要输入这样的 ISBN，请这样输入“ISBN2010120035”
+                    return false;
+                }
                 return true;
+            }
 
 #if NO
             if (strText.Length == 13)
@@ -1546,6 +1570,29 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                 strText = strItemBarcode;
             }
 
+            // 变换条码号
+            if (Program.MainForm.NeedTranformBarcode(Program.MainForm.FocusLibraryCode) == true)
+            {
+                string strError = "";
+
+                // 2017/1/4
+                int nRet = Program.MainForm.TransformBarcode(
+                    Program.MainForm.FocusLibraryCode,
+                    ref strText,
+                    out strError);
+                if (nRet == -1)
+                {
+                    // TODO: 语音提示
+                    // TODO: 红色对话框
+                    MessageBox.Show(this, strError);
+                    this.textBox_input.SelectAll();
+                    this.textBox_input.Focus();
+                    return;
+                }
+
+                // TODO: 如何让操作者能看到变换后的字符串?
+            }
+
             // 检查条码号，如果是读者证条码号，则 func = LoadPatronInfo
             if (this.NeedVerifyBarcode == true)
             {
@@ -1569,6 +1616,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                 else
                 {
                     string strError = "";
+
                     // 形式校验条码号
                     // return:
                     //      -2  服务器没有配置校验方法，无法校验
@@ -1577,7 +1625,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                     //      1   是合法的读者证条码号
                     //      2   是合法的册条码号
                     int nRet = VerifyBarcode(
-                        this.MainForm.FocusLibraryCode,  // this.Channel.LibraryCodeList,
+                        Program.MainForm.FocusLibraryCode,  // this.Channel.LibraryCodeList,
                         strText,
                         out strError);
                     if (nRet == -2)
@@ -1734,6 +1782,18 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
                 task.ItemBarcode = strText;
                 task.Action = "read";
             }
+            else if (func == dp2Circulation.FuncState.Boxing)
+            {
+                task.ItemBarcode = strText;
+                task.Action = "boxing";
+                task.Parameters = strParameters;
+            }
+            else if (func == dp2Circulation.FuncState.Move)
+            {
+                task.ItemBarcode = strText;
+                task.Action = "move";
+                task.Parameters = strParameters;
+            }
 
             this.textBox_input.SelectAll();
 
@@ -1767,7 +1827,7 @@ System.Runtime.InteropServices.COMException (0x800700AA): 请求的资源在使�
 
         void Window_Error(object sender, HtmlElementErrorEventArgs e)
         {
-            if (this.MainForm.SuppressScriptErrors == true)
+            if (Program.MainForm.SuppressScriptErrors == true)
                 e.Handled = true;
         }
 
@@ -1855,7 +1915,7 @@ false);
             {
                 if (_nLogOperTime == 0)
                 {
-                    bool bRet = this.MainForm.AppInfo.GetBoolean(
+                    bool bRet = Program.MainForm.AppInfo.GetBoolean(
                         "quickcharging_form",
                         "log_opertime",
                         true);
@@ -1873,7 +1933,7 @@ false);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("quickcharging_form",
+                return Program.MainForm.AppInfo.GetString("quickcharging_form",
                     "display_format",
                     "HTML");
             }
@@ -1883,7 +1943,7 @@ false);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("quickcharging_form",
+                return Program.MainForm.AppInfo.GetString("quickcharging_form",
                     "display_style",
                     "light");
             }
@@ -1894,7 +1954,7 @@ false);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("quickcharging_form",
+                return Program.MainForm.AppInfo.GetString("quickcharging_form",
         "state_speak",
         "[不朗读]");
             }
@@ -1915,7 +1975,7 @@ false);
                 if (_cardControl != null)
                 {
                     if (this.NoBorrowHistory == true
-                        && StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.25") >= 0)
+                        && StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.25") >= 0)
                     {
                         styles.Add("noborrowhistory");
                         // return "xml:noborrowhistory";
@@ -1925,7 +1985,7 @@ false);
                 else
                 {
                     if (this.NoBorrowHistory == true
-                        && StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.21") >= 0)
+                        && StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.21") >= 0)
                     {
                         styles.Add("noborrowhistory");
                         // return "html:noborrowhistory";
@@ -1944,14 +2004,14 @@ false);
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "quickcharging_form",
                     "no_borrow_history",
                     true);
             }
             set
             {
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
                     "quickcharging_form",
                     "no_borrow_history",
                     value);
@@ -1967,7 +2027,7 @@ false);
             {
                 return true;
 #if NO
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "charging_form",
                     "autoClearTextbox",
                     true);
@@ -1982,7 +2042,7 @@ false);
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "quickcharging_form",
                     "verify_barcode",
                     false);
@@ -2008,7 +2068,7 @@ false);
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "quickcharging_form",
                     "speak_reader_name",
                     false);
@@ -2022,7 +2082,7 @@ false);
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(
+                return Program.MainForm.AppInfo.GetBoolean(
                     "quickcharging_form",
                     "speak_book_title",
                     false);
@@ -2048,7 +2108,7 @@ false);
                 WillLoadReaderInfo = true;
                 this._bScrollBarTouched = false;
 
-                this.MainForm.ClearQrLastText();
+                Program.MainForm.ClearQrLastText();
 
                 this.toolStripMenuItem_borrow.Checked = false;
                 this.toolStripMenuItem_return.Checked = false;
@@ -2061,6 +2121,8 @@ false);
                 this.toolStripMenuItem_continueBorrow.Checked = false;
                 this.toolStripMenuItem_inventoryBook.Checked = false;
                 this.toolStripMenuItem_read.Checked = false;
+                this.toolStripMenuItem_boxing.Checked = false;
+                this.toolStripMenuItem_move.Checked = false;
 
                 if (this.AutoClearTextbox == true)
                 {
@@ -2128,6 +2190,17 @@ false);
                 {
                     this.toolStripMenuItem_read.Checked = true;
                 }
+                else if (_funcstate == FuncState.Boxing)
+                {
+                    this.toolStripMenuItem_boxing.Checked = true;
+
+                    WillLoadReaderInfo = false;
+                }
+                else if (_funcstate == FuncState.Move)
+                {
+                    this.toolStripMenuItem_move.Checked = true;
+                    WillLoadReaderInfo = false;
+                }
                 // SetInputMessage();
             }
         }
@@ -2176,7 +2249,11 @@ false);
             MessageBoxDefaultButton.Button2);
                     if (result == System.Windows.Forms.DialogResult.Yes)
                     {
+#if OLD_CHARGING_CHANNEL
                         this._taskList.stop.DoStop();
+#else
+                        this._taskList.DoStop(this, new StopEventArgs());
+#endif
                     }
                     else
                         return false;   // 放弃清除
@@ -2936,7 +3013,7 @@ MessageBoxDefaultButton.Button2);
 
             if (strType == "readerinfo_form")
             {
-                ReaderInfoForm form = this.MainForm.EnsureReaderInfoForm();
+                ReaderInfoForm form = Program.MainForm.EnsureReaderInfoForm();
                 Global.Activate(form);
 
                 form.LoadRecord(selected_task.ReaderBarcode,
@@ -2944,34 +3021,34 @@ MessageBoxDefaultButton.Button2);
             }
             if (strType == "amerce_form")
             {
-                AmerceForm form = this.MainForm.EnsureAmerceForm();
+                AmerceForm form = Program.MainForm.EnsureAmerceForm();
                 Global.Activate(form);
 
                 form.LoadReader(selected_task.ReaderBarcode, true);
             }
             if (strType == "activate_form_old")
             {
-                ActivateForm form = this.MainForm.EnsureActivateForm();
+                ActivateForm form = Program.MainForm.EnsureActivateForm();
                 Global.Activate(form);
 
                 form.LoadOldRecord(selected_task.ReaderBarcode);
             }
             if (strType == "activate_form_new")
             {
-                ActivateForm form = this.MainForm.EnsureActivateForm();
+                ActivateForm form = Program.MainForm.EnsureActivateForm();
                 Global.Activate(form);
 
                 form.LoadNewRecord(selected_task.ReaderBarcode);
             }
             if (strType == "readermanage_form")
             {
-                ReaderManageForm form = this.MainForm.EnsureReaderManageForm();
+                ReaderManageForm form = Program.MainForm.EnsureReaderManageForm();
                 Global.Activate(form);
 
                 form.LoadRecord(selected_task.ReaderBarcode);
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2997,12 +3074,12 @@ MessageBoxDefaultButton.Button2);
                 goto ERROR1;
             }
 
-            ItemInfoForm form = this.MainForm.EnsureItemInfoForm();
+            ItemInfoForm form = Program.MainForm.EnsureItemInfoForm();
             Global.Activate(form);
 
             form.LoadRecord(selected_task.ItemBarcode);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3027,7 +3104,7 @@ MessageBoxDefaultButton.Button2);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             this.ShowMessage(strError, "error", true);
         }
 
@@ -3053,12 +3130,12 @@ MessageBoxDefaultButton.Button2);
                 goto ERROR1;
             }
 
-            EntityForm form = this.MainForm.EnsureEntityForm();
+            EntityForm form = Program.MainForm.EnsureEntityForm();
             Global.Activate(form);
 
             form.LoadItemByBarcode(selected_task.ItemBarcode, false);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3240,7 +3317,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
 
             if (_patronSummaryForm.Visible == false)
             {
-                this.MainForm.AppInfo.LinkFormState(this._patronSummaryForm, "_patronSummaryForm_state");
+                Program.MainForm.AppInfo.LinkFormState(this._patronSummaryForm, "_patronSummaryForm_state");
                 if (_patronSummaryForm.IsDisposed)
                     return;
                 _patronSummaryForm.Show(this);
@@ -3255,9 +3332,9 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
         void _patronSummaryForm_FormClosed(object sender, FormClosedEventArgs e)
         {
             if (_patronSummaryForm != null
-                && this.MainForm != null && this.MainForm.AppInfo != null)
+                && Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.UnlinkFormState(_patronSummaryForm);
+                Program.MainForm.AppInfo.UnlinkFormState(_patronSummaryForm);
                 this._patronSummaryForm = null;
             }
         }
@@ -3278,7 +3355,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
         public void Print()
         {
             // 触发历史动作
-            this.MainForm.OperHistory.Print();
+            Program.MainForm.OperHistory.Print();
         }
 
 #if NO
@@ -3344,8 +3421,14 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
 
         string GetUpperCase(string strText)
         {
+#if NO
             if (string.IsNullOrEmpty(strText) == true)
                 return strText;
+
+            // 除去首尾连续的空额
+            // 2016/12/15
+            strText = strText.Trim();
+
             if (this.toolStripButton_upperInput.Checked == true)
             {
                 if (strText.ToLower().StartsWith("@bibliorecpath:") == true)
@@ -3353,6 +3436,8 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
                 return strText.ToUpper();
             }
             return strText;
+#endif
+            return Program.MainForm.GetUpperCase(strText);
         }
 
         private void toolStripButton_upperInput_CheckedChanged(object sender, EventArgs e)
@@ -3361,8 +3446,9 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
                 this.toolStripButton_upperInput.Text = "A";
             else
                 this.toolStripButton_upperInput.Text = "a";
-        }
 
+            Program.MainForm.UpperInputBarcode = this.toolStripButton_upperInput.Checked;
+        }
 
         void RefreshActionPicture()
         {
@@ -3408,6 +3494,10 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
                 strText = "盘";
             else if (_funcstate == FuncState.Read)
                 strText = "读";
+            else if (_funcstate == FuncState.Boxing)
+                strText = "配";
+            else if (_funcstate == FuncState.Move)
+                strText = "调";
             else
                 strText = "?";
 
@@ -3459,7 +3549,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
             MainForm.SetControlFont(dlg, this.Font, false);
             dlg.LibraryCodeList = GetOwnerLibraryCodes();
             dlg.BatchNo = this.BatchNo;
-            this.MainForm.AppInfo.LinkFormState(dlg, "InventoryFromFileDialog_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "InventoryFromFileDialog_state");
             dlg.ShowDialog(this.SafeWindow);
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return;
@@ -3471,7 +3561,7 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
                 goto ERROR1;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3589,6 +3679,21 @@ dp2Circulation 版本: dp2Circulation, Version=2.4.5735.664, Culture=neutral, Pu
                     "simulate_reservation_arrive");
             else
                 MessageBox.Show(this, "此功能必须和还书、丢失功能配套使用");
+        }
+
+        private void ToolStripMenuItem_boxing_Click(object sender, EventArgs e)
+        {
+            this.FuncState = FuncState.Boxing;
+        }
+
+        private void ToolStripMenuItem_move_Click(object sender, EventArgs e)
+        {
+            this.FuncState = FuncState.Move;
+        }
+
+        private void toolStripButton_selectTargetLocation_Click(object sender, EventArgs e)
+        {
+
         }
     }
 

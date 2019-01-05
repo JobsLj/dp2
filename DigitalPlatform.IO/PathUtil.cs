@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 
@@ -15,6 +14,33 @@ namespace DigitalPlatform.IO
     /// </summary>
     public class PathUtil
     {
+        // 检查 .xlsx 文件名的合法性，如果必要自动添加扩展名部分
+        public static string CheckXlsxFileName(ref string strFilePath)
+        {
+            try
+            {
+                string strPureFileName = Path.GetFileName(strFilePath);
+                if (string.IsNullOrEmpty(strPureFileName))
+                    return "文件名部分不应为空";
+                string strExtension = Path.GetExtension(strPureFileName);
+                if (string.IsNullOrEmpty(strExtension))
+                {
+                    // 自动加上扩展名部分
+                    strPureFileName = Path.GetFileNameWithoutExtension(strFilePath) + ".xlsx";
+                    strFilePath = Path.Combine(Path.GetDirectoryName(strFilePath), strPureFileName);
+                    strExtension = Path.GetExtension(strPureFileName);
+                }
+                if (string.Compare(strExtension, ".xlsx") != 0)
+                    return "文件扩展名应当为 .xlsx";
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return "文件名 '" + strFilePath + "' 不合法: " + ExceptionUtil.GetAutoText(ex);
+            }
+        }
+
         // 获得一个目录下的全部文件名。包括子目录中的
         public static List<string> GetFileNames(string strDataDir,
             FileNameFilterProc filter_proc = null)
@@ -708,7 +734,7 @@ namespace DigitalPlatform.IO
 
         // get clickonce shortcut filename
         // parameters:
-        //      strApplicationName  "DigitalPlatform/dp2 V2/dp2内务 V2"
+        //      strApplicationName  "DigitalPlatform/dp2 V3/dp2内务 V3"
         public static string GetShortcutFilePath(string strApplicationName)
         {
             // string publisherName = "Publisher Name";
@@ -726,12 +752,52 @@ namespace DigitalPlatform.IO
             {
                 // 不存在就算了
             }
+            catch (IOException)
+            {
+                Thread.Sleep(0);
+                Directory.Delete(strDirPath, true);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Thread.Sleep(0);
+                Directory.Delete(strDirPath, true);
+            }
         }
+
+#if NO
+        // https://stackoverflow.com/questions/329355/cannot-delete-directory-with-directory-deletepath-true
+        public static void DeleteDirectory(string path)
+        {
+            foreach (string directory in Directory.GetDirectories(path))
+            {
+                DeleteDirectory(directory);
+            }
+
+            try
+            {
+                Directory.Delete(path, true);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // 不存在就算了
+            }
+            catch (IOException)
+            {
+                Thread.Sleep(0);
+                Directory.Delete(path, true);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Thread.Sleep(0);
+                Directory.Delete(path, true);
+            }
+        }
+#endif
 
         // 移除文件目录内所有文件的 ReadOnly 属性
         public static void RemoveReadOnlyAttr(string strSourceDir)
         {
-            string strCurrentDir = Directory.GetCurrentDirectory();
+            // string strCurrentDir = Directory.GetCurrentDirectory();
 
             DirectoryInfo di = new DirectoryInfo(strSourceDir);
 
@@ -783,7 +849,21 @@ namespace DigitalPlatform.IO
                 }
 #endif
 
-                CreateDirIfNeed(strTargetDir);
+                try
+                {
+                    // 如果目录不存在则创建之
+                    // return:
+                    //      false   已经存在
+                    //      true    刚刚新创建
+                    // exception:
+                    //      可能会抛出异常 System.IO.DirectoryNotFoundException (未能找到路径“...”的一部分)
+                    TryCreateDir(strTargetDir);
+                }
+                catch (Exception ex)
+                {
+                    strError = "创建目录 '" + strTargetDir + "' 时出现异常: " + ex.Message;
+                    return -1;
+                }
 
                 FileSystemInfo[] subs = di.GetFileSystemInfos();
 
@@ -874,20 +954,38 @@ namespace DigitalPlatform.IO
                 if (bDeleteTargetBeforeCopy == true)
                 {
                     if (Directory.Exists(strTargetDir) == true)
+                    {
+                        RemoveReadOnlyAttr(strTargetDir);   // 怕即将删除的目录中有隐藏文件妨碍删除
+
                         Directory.Delete(strTargetDir, true);
+                    }
                 }
 
-                CreateDirIfNeed(strTargetDir);
+                try
+                {
+                    // 如果目录不存在则创建之
+                    // return:
+                    //      false   已经存在
+                    //      true    刚刚新创建
+                    // exception:
+                    //      可能会抛出异常 System.IO.DirectoryNotFoundException (未能找到路径“...”的一部分)
+                    TryCreateDir(strTargetDir);
+                }
+                catch (Exception ex)
+                {
+                    strError = "创建目录 '" + strTargetDir + "' 时出现异常: " + ex.Message;
+                    return -1;
+                }
 
                 FileSystemInfo[] subs = di.GetFileSystemInfos();
 
-                for (int i = 0; i < subs.Length; i++)
+                foreach (FileSystemInfo sub in subs)
                 {
                     // 复制目录
-                    if ((subs[i].Attributes & FileAttributes.Directory) == FileAttributes.Directory)
+                    if ((sub.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
                     {
-                        int nRet = CopyDirectory(subs[i].FullName,
-                            Path.Combine(strTargetDir, subs[i].Name),
+                        int nRet = CopyDirectory(sub.FullName,
+                            Path.Combine(strTargetDir, sub.Name),
                             bDeleteTargetBeforeCopy,
                             out strError);
                         if (nRet == -1)
@@ -895,8 +993,8 @@ namespace DigitalPlatform.IO
                         continue;
                     }
                     // 复制文件
-                    File.Copy(subs[i].FullName, 
-                        Path.Combine(strTargetDir, subs[i].Name),
+                    File.Copy(sub.FullName,
+                        Path.Combine(strTargetDir, sub.Name),
                         true);
                 }
             }
@@ -909,11 +1007,27 @@ namespace DigitalPlatform.IO
             return 0;
         }
 
+        // 兼容原来函数名
+        // exception:
+        //      可能会抛出异常 System.IO.DirectoryNotFoundException (未能找到路径“...”的一部分)
+        public static bool CreateDirIfNeed(string strDir)
+        {
+            // 如果目录不存在则创建之
+            // return:
+            //      false   已经存在
+            //      true    刚刚新创建
+            // exception:
+            //      可能会抛出异常 System.IO.DirectoryNotFoundException (未能找到路径“...”的一部分)
+            return TryCreateDir(strDir);
+        }
+
         // 如果目录不存在则创建之
         // return:
         //      false   已经存在
         //      true    刚刚新创建
-        public static bool CreateDirIfNeed(string strDir)
+        // exception:
+        //      盘符不存在的情况下，可能会抛出异常 System.IO.DirectoryNotFoundException (未能找到路径“...”的一部分)
+        public static bool TryCreateDir(string strDir)
         {
             DirectoryInfo di = new DirectoryInfo(strDir);
             if (di.Exists == false)
@@ -948,6 +1062,35 @@ namespace DigitalPlatform.IO
             }
         }
 
+        // 2018/10/12
+        // 计算一个目录中的文件个数
+        public static long GetFileCount(string strDir)
+        {
+            try
+            {
+                DirectoryInfo di = new DirectoryInfo(strDir);
+                if (di.Exists == false)
+                    return 0;
+
+                long count = 0;
+                // 计算所有的下级目录中的文件个数
+                DirectoryInfo[] dirs = di.GetDirectories();
+                foreach (DirectoryInfo childDir in dirs)
+                {
+                    count += GetFileCount(childDir.FullName);
+                }
+
+                // 所有文件
+                FileInfo[] fis = di.GetFiles();
+                count += fis.Length;
+                return count;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
         // 删除一个目录内的所有文件和目录
         // 不会抛出异常
         public static bool TryClearDir(string strDir)
@@ -974,10 +1117,20 @@ namespace DigitalPlatform.IO
 
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception /*ex*/)
             {
                 return false;
             }
+        }
+
+        // 是否为纯文件名？
+        public static bool IsPureFileName(string strText)
+        {
+            if (string.IsNullOrEmpty(strText) == true)
+                return false;
+            if (strText.IndexOfAny(new char[] { '/', '\\', ':' }) == -1)
+                return true;
+            return false;
         }
 
         // 获得纯文件名部分
@@ -1122,6 +1275,7 @@ namespace DigitalPlatform.IO
             if (strPath1 == strPath2)
                 return true;
 
+            // TODO: new DirecotryInfo() 对一个文件操作时候会怎样？会抛出异常么? 需要测试一下 2016/11/6
             FileSystemInfo fi1 = new DirectoryInfo(strPath1);
             FileSystemInfo fi2 = new DirectoryInfo(strPath2);
 

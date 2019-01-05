@@ -61,10 +61,10 @@ namespace DigitalPlatform.rms
             if (nRet == -1)
                 return -1;
 
-            if (this.dom != null)
+            if (this._dom != null)
             {
                 // 初始化stopword
-                XmlNode nodeStopword = dom.DocumentElement.SelectSingleNode("//stopword");
+                XmlNode nodeStopword = _dom.DocumentElement.SelectSingleNode("//stopword");
                 if (nodeStopword != null)
                 {
                     this.StopwordCfg = new StopwordCfg();
@@ -99,14 +99,14 @@ namespace DigitalPlatform.rms
             strError = "";
             int nRet = 0;
 
-            if (this.dom == null)
+            if (this._dom == null)
             {
                 this.m_assembly = null;
                 return 0;
             }
 
             // 找到<script>节点
-            XmlNode nodeScript = this.dom.SelectSingleNode("//script");
+            XmlNode nodeScript = this._dom.SelectSingleNode("//script");
 
             // <script>节点不存在的时
             if (nodeScript == null)
@@ -211,7 +211,7 @@ namespace DigitalPlatform.rms
                 false); // 不要抛出异常，因为可能还有%binddir%宏现在还无法替换
                 refs[i] = strNew;
             }
-        } 
+        }
 
         // 创建Assembly
         // parameters:
@@ -322,7 +322,7 @@ namespace DigitalPlatform.rms
             return nCount;
         }
 
-        
+
 
 
         // 创建TableInfo缓存,被Initial调
@@ -335,11 +335,11 @@ namespace DigitalPlatform.rms
             strError = "";
             int nRet = 0;
 
-            if (this.dom == null)
+            if (this._dom == null)
                 return 0;
 
             // 找到<key>下级的所有<table>
-            XmlNodeList nodeListTable = this.dom.DocumentElement.SelectNodes("//key/table");
+            XmlNodeList nodeListTable = this._dom.DocumentElement.SelectNodes("//key/table");
             for (int i = 0; i < nodeListTable.Count; i++)
             {
                 // 当前<table>节点
@@ -360,7 +360,7 @@ namespace DigitalPlatform.rms
 
                 // 取出目标<table>的路径
                 string strPath = "";
-                nRet = DomUtil.Node2Path(dom.DocumentElement,
+                nRet = DomUtil.Node2Path(_dom.DocumentElement,
                     nodeTargetTable,
                     out strPath,
                     out strError);
@@ -424,7 +424,7 @@ namespace DigitalPlatform.rms
             string strXPath = "//table[@name='" + strRef + "']";
             if (string.IsNullOrEmpty(strTableName) == false
                 && string.IsNullOrEmpty(strTableID) == false)
-                strXPath = "//table[@name='" + strTableName + "' and @id='"+strTableID+"']";
+                strXPath = "//table[@name='" + strTableName + "' and @id='" + strTableID + "']";
             else if (string.IsNullOrEmpty(strTableName) == false)
                 strXPath = "//table[@name='" + strTableName + "']";
             else if (string.IsNullOrEmpty(strTableID) == false)
@@ -459,8 +459,8 @@ namespace DigitalPlatform.rms
                 return -1;
             }
 
-            string [] parts = strRef.Split(new char []{','});
-            foreach(string part in parts)
+            string[] parts = strRef.Split(new char[] { ',' });
+            foreach (string part in parts)
             {
                 string strText = part.Trim();
                 if (String.IsNullOrEmpty(strText) == true)
@@ -534,7 +534,7 @@ namespace DigitalPlatform.rms
         public int BuildKeys(XmlDocument domData,
             string strRecordID,
             string strLang,
-//             string strStyle,
+            //             string strStyle,
             int nKeySize,
             out KeyCollection keys,
             out string strError)
@@ -542,7 +542,7 @@ namespace DigitalPlatform.rms
             strError = "";
             keys = new KeyCollection();
 
-            if (this.dom == null)
+            if (this._dom == null)
                 return 0;
 
             if (domData == null)
@@ -581,7 +581,7 @@ namespace DigitalPlatform.rms
 
             // 找到所有<key>节点
             // TODO: <key> 是否有明确的位置？ 那样就可以避免 // 查找。或者预先缓存起来
-            XmlNodeList keyList = dom.SelectNodes("//key");
+            XmlNodeList keyList = _dom.SelectNodes("//key");
 
             XPathNavigator nav = domData.CreateNavigator();
 
@@ -663,24 +663,20 @@ namespace DigitalPlatform.rms
                 TableInfo tableInfo = (TableInfo)this.tableTableInfoClient[nodeTable];
                 Debug.Assert(tableInfo != null, "从Hashtable里取出的tabInfo不可能为null。");
 
-
-
                 strSqlTableName = tableInfo.SqlTableName.Trim();
 
                 // 根据语言版本获得来源名称
                 strFromName = tableInfo.GetCaption(strLang);
 
-
                 // 所有的检索点字符串
                 List<string> aKey = new List<string>();
-
 
                 XmlNode nodeXpath = nodeKey.SelectSingleNode("xpath");
                 string strScriptAttr = "";
                 if (nodeXpath != null)
                     strScriptAttr = DomUtil.GetAttr(nodeXpath, "scripting");
 
-                
+
                 if (String.Compare(strScriptAttr, "on", true) == 0)
                 {
                     // 执行脚本得到检索点
@@ -806,7 +802,7 @@ namespace DigitalPlatform.rms
                     strKey = aKey[j];
                     //???????注意，如果key内容为空，是否也应该算作一个key呢?
                     if (strKey == "")
-                    	continue;
+                        continue;
 
                     strKeyNoProcess = strKey;
                     strNum = "-1";
@@ -887,7 +883,7 @@ namespace DigitalPlatform.rms
         //      0   成功
         public int DoScriptFunction(XmlDocument dataDom,
             string strFunctionName,
-            ref List<string> aInputString,            
+            ref List<string> aInputString,
             out string strError)
         {
             strError = "";
@@ -967,7 +963,7 @@ namespace DigitalPlatform.rms
 
             if (this.m_assembly == null)
             {
-                strError = "keys 配置文件 '"+this.CfgFileName+"' 中未定义脚本代码，因此无法使用脚本函数'" + strFunctionName + "'。";
+                strError = "keys 配置文件 '" + this.CfgFileName + "' 中未定义脚本代码，因此无法使用脚本函数'" + strFunctionName + "'。";
                 return -1;
 
                 //strOutputString = "";
@@ -994,7 +990,7 @@ namespace DigitalPlatform.rms
                 return -1;
             }
             host.DataDom = dataDom;
-            host.CfgDom = this.dom;
+            host.CfgDom = this._dom;
             host.InputString = strInputString;
 
             // 执行函数
@@ -1057,7 +1053,7 @@ namespace DigitalPlatform.rms
                 curType = curType.BaseType;
             }
         }
-        
+
         // 清空对象
         public override void Clear()
         {
@@ -1072,6 +1068,7 @@ namespace DigitalPlatform.rms
 
         // 根据表名得到表的属性信息
         // parameters:
+        //      strTableName    表名。可以是 "@811" 这样的形态
         // return:
         //		-1	出错
         //		0	未找到
@@ -1094,9 +1091,21 @@ namespace DigitalPlatform.rms
                     return -1;
             }
 
-            for (int i = 0; i < aTableInfo.Count; i++)
+            // 2017/5/4
+            string strID = "";
+            if (strTableName[0] == '@')
+                strID = strTableName.Substring(1).Trim();
+
+            foreach (TableInfo oneTableInfo in aTableInfo)
             {
-                TableInfo oneTableInfo = aTableInfo[i];
+                if (string.IsNullOrEmpty(strID) == false)
+                {
+                    if (oneTableInfo.ID == strID)
+                    {
+                        tableInfo = oneTableInfo;
+                        return 1;
+                    }
+                }
                 if (StringUtil.IsInList(strTableName, oneTableInfo.GetAllCaption()) == true)
                 {
                     tableInfo = oneTableInfo;
@@ -1127,7 +1136,7 @@ namespace DigitalPlatform.rms
                 return 0;
             }
 
-            if (this.dom == null)
+            if (this._dom == null)
                 return 0;
 
 
@@ -1135,7 +1144,7 @@ namespace DigitalPlatform.rms
 
             // 找到<key>下级的所有不带ref属性的 <table>
             string strXpath = "//table[not(@ref)]";
-            XmlNodeList nodeListTable = this.dom.DocumentElement.SelectNodes(strXpath);//"//key/table");
+            XmlNodeList nodeListTable = this._dom.DocumentElement.SelectNodes(strXpath);//"//key/table");
             for (int i = 0; i < nodeListTable.Count; i++)
             {
                 XmlNode nodeTable = nodeListTable[i];
@@ -1344,7 +1353,7 @@ namespace DigitalPlatform.rms
                     {
                         // 2012/3/30
                         strKey = "";
-                    } 
+                    }
                     else if (strKey == "0")
                     {
                     }
@@ -1623,7 +1632,7 @@ namespace DigitalPlatform.rms
                     List<string> result = new List<string>();
                     for (int i = 0; i < keys.Count; i++)
                     {
-                        string[] tempKeys = keys[i].Split(new char[] { ',','，',' ', '　'});   // 半角和全角的逗号和空格
+                        string[] tempKeys = keys[i].Split(new char[] { ',', '，', ' ', '　' }, StringSplitOptions.RemoveEmptyEntries);   // 半角和全角的逗号和空格
                         result.AddRange(tempKeys);
                     }
 
@@ -1658,8 +1667,8 @@ namespace DigitalPlatform.rms
                     // 2008/10/22
 
                     List<string> results = new List<string>();
-                    
-                    
+
+
                     for (int i = 0; i < keys.Count; i++)
                     {
                         List<string> temp_ids = GetLocationRefIDs(keys[i]);
@@ -1670,7 +1679,7 @@ namespace DigitalPlatform.rms
                     keys = results;
                 }
                 else
-                { 
+                {
                     // 处理C#脚本函数调用
                     string strFirstChar = "";
                     if (strOneStyle.Length > 0)
@@ -1710,7 +1719,7 @@ namespace DigitalPlatform.rms
         static List<string> SplitFullTextContent(string strContent)
         {
             List<string> results = new List<string>();
-            string [] parts = strContent.Split(new char []{',',
+            string[] parts = strContent.Split(new char[]{',',
                 ' ',
                 '　',    // 全角空格
                 '.',
@@ -1834,7 +1843,7 @@ namespace DigitalPlatform.rms
         public static string PinyinAb(string strText)
         {
             string strResult = "";
-            string[] words = strText.Split(new char[] {' ','　',',','，','-','－','_','＿','.','。',';','；',':','：','、','?','？','!','！','\'','\"','“','”','‘','’','[',']','［','］','(',')','（','）','@','·'});
+            string[] words = strText.Split(new char[] { ' ', '　', ',', '，', '-', '－', '_', '＿', '.', '。', ';', '；', ':', '：', '、', '?', '？', '!', '！', '\'', '\"', '“', '”', '‘', '’', '[', ']', '［', '］', '(', ')', '（', '）', '@', '·' });
             for (int i = 0; i < words.Length; i++)
             {
                 string strWord = words[i].Trim();

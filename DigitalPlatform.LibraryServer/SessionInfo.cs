@@ -46,12 +46,16 @@ namespace DigitalPlatform.LibraryServer
             set;
         }
 
+        public string RouterClientIP = null;  // 访问 dp2Router 的前端 IP 地址。null 表示请求中没有 _dp2router_clientip 头字段；"" 表示有这个头字段，但 value 为 ""
         public string ClientIP = "";  // 前端 IP 地址
         public string Via = ""; // 经由什么协议
+
         public string SessionID = "";   // Session 唯一的 ID
 
         public bool NeedAutoClean = true;   // 是否需要自动清除
         public long CallCount = 0;
+
+        public int Used = 0;
 
         public SessionTime SessionTime = null;
 
@@ -226,8 +230,9 @@ namespace DigitalPlatform.LibraryServer
 
         public SessionInfo(LibraryApplication app,
             string strSessionID = "",
-            string strIP = "",
-            string strVia = "")
+            List<RemoteAddress> address_list = null
+            /*string strIP = "",
+            string strVia = ""*/)
         {
             this.App = app;
             this.Channels.GUI = false;
@@ -239,16 +244,33 @@ namespace DigitalPlatform.LibraryServer
             this.m_strTempDir = PathUtil.MergePath(app.SessionDir, this.GetHashCode().ToString());
 
             this.SessionID = strSessionID;
-            this.ClientIP = strIP;
-            this.Via = strVia;
-        }
 
+            RemoteAddress nearest = RemoteAddress.FindClientAddress(address_list, "");
+            if (nearest != null)
+            {
+                this.ClientIP = nearest.ClientIP;
+                this.Via = nearest.Via;
+            }
+
+            RemoteAddress router = RemoteAddress.FindClientAddress(address_list, "dp2Router");
+            if (router != null)
+            {
+                // dp2Router 的 Via 放在前面；原有 IP 和 Via 放在后面，构成新的 Via
+                this.Via = router.ClientIP + "@dp2Router; " + this.ClientIP + "@" + this.Via;
+
+                this.RouterClientIP = router.ClientIP;
+            }
+            else
+                this.RouterClientIP = null;
+
+            // TODO: 这里要改造，允许显示多个 client ip 在通道管理窗
+        }
 
         public string GetTempDir()
         {
             Debug.Assert(this.m_strTempDir != "", "");
 
-            PathUtil.CreateDirIfNeed(this.m_strTempDir);	// 确保目录创建
+            PathUtil.TryCreateDir(this.m_strTempDir);	// 确保目录创建
             return this.m_strTempDir;
         }
 
@@ -296,6 +318,7 @@ namespace DigitalPlatform.LibraryServer
         // TODO: 多文种提示
         // parameters:
         //      strPassword 如果为null，表示不验证密码。因此需要格外注意，即便是空密码，如果要验证也需要使用""
+        //      alter_type_list 已经实施的绑定验证类型和尚未实施的类型列表
         // return:
         //      -1  error
         //      0   user not found, or password error
@@ -306,7 +329,9 @@ namespace DigitalPlatform.LibraryServer
             string strLocation,
             bool bPublicError,  // 是否模糊用户名和密码不匹配提示?
             string strClientIP,
+            string strRouterClientIP,   // 2016/10/30
             string strGetToken,
+            out List<string> alter_type_list,
             out string strRights,
             out string strLibraryCode,
             out string strError)
@@ -314,6 +339,7 @@ namespace DigitalPlatform.LibraryServer
             strError = "";
             strRights = "";
             strLibraryCode = "";
+            alter_type_list = new List<string>();
 
             if (this.App == null)
             {
@@ -324,7 +350,7 @@ namespace DigitalPlatform.LibraryServer
             Account account = null;
 
             int nRet = this.App.GetAccount(strUserID,
-                out account, 
+                out account,
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -333,6 +359,59 @@ namespace DigitalPlatform.LibraryServer
                 if (bPublicError == true)
                     strError = this.App.GetString("帐户不存在或密码不正确");
                 return 0;
+            }
+
+            // 匹配 IP 地址
+            if (string.IsNullOrEmpty(strClientIP) == false) // 2016/11/2
+            {
+                List<string> temp = new List<string>();
+                bool bRet = account.MatchClientIP(strClientIP,
+                    ref temp,
+                    out strError);
+                if (bRet == false)
+                {
+                    if (temp.Count == 0)
+                        return -1;
+
+                    // 不允许，又没有可以替代的方式，就要返回出错了
+                    if (Account.HasAlterBindingType(temp) == false)
+                        return -1;
+
+                    // 有替代的验证方式，先继续完成登录
+                    alter_type_list.AddRange(temp);
+                }
+                else
+                    alter_type_list.AddRange(temp);
+
+            }
+
+            // 星号表示不进行 router client ip 检查
+            // == null 表示当前前端不是通过 dp2Router 访问的，因而也就没有必要验证 router_ip 绑定了
+            if (strRouterClientIP != null
+                && strRouterClientIP != "*"
+                )
+            {
+                List<string> temp = new List<string>();
+
+                // 匹配 dp2Router 前端的 IP 地址
+                bool bRet = account.MatchRouterClientIP(strRouterClientIP,
+                    ref temp,
+                    out strError);
+                if (bRet == false)
+                {
+                    if (temp.Count == 0)
+                        return -1;
+
+                    // 不允许，又没有可以替代的方式，就要返回出错了
+                    if (Account.HasAlterBindingType(temp) == false)
+                        return -1;
+
+                    // 否则继续完成登录
+                    alter_type_list.AddRange(temp);
+                }
+                else
+                    alter_type_list.AddRange(temp);
+
             }
 
             if (strPassword != null)
@@ -398,11 +477,14 @@ namespace DigitalPlatform.LibraryServer
             {
                 this.Account.Location = strLocation;
 
-                // 2016/6/7
-                // 给工作人员账户权限补上 librarian
-                string strTemp = this.Account.Rights;
-                StringUtil.SetInList(ref strTemp, "librarian", true);
-                this.Account.Rights = strTemp;
+                // 2016/6/7 给工作人员账户权限补上 librarian
+                // 2017/1/16 加入 special_usernames 判断
+                if (Array.IndexOf(special_usernames, this.Account.UserID) == -1)
+                {
+                    string strTemp = this.Account.Rights;
+                    StringUtil.SetInList(ref strTemp, "librarian", true);
+                    this.Account.Rights = strTemp;
+                }
             }
 
             strRights = this.RightsOrigin;
@@ -436,8 +518,13 @@ namespace DigitalPlatform.LibraryServer
                 && strUserID != "reader" && strUserID != "public" && strUserID != "opac")
                 strRights += ",checkclientversion";
 
+            // 2017/10/13
+            if (string.IsNullOrEmpty(this.App.GlobalAddRights) == false)
+                strRights += "," + this.App.GlobalAddRights;
             return 1;
         }
+
+        static string[] special_usernames = new string[] { "public", "reader", "opac", "图书馆" };
 
         /*
 		// 获得缺省帐户信息
@@ -1009,10 +1096,12 @@ SetStartEventArgs e);
         }
 #endif
 
+        // TODO: 不知此函数为何被跳过 2016/10/29
         public void IncNullIpCount(string strIP, int nDelta)
         {
             return;
 
+#if NO
             if (this.m_lock.TryEnterWriteLock(m_nLockTimeout) == false)
                 throw new ApplicationException("锁定尝试中超时");
             try
@@ -1023,6 +1112,7 @@ SetStartEventArgs e);
             {
                 this.m_lock.ExitWriteLock();
             }
+#endif
         }
 
 
@@ -1091,10 +1181,18 @@ SetStartEventArgs e);
         public int MaxSessionsPerIp = 50;
         public int MaxSessionsLocalHost = 150;
 
+        // 2017/10/20
+        // 特殊的，需要放开通道数限制到 150 个的那些 IP 地址
+        public List<string> SpecialIpList { get; set; }
+
+        // parameters:
+        //      bAutoCreate 是否自动创建 SessionInfo 对象? true 表示自动创建; false 表示不自动创建(只返回已存在的 SessionInfo 对象)
         public SessionInfo PrepareSession(LibraryApplication app,
             string strSessionID,
-            string strIP,
-            string strVia)
+            List<RemoteAddress> address_list,
+            bool bAutoCreate = true
+            /*string strIP,
+            string strVia*/)
         {
             SessionInfo sessioninfo = null;
 
@@ -1128,10 +1226,16 @@ SetStartEventArgs e);
                 return sessioninfo;
             }
 
+            if (bAutoCreate == false)
+            {
+                // Debug.WriteLine("session '" + strSessionID + "' not found");
+                return null;
+            }
+
             if (this.Count > _nMaxCount)
                 throw new ApplicationException("Session 数量超过 " + _nMaxCount.ToString());
 
-            sessioninfo = new SessionInfo(app, strSessionID, strIP, strVia);
+            sessioninfo = new SessionInfo(app, strSessionID, address_list);
             sessioninfo.SessionTime = new SessionTime();
 #if NO
             sessioninfo.SessionTime.SessionID = strSessionID;
@@ -1141,18 +1245,25 @@ SetStartEventArgs e);
                 throw new ApplicationException("锁定尝试中超时");
             try
             {
+                string strIP = "";
+                RemoteAddress address = RemoteAddress.FindClientAddress(address_list, "");
+                if (address != null)
+                    strIP = address.ClientIP;
+
                 long v = _incIpCount(strIP, 1);
 
                 int nMax = this.MaxSessionsPerIp;
                 // if (strIP == "::1" || strIP == "127.0.0.1" || strIP == "localhost")
                 if (IsLocalhost(strIP) == true)
                     nMax = this.MaxSessionsLocalHost;
+                else if (IsSpecialIp(strIP) == true)
+                    nMax = this.MaxSessionsLocalHost;
 
                 if (v >= nMax)
                 {
                     // 注意 Session 是否 Dispose() ?
                     _incIpCount(strIP, -1);
-                    throw new OutofSessionException("Session 资源不足，超过配额 " + this.MaxSessionsPerIp.ToString());
+                    throw new OutofSessionException("Session 资源不足，通道创建失败。(配额值 " + nMax.ToString() + ")");
                 }
 
                 // 没有超过配额的才加入
@@ -1166,6 +1277,103 @@ SetStartEventArgs e);
             }
         }
 
+        // 过滤 SessionInfo
+        // return:
+        //      true    命中
+        //      false   未命中
+        public delegate bool Delegate_filterSession(SessionInfo info);
+
+        // 通用的选择性关闭 Session 函数
+        public int CloseSessionBy(Delegate_filterSession filter_func)
+        {
+            List<string> remove_keys = new List<string>();
+
+            if (this.m_lock.TryEnterReadLock(m_nLockTimeout) == false)
+                throw new ApplicationException("锁定尝试中超时");
+            try
+            {
+                foreach (string key in this.Keys)
+                {
+                    SessionInfo info = (SessionInfo)this[key];
+
+                    if (info == null)
+                        continue;
+
+                    if (filter_func(info))
+                    {
+                        remove_keys.Add(key);   // 这里不能删除，因为 foreach 还要用枚举器
+                    }
+                }
+            }
+            finally
+            {
+                this.m_lock.ExitReadLock();
+            }
+
+            if (remove_keys.Count == 0)
+                return 0;   // 没有找到
+
+            int nCount = 0;
+            List<SessionInfo> delete_sessions = new List<SessionInfo>();
+            if (this.m_lock.TryEnterWriteLock(m_nLockTimeout) == false)
+                throw new ApplicationException("锁定尝试中超时");
+            try
+            {
+                foreach (string key in remove_keys)
+                {
+                    SessionInfo sessioninfo = (SessionInfo)this[key];
+                    if (sessioninfo == null)
+                        continue;
+
+                    // DeleteSession(sessioninfo, false);
+
+                    // 和 sessionid 的 hashtable 脱离关系
+                    this.Remove(key);
+
+                    delete_sessions.Add(sessioninfo);
+
+                    if (string.IsNullOrEmpty(sessioninfo.ClientIP) == false)
+                    {
+                        _incIpCount(sessioninfo.ClientIP, -1);
+                        sessioninfo.ClientIP = "";
+                    }
+
+                    nCount++;
+                }
+            }
+            finally
+            {
+                this.m_lock.ExitWriteLock();
+            }
+
+            // 把 CloseSession 放在锁定范围外面，主要是想尽量减少锁定的时间
+            foreach (SessionInfo info in delete_sessions)
+            {
+                info.CloseSession();
+            }
+            return nCount;
+        }
+
+        public int CloseSessionByUserID(string strUserID)
+        {
+            return CloseSessionBy((info) =>
+            {
+                if (info == null)
+                    return false;
+                return (info.UserID == strUserID);
+            });
+        }
+
+        public int CloseSessionByClientIP(string strClientIP)
+        {
+            return CloseSessionBy((info) =>
+            {
+                if (info == null)
+                    return false;
+                return (info.ClientIP == strClientIP);
+            });
+        }
+#if NO
         public int CloseSessionByClientIP(string strClientIP)
         {
             List<string> remove_keys = new List<string>();
@@ -1235,7 +1443,7 @@ SetStartEventArgs e);
             }
             return nCount;
         }
-
+#endif
         public bool CloseSessionBySessionID(string strSessionID)
         {
             SessionInfo sessioninfo = null;
@@ -1259,6 +1467,19 @@ SetStartEventArgs e);
             return true;
         }
 
+        public int CloseSessionByReaderBarcode(string strReaderBarcode)
+        {
+            return CloseSessionBy((info) =>
+            {
+                if (info != null && info.Account != null
+                    && info.Account.Barcode == strReaderBarcode
+                    && info.Account.Barcode == info.Account.UserID)
+                    return true;
+                return false;
+            });
+        }
+
+#if NO
         // 读者记录发生修改后，要把和该读者登录的 Session 给清除，这样就避免后面用到旧的读者权限
         public int CloseSessionByReaderBarcode(string strReaderBarcode)
         {
@@ -1329,6 +1550,7 @@ SetStartEventArgs e);
             }
             return nCount;
         }
+#endif
 
         public void DeleteSession(SessionInfo sessioninfo,
             bool bLock = true)
@@ -1398,7 +1620,9 @@ SetStartEventArgs e);
 
                     if ((DateTime.Now - info.SessionTime.LastUsedTime) >= delta)
                     {
-                        remove_keys.Add(key);   // 这里不能删除，因为 foreach 还要用枚举器
+                        // 2017/5/7 正在使用中的 SessionInfo 不要清除
+                        if (info.Used == 0)
+                            remove_keys.Add(key);   // 这里不能删除，因为 foreach 还要用枚举器
                     }
                 }
             }
@@ -1415,7 +1639,8 @@ SetStartEventArgs e);
             if (this.m_lock.TryEnterWriteLock(m_nLockTimeout) == false)
                 throw new ApplicationException("锁定尝试中超时");
             try
-            {            // 2013.11.1
+            {
+                // 2013.11.1
                 foreach (string key in remove_keys)
                 {
                     SessionInfo info = (SessionInfo)this[key];
@@ -1464,6 +1689,15 @@ SetStartEventArgs e);
         public static bool IsLocalhost(string strIP)
         {
             if (strIP == "::1" || strIP == "127.0.0.1" || strIP == "localhost")
+                return true;
+            return false;
+        }
+
+        public bool IsSpecialIp(string strIP)
+        {
+            if (this.SpecialIpList == null || this.SpecialIpList.Count == 0)
+                return false;
+            if (this.SpecialIpList.IndexOf(strIP) != -1)
                 return true;
             return false;
         }
@@ -1549,7 +1783,7 @@ SetStartEventArgs e);
             foreach (string ip in ips)
             {
                 ChannelInfo info = infos[i];
-                foreach(ChannelInfo result in results)
+                foreach (ChannelInfo result in results)
                 {
                     if (result.ClientIP == ip)
                     {
@@ -1585,29 +1819,29 @@ SetStartEventArgs e);
             try
             {
 #endif
-                foreach (string sessionid in this.Keys)
-                {
-                    SessionInfo session = (SessionInfo)this[sessionid];
-                    if (session == null)
-                        continue;
+            foreach (string sessionid in this.Keys)
+            {
+                SessionInfo session = (SessionInfo)this[sessionid];
+                if (session == null)
+                    continue;
 
-                    if (ips.IndexOf(session.ClientIP) == -1)
-                        continue;
+                if (ips.IndexOf(session.ClientIP) == -1)
+                    continue;
 
-                    ChannelInfo info = new ChannelInfo();
-                    info.SessionID = session.SessionID;
-                    info.ClientIP = session.ClientIP;
-                    info.UserName = session.UserID;
-                    info.LibraryCode = session.LibraryCodeList;
-                    info.Via = session.Via;
-                    info.Count = 1;
-                    info.CallCount = session.CallCount;
-                    info.Lang = session.Lang;
-                    if (session.Account != null)
-                        info.Location = session.Account.Location;
+                ChannelInfo info = new ChannelInfo();
+                info.SessionID = session.SessionID;
+                info.ClientIP = session.ClientIP;
+                info.UserName = session.UserID;
+                info.LibraryCode = session.LibraryCodeList;
+                info.Via = session.Via;
+                info.Count = 1;
+                info.CallCount = session.CallCount;
+                info.Lang = session.Lang;
+                if (session.Account != null)
+                    info.Location = session.Account.Location;
 
-                    infos.Add(info);
-                }
+                infos.Add(info);
+            }
 #if NO
             }
             finally

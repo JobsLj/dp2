@@ -58,7 +58,7 @@ namespace DigitalPlatform.LibraryServer
             }
             catch (Exception ex)
             {
-                strError = "open file '" +strFileName+ "' error : " + ex.Message;
+                strError = "open file '" + strFileName + "' error : " + ex.Message;
                 return -1;
             }
 
@@ -146,6 +146,13 @@ namespace DigitalPlatform.LibraryServer
             {
                 this.PauseBatchTask = false;
 
+                // 2016/11/6
+                if (this.BatchTasks == null)
+                {
+                    strError = "this.BatchTasks == null";
+                    return -1;
+                }
+
                 // 2013/11/23
                 foreach (BatchTask current_task in this.BatchTasks)
                 {
@@ -172,7 +179,7 @@ namespace DigitalPlatform.LibraryServer
 
             if (this.BatchTasks == null)
             {
-                strError = "this.AppTasks == null";
+                strError = "this.BatchTasks == null";
                 return -1;
             }
 
@@ -186,7 +193,11 @@ namespace DigitalPlatform.LibraryServer
                 else if (strName == "日志恢复")
                     task = new OperLogRecover(this, strName);
                 else if (strName == "dp2Library 同步")
-                    task = new LibraryReplication(this, strName);
+                {
+                    // task = new LibraryReplication(this, strName);
+                    strError = "尚未正式提供服务";  // 2017/6/8
+                    return -1;
+                }
                 else if (strName == "重建检索点")
                     task = new RebuildKeys(this, strName);
                 /*
@@ -205,6 +216,10 @@ namespace DigitalPlatform.LibraryServer
                     task = new MessageMonitor(this, strName);
                 else if (strName == "创建 MongoDB 日志库")
                     task = new BuildMongoOperDatabase(this, strName);
+                else if (strName == "服务器同步")
+                    task = new ServerReplication(this, strName);
+                else if (strName == "大备份")
+                    task = new BackupTask(this, strName);
                 else
                 {
                     strError = "系统不能识别任务名 '" + strName + "'";
@@ -224,7 +239,6 @@ namespace DigitalPlatform.LibraryServer
             else
             {
                 bool bOldStoppedValue = task.Stopped;
-
 
                 if (bOldStoppedValue == false)
                 {
@@ -257,6 +271,7 @@ namespace DigitalPlatform.LibraryServer
                 StopAllBatchTasks();
             }
 
+            task.SetProgressText("");
             task.ManualStart = true;    // 表示为命令启动
             task.StartInfo = param.StartInfo;
             task.ClearProgressFile();   // 清除进度文件内容
@@ -267,8 +282,36 @@ namespace DigitalPlatform.LibraryServer
             task.eventActive.Set();
              * */
 
+            // 等待工作线程运行到启动点
+            if (task.StartInfo.WaitForBegin)
+            {
+                if (task.eventStarted.WaitOne(TimeSpan.FromSeconds(10)) == false)
+                {
+                    strError = "任务 " + task.Name + " 未能在 10 秒内启动成功";
+                    return 1;
+                }
+
+                // 2017/8/23
+                if (string.IsNullOrEmpty(task.ErrorInfo) == false)
+                {
+                    strError = "任务 " + task.Name + " 启动阶段出错: " + task.ErrorInfo;
+                    return 1;
+                }
+            }
+
             info = task.GetCurrentInfo(param.ResultOffset,
                 param.MaxResultBytes);
+
+            if (task.StartInfo.WaitForBegin)
+            {
+                if (info.StartInfo == null)
+                    info.StartInfo = new BatchTaskStartInfo();
+                if (strName == "大备份")
+                {
+                    BackupTask temp = task as BackupTask;
+                    info.StartInfo.OutputParam = temp.OutputFileNames;
+                }
+            }
 
             return 0;
         }
@@ -288,6 +331,13 @@ namespace DigitalPlatform.LibraryServer
                 return 1;
             }
 
+            // 2016/11/6
+            if (this.BatchTasks == null)
+            {
+                strError = "this.BatchTasks == null";
+                return -1;
+            }
+
             BatchTask task = this.BatchTasks.GetBatchTask(strName);
 
             // 任务本来就不存在
@@ -305,6 +355,38 @@ namespace DigitalPlatform.LibraryServer
             return 1;
         }
 
+        public int AbortBatchTask(string strName,
+    BatchTaskInfo param,
+    out BatchTaskInfo info,
+    out string strError)
+        {
+            strError = "";
+            info = null;
+
+            if (this.BatchTasks == null)
+            {
+                strError = "this.BatchTasks == null";
+                return -1;
+            }
+
+            BatchTask task = this.BatchTasks.GetBatchTask(strName);
+
+            // 任务本来就不存在
+            if (task == null)
+            {
+                strError = "任务 '" + strName + "' 不存在";
+                return -1;
+            }
+
+            task._pendingCommands.Add("abort");
+            task.Stop();
+
+            info = task.GetCurrentInfo(param.ResultOffset,
+                param.MaxResultBytes);
+
+            return 1;
+        }
+
         public int GetBatchTaskInfo(string strName,
             BatchTaskInfo param,
             out BatchTaskInfo info,
@@ -312,6 +394,13 @@ namespace DigitalPlatform.LibraryServer
         {
             strError = "";
             info = null;
+
+            // 2016/11/6
+            if (this.BatchTasks == null)
+            {
+                strError = "this.BatchTasks == null";
+                return -1;
+            }
 
             BatchTask task = this.BatchTasks.GetBatchTask(strName);
 
@@ -344,6 +433,12 @@ namespace DigitalPlatform.LibraryServer
         [DataMember]
         public string Count = ""; // 个数 纯数字
 
+        // 207/8/19
+        [DataMember]
+        public bool WaitForBegin { get; set; }  // [in] 在启动的时候，是否等待到 Begin 阶段完成？
+        [DataMember]
+        public string OutputParam { get; set; }  // [out] 启动到 Begin 阶段完成后，返回给前端的信息。比如，实际使用的文件名
+
         public override string ToString()
         {
             Hashtable table = new Hashtable();
@@ -356,6 +451,11 @@ namespace DigitalPlatform.LibraryServer
             if (string.IsNullOrEmpty(this.Count) == false)
                 table["Count"] = this.Count;
 
+            if (this.WaitForBegin == true)
+                table["WaitForBegin"] = "true";
+            if (string.IsNullOrEmpty(this.OutputParam) == false)
+                table["OutputParam"] = this.OutputParam;
+
             return StringUtil.BuildParameterString(table, ',', ':');
         }
 
@@ -363,10 +463,13 @@ namespace DigitalPlatform.LibraryServer
         {
             BatchTaskStartInfo info = new BatchTaskStartInfo();
             Hashtable table = StringUtil.ParseParameters(strText, ',', ':');
-            info.Param = (string)table["Param"] ;
+            info.Param = (string)table["Param"];
             info.BreakPoint = (string)table["BreakPoint"];
             info.Start = (string)table["Start"];
             info.Count = (string)table["Count"];
+
+            info.WaitForBegin = DomUtil.IsBooleanTrue((string)table["WaitForBegin"]);
+            info.OutputParam = (string)table["OutputParam"];
             return info;
         }
     }
@@ -402,5 +505,25 @@ namespace DigitalPlatform.LibraryServer
 
         [DataMember]
         public long ResultVersion = 0;  // 信息文件版本
+
+        public string Dump()
+        {
+            StringBuilder text = new StringBuilder();
+            if (this.Name != null)
+                text.Append("Name=" + this.Name + "\r\n");
+            if (this.State != null)
+                text.Append("State=" + this.State + "\r\n");
+            if (this.ProgressText != null)
+                text.Append("ProgressText=" + this.ProgressText + "\r\n");
+            text.Append("MaxResultBytes=" + this.MaxResultBytes + "\r\n");
+            text.Append("ResultText=" + ByteArray.GetHexTimeStampString(this.ResultText) + "\r\n");
+            text.Append("ResultOffset=" + this.ResultOffset + "\r\n");
+            text.Append("ResultTotalLength=" + this.ResultTotalLength + "\r\n");
+            if (this.StartInfo != null)
+                text.Append("StartInfo=" + this.StartInfo.ToString() + "\r\n");
+            text.Append("ResultVersion=" + this.ResultVersion + "\r\n");
+
+            return text.ToString();
+        }
     }
 }

@@ -9,6 +9,7 @@ using System.Windows.Forms;
 using System.Diagnostics;
 using System.Xml;
 using System.IO;
+using System.Web;
 
 using DigitalPlatform.GUI;
 using DigitalPlatform.Text;
@@ -19,7 +20,8 @@ using DigitalPlatform.CirculationClient;
 using DigitalPlatform.Range;
 using DigitalPlatform.Marc;
 using DigitalPlatform.CommonControl;
-using System.Web;
+using System.Collections;
+using DigitalPlatform.LibraryClient;
 
 namespace dp2Circulation
 {
@@ -45,17 +47,17 @@ namespace dp2Circulation
             FillEncodingList(this.comboBox_worToIso_encoding,
     false);
 
-            this.UiState = this.MainForm.AppInfo.GetString(
+            this.UiState = Program.MainForm.AppInfo.GetString(
                 "utilityform",
                 "ui_state",
                 "");
 
 #if NO
-            this.textBox_serverFilePath.Text = this.MainForm.AppInfo.GetString(
+            this.textBox_serverFilePath.Text = Program.MainForm.AppInfo.GetString(
                 "utilityform",
                 "server_file_path",
                 "");
-            this.textBox_clientFilePath.Text = this.MainForm.AppInfo.GetString(
+            this.textBox_clientFilePath.Text = Program.MainForm.AppInfo.GetString(
     "utilityform",
     "client_file_path",
     "");
@@ -76,18 +78,18 @@ namespace dp2Circulation
         private void UtilityForm_FormClosed(object sender, FormClosedEventArgs e)
         {
 #if NO
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
     "utilityform",
     "server_file_path",
     this.textBox_serverFilePath.Text);
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
     "utilityform",
     "client_file_path",
     this.textBox_clientFilePath.Text);
 #endif
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
         "utilityform",
         "ui_state",
         this.UiState);
@@ -175,10 +177,10 @@ namespace dp2Circulation
                 int nRet = 0;
 
 
-                nRet = this.MainForm.LoadQuickSjhm(true, out strError);
+                nRet = Program.MainForm.LoadQuickSjhm(true, out strError);
                 if (nRet == -1)
                     return -1;
-                nRet = this.MainForm.QuickSjhm.GetSjhm(
+                nRet = Program.MainForm.QuickSjhm.GetSjhm(
                     strHanzi,
                     out strResultSjhm,
                     out strError);
@@ -521,9 +523,9 @@ namespace dp2Circulation
             List<string> right = new List<string>(this.textBox_textLines_source2.Lines);
 
             left.Sort();
-            StringUtil.RemoveDup(ref left);
+            StringUtil.RemoveDup(ref left, true);
             right.Sort();
-            StringUtil.RemoveDup(ref right);
+            StringUtil.RemoveDup(ref right, true);
 
             string strDebugInfo = "";
             string strError = "";
@@ -554,9 +556,9 @@ namespace dp2Circulation
             List<string> right = new List<string>(this.textBox_textLines_source2.Lines);
 
             left.Sort();
-            StringUtil.RemoveDup(ref left);
+            StringUtil.RemoveDup(ref left, true);
             right.Sort();
-            StringUtil.RemoveDup(ref right);
+            StringUtil.RemoveDup(ref right, true);
 
             string strDebugInfo = "";
             string strError = "";
@@ -599,7 +601,7 @@ namespace dp2Circulation
             List<string> left = new List<string>(this.textBox_textLines_source1.Lines);
 
             left.Sort();
-            StringUtil.RemoveDup(ref left);
+            StringUtil.RemoveDup(ref left, true);
             this.textBox_textLines_target.Text = StringUtil.MakePathList(left, "\r\n");
 
         }
@@ -683,7 +685,7 @@ out strError);
         {
             string strError = "";
 
-            int nRet = this.MainForm.LoadIsbnSplitter(true, out strError);
+            int nRet = Program.MainForm.LoadIsbnSplitter(true, out strError);
             if (nRet == -1)
             {
                 MessageBox.Show(this, strError);
@@ -712,7 +714,7 @@ out strError);
                     }
 
                     string strTarget = "";
-                    nRet = this.MainForm.IsbnSplitter.IsbnInsertHyphen(
+                    nRet = Program.MainForm.IsbnSplitter.IsbnInsertHyphen(
                        strText,
                        strAction,   // "force10",
                         out strTarget,
@@ -1072,6 +1074,8 @@ MessageBoxDefaultButton.Button2);
                     this.stop,
                     this.textBox_serverFilePath.Text,
                     this.textBox_clientFilePath.Text,
+                    // "metadata",
+                    "content,data,metadata,timestamp,outputpath,gzip",  // 2017/10/7 增加 gzip
                     out strMetaData,
                     out baOutputTimeStamp,
                     out strOutputPath,
@@ -1156,7 +1160,7 @@ MessageBoxDefaultButton.Button2);
             dlg.MarcSyntax = "<自动>";    // strPreferedMarcSyntax;
             dlg.EnableMarcSyntax = false;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "OpenMarcFileDlg_forOutput_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "OpenMarcFileDlg_forOutput_state");
             dlg.ShowDialog(this);
             if (dlg.DialogResult != DialogResult.OK)
                 return;
@@ -1320,6 +1324,10 @@ MessageBoxDefaultButton.Button2);
 
                 controls.Add(this.textBox_worToIso_worFilename);
                 controls.Add(this.comboBox_worToIso_encoding);
+
+                controls.Add(this.textBox_biblioRecPath);
+                controls.Add(this.textBox_biblioTableStyle);
+
                 return GuiState.GetUiState(controls);
             }
             set
@@ -1333,6 +1341,10 @@ MessageBoxDefaultButton.Button2);
 
                 controls.Add(this.textBox_worToIso_worFilename);
                 controls.Add(this.comboBox_worToIso_encoding);
+
+                controls.Add(this.textBox_biblioRecPath);
+                controls.Add(this.textBox_biblioTableStyle);
+
                 GuiState.SetUiState(controls, value);
             }
         }
@@ -1375,5 +1387,209 @@ MessageBoxDefaultButton.Button2);
             this.textBox_xmlEditor_content.Text = HttpUtility.HtmlDecode(this.textBox_xmlEditor_content.Text);
         }
 
+        private void button_systemInfo_getClientIP_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+            string strValue = "";
+
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.83") < 0)
+            {
+                strError = "当前连接的 dp2library 版本必须在 2.83 以上才能使用本功能 (但它是 " + Program.MainForm.ServerVersion + ")";
+                goto ERROR1;
+            }
+
+            EnableControls(false);
+
+            stop.OnStop += new StopEventHandler(this.DoStop);
+            stop.Initial("正在测算网络速度 ...");
+            stop.BeginLoop();
+
+            try
+            {
+                long lRet = this.Channel.GetSystemParameter(stop,
+                    "utility",
+                    "getClientIP",
+                    out strValue,
+                    out strError);
+                if (lRet == -1)
+                    goto ERROR1;
+
+                // InputDlg.GetInput(this, "本机 IP 地址", "本机 IP 地址", strValue, this.Font);
+                bool bTemp = false;
+                MessageDlg.Show(this,
+    "本机 IP 地址为:\r\n" + strValue,
+    "dp2Circulation",
+    MessageBoxButtons.OK,
+    MessageBoxDefaultButton.Button1,
+    ref bTemp);
+
+            }
+            finally
+            {
+                stop.EndLoop();
+                stop.OnStop -= new StopEventHandler(this.DoStop);
+                stop.Initial("");
+
+                EnableControls(true);
+            }
+
+            return;
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 取 GCAT 著者号
+        private void toolStripButton_textLines_getAuthorNumber_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            this.textBox_textLines_target.Text = "";
+            this.textBox_textLines_source2.Text = "";
+
+            string strGcatWebServiceUrl = Program.MainForm.GcatServerUrl;   // "http://dp2003.com/dp2libraryws/gcat.asmx";
+
+            if (string.IsNullOrEmpty(strGcatWebServiceUrl))
+            {
+                strError = "尚未配置 GCAT 服务器地址";
+                goto ERROR1;
+            }
+
+            StringBuilder result1 = new StringBuilder();
+            StringBuilder result2 = new StringBuilder();
+
+            this.EnableControls(false);
+
+            this.stop.OnStop += new StopEventHandler(this.DoStop);
+            this.stop.Initial("正在取著者号 ...");
+            this.stop.BeginLoop();
+            try
+            {
+                foreach (string line in this.textBox_textLines_source1.Lines)
+                {
+                    if (string.IsNullOrEmpty(line))
+                        continue;
+                    string strLine = line.Trim();
+                    if (string.IsNullOrEmpty(strLine))
+                        continue;
+
+#if NO
+                    Hashtable question_table = (Hashtable)Program.MainForm.ParamTable["question_table"];
+                    if (question_table == null)
+                        question_table = new Hashtable();
+#endif
+                    Hashtable question_table = new Hashtable();
+
+                    stop.SetMessage("正在取著者号 '" + strLine + "' ...");
+
+                    string strDebugInfo = "";
+                    string strAuthorNumber = "";
+                    // return:
+                    //      -4  著者字符串没有检索命中
+                    //      -2  strID验证失败
+                    //      -1  error
+                    //      0   canceled
+                    //      1   succeed
+                    long nRet = BiblioItemsHost.GetAuthorNumber(
+                        ref question_table,
+                        this.stop,
+                        this,
+                        strGcatWebServiceUrl,
+                        strLine,
+                        "",
+                        true,	// bSelectPinyin
+                        true,	// bSelectEntry
+                        false,	// bOutputDebugInfo
+                        out strAuthorNumber,
+                        out strDebugInfo,
+                        out strError);
+#if NO
+                    Program.MainForm.ParamTable["question_table"] = question_table;
+#endif
+
+                    if (nRet == 0)
+                        goto ERROR1;
+                    if (nRet == 1)
+                    {
+                        result1.Append(strAuthorNumber + "\r\n");
+                        result2.Append(strLine + "\t" + strAuthorNumber + "\r\n");
+                    }
+                    else
+                    {
+                        result1.Append("error: " + strError + "\r\n");
+                        result2.Append(strLine + "\terror: " + strError + "\r\n");
+                    }
+                }
+
+                this.textBox_textLines_source2.Text = result1.ToString();
+                this.textBox_textLines_target.Text = result2.ToString();
+                return;
+            }
+            finally
+            {
+                this.stop.EndLoop();
+                this.stop.OnStop -= new StopEventHandler(this.DoStop);
+                this.stop.Initial("");
+
+                this.EnableControls(true);
+            }
+        ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        private void button_getBiblioTable_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            this.textBox_biblioTableXml.Text = "";
+
+            this.EnableControls(false);
+
+            this.stop.OnStop += new StopEventHandler(this.DoStop);
+            this.stop.Initial("正在获取书目 table 格式 ...");
+            this.stop.BeginLoop();
+
+            LibraryChannel channel = this.GetChannel();
+            try
+            {
+                List<string> formats = new List<string> { "table:" + this.textBox_biblioTableStyle.Text.Replace(",", "|") };
+                string[] results = null;
+                byte[] timestamp = null;
+
+                long lRet = channel.GetBiblioInfos(
+                    stop,
+                    this.textBox_biblioRecPath.Text,
+                    "",
+                    formats.ToArray(),
+                    out results,
+                    out timestamp,
+                    out strError);
+                if (lRet == -1 || lRet == 0)
+                {
+                    if (lRet == 0 && String.IsNullOrEmpty(strError) == true)
+                        strError = "书目记录 '" + this.textBox_biblioRecPath.Text + "' 不存在";
+
+                    goto ERROR1;
+                }
+                else
+                {
+                    Debug.Assert(results != null && results.Length == formats.Count, "results必须包含 " + formats.Count + " 个元素");
+                    this.textBox_biblioTableXml.Text = DomUtil.GetIndentXml(results[0]).Replace("\"", "\'");
+                }
+
+                return;
+            }
+            finally
+            {
+                this.ReturnChannel(channel);
+
+                this.stop.EndLoop();
+                this.stop.OnStop -= new StopEventHandler(this.DoStop);
+                this.stop.Initial("");
+
+                this.EnableControls(true);
+            }
+            ERROR1:
+            MessageBox.Show(this, strError);
+        }
     }
 }

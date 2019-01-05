@@ -7,22 +7,37 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 
 using Microsoft.Win32;
+using System.Threading.Tasks;
 
 namespace DigitalPlatform.GUI
 {
 
-	// 增补菜单
-	public delegate void GuiAppendMenuEventHandle(object sender,
+    // 增补菜单
+    public delegate void GuiAppendMenuEventHandle(object sender,
     GuiAppendMenuEventArgs e);
 
-	public class GuiAppendMenuEventArgs: EventArgs
-	{
-		public ContextMenu ContextMenu = null;
+    public class GuiAppendMenuEventArgs : EventArgs
+    {
+        public ContextMenu ContextMenu = null;
         public ContextMenuStrip ContextMenuStrip = null;
-	}
+    }
 
     public class GuiUtil
     {
+        public static void TryStartDrag(Point start, Action action)
+        {
+            Task.Factory.StartNew(() =>
+                {
+                    Thread.Sleep(500);
+                    Point current = Control.MousePosition;
+                    if (Math.Abs(current.X - start.X) > SystemInformation.DragSize.Width
+                        || Math.Abs(current.Y - start.Y) > SystemInformation.DragSize.Height)
+                    {
+                        action.Invoke();
+                    }
+                });
+        }
+
         public static string GetText(Control control)
         {
             if (control.InvokeRequired == false)
@@ -96,7 +111,6 @@ namespace DigitalPlatform.GUI
             {
             }
         }
-
 
         // 注册IE9 WebControl模式
         public static bool RegisterIE9DocMode()
@@ -332,6 +346,21 @@ Rectangle rect)
 
         public static bool PtInRect(long x,
 long y,
+RectangleF rect)
+        {
+            if (x < rect.X)
+                return false;
+            if (x >= rect.Right)
+                return false;
+            if (y < rect.Y)
+                return false;
+            if (y >= rect.Bottom)
+                return false;
+            return true;
+        }
+
+        public static bool PtInRect(float x,
+float y,
 RectangleF rect)
         {
             if (x < rect.X)

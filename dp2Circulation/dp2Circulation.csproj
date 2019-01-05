@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="12.0">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -19,12 +19,12 @@
     <SccProvider>
     </SccProvider>
     <IsWebBootstrapper>true</IsWebBootstrapper>
-    <ManifestCertificateThumbprint>46EAD2E4BB8C84DDD31EFA5C83308710A458086D</ManifestCertificateThumbprint>
-    <ManifestKeyFile>dp2Circulation_TemporaryKey.pfx</ManifestKeyFile>
-    <GenerateManifests>true</GenerateManifests>
+    <ManifestCertificateThumbprint>458DBD8488B5B2A4FD0653A590D3F6E2BC38DA9F</ManifestCertificateThumbprint>
+    <ManifestKeyFile>dp2003.pfx</ManifestKeyFile>
+    <GenerateManifests>false</GenerateManifests>
     <SignManifests>true</SignManifests>
     <ApplicationIcon>nei.ico</ApplicationIcon>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
     <OldToolsVersion>2.0</OldToolsVersion>
@@ -32,8 +32,9 @@
     <TargetFrameworkProfile />
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
     <RestorePackages>true</RestorePackages>
-    <NuGetPackageImportStamp>88c8a65a</NuGetPackageImportStamp>
-    <PublishUrl>c:\publish\dp2circulation\v2\</PublishUrl>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+    <PublishUrl>c:\publish\dp2circulation\v3\</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Web</InstallFrom>
     <UpdateEnabled>true</UpdateEnabled>
@@ -43,16 +44,16 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <InstallUrl>http://dp2003.com/dp2Circulation/v2/</InstallUrl>
-    <UpdateUrl>http://dp2003.com/dp2Circulation/v2/</UpdateUrl>
+    <InstallUrl>http://dp2003.com/dp2Circulation/v3/</InstallUrl>
+    <UpdateUrl>http://dp2003.com/dp2Circulation/v3/</UpdateUrl>
     <TargetCulture>zh-CN</TargetCulture>
-    <ProductName>dp2内务 V2</ProductName>
+    <ProductName>dp2内务 V3</ProductName>
     <PublisherName>DigitalPlatform</PublisherName>
-    <SuiteName>dp2 V2</SuiteName>
+    <SuiteName>dp2 V3</SuiteName>
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
-    <ApplicationRevision>91</ApplicationRevision>
-    <ApplicationVersion>2.10.0.%2a</ApplicationVersion>
+    <ApplicationRevision>90</ApplicationRevision>
+    <ApplicationVersion>3.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
     <BootstrapperEnabled>true</BootstrapperEnabled>
@@ -69,6 +70,7 @@
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <DocumentationFile>bin\Debug\dp2Circulation_codeComment.XML</DocumentationFile>
     <NoWarn>1591</NoWarn>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -78,6 +80,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup />
   <PropertyGroup>
@@ -86,86 +89,77 @@
   <PropertyGroup>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <PropertyGroup>
+    <ManifestTimestampUrl>http://timestamp.comodoca.com/rfc3161</ManifestTimestampUrl>
+  </PropertyGroup>
+  <PropertyGroup>
+    <SignAssembly>false</SignAssembly>
+  </PropertyGroup>
   <ItemGroup>
-    <Reference Include="ClosedXML, Version=0.76.0.0, Culture=neutral, PublicKeyToken=fd1eb21b62ae805b, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\ClosedXML.0.76.0\lib\net40-client\ClosedXML.dll</HintPath>
+    <Reference Include="ClosedXML, Version=0.92.1.0, Culture=neutral, PublicKeyToken=fd1eb21b62ae805b, processorArchitecture=MSIL">
+      <HintPath>..\packages\ClosedXML.0.92.1\lib\net40\ClosedXML.dll</HintPath>
     </Reference>
-    <Reference Include="DocumentFormat.OpenXml, Version=2.5.5631.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+    <Reference Include="DigitalPlatform.rms, Version=2.0.6333.41774, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>packages\DocumentFormat.OpenXml.2.5\lib\DocumentFormat.OpenXml.dll</HintPath>
+      <HintPath>..\DigitalPlatform.rms\bin\Debug\DigitalPlatform.rms.dll</HintPath>
+    </Reference>
+    <Reference Include="DocumentFormat.OpenXml, Version=2.8.1.0, Culture=neutral, PublicKeyToken=8fb06cb64d019a17, processorArchitecture=MSIL">
+      <HintPath>..\packages\DocumentFormat.OpenXml.2.8.1\lib\net40\DocumentFormat.OpenXml.dll</HintPath>
     </Reference>
     <Reference Include="EntityFramework, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\EntityFramework.6.1.3\lib\net40\EntityFramework.dll</HintPath>
+      <HintPath>..\packages\EntityFramework.6.2.0\lib\net45\EntityFramework.dll</HintPath>
     </Reference>
     <Reference Include="EntityFramework.SqlServer, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\EntityFramework.6.1.3\lib\net40\EntityFramework.SqlServer.dll</HintPath>
+      <HintPath>..\packages\EntityFramework.6.2.0\lib\net45\EntityFramework.SqlServer.dll</HintPath>
+    </Reference>
+    <Reference Include="ExcelNumberFormat, Version=1.0.3.0, Culture=neutral, PublicKeyToken=23c6f5d73be07eca, processorArchitecture=MSIL">
+      <HintPath>..\packages\ExcelNumberFormat.1.0.3\lib\net20\ExcelNumberFormat.dll</HintPath>
+    </Reference>
+    <Reference Include="FastMember.Signed, Version=1.3.0.0, Culture=neutral, PublicKeyToken=9e8f22703bef9a29, processorArchitecture=MSIL">
+      <HintPath>..\packages\FastMember.Signed.1.3.0\lib\net40\FastMember.Signed.dll</HintPath>
     </Reference>
     <Reference Include="Ionic.Zip, Version=1.9.1.8, Culture=neutral, PublicKeyToken=edbe51ad942a3f5c, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Ionic.Zip.dll</HintPath>
     </Reference>
     <Reference Include="Jurassic, Version=2.1.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>.\Jurassic.dll</HintPath>
+      <HintPath>..\packages\Jurassic.2.2.2\lib\net35\Jurassic.dll</HintPath>
+    </Reference>
+    <Reference Include="log4net, Version=2.0.8.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+      <HintPath>..\packages\log4net.2.0.8\lib\net45-full\log4net.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
-    <Reference Include="Microsoft.Threading.Tasks">
-      <HintPath>..\packages\Microsoft.Bcl.Async.1.0.168\lib\net40\Microsoft.Threading.Tasks.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Threading.Tasks.Extensions">
-      <HintPath>..\packages\Microsoft.Bcl.Async.1.0.168\lib\net40\Microsoft.Threading.Tasks.Extensions.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Threading.Tasks.Extensions.Desktop">
-      <HintPath>..\packages\Microsoft.Bcl.Async.1.0.168\lib\net40\Microsoft.Threading.Tasks.Extensions.Desktop.dll</HintPath>
-    </Reference>
-    <Reference Include="Newtonsoft.Json, Version=7.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.7.0.1\lib\net40\Newtonsoft.Json.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.11.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Data" />
-    <Reference Include="System.Data.SQLite, Version=1.0.99.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Data.SQLite.Core.1.0.99.0\lib\net40\System.Data.SQLite.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="System.Data.SQLite, Version=1.0.108.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Data.SQLite.Core.1.0.108.0\lib\net46\System.Data.SQLite.dll</HintPath>
     </Reference>
-    <Reference Include="System.Data.SQLite.EF6, Version=1.0.99.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Data.SQLite.EF6.1.0.99.0\lib\net40\System.Data.SQLite.EF6.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="System.Data.SQLite.EF6, Version=1.0.108.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Data.SQLite.EF6.1.0.108.0\lib\net46\System.Data.SQLite.EF6.dll</HintPath>
     </Reference>
-    <Reference Include="System.Data.SQLite.Linq, Version=1.0.99.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Data.SQLite.Linq.1.0.99.0\lib\net40\System.Data.SQLite.Linq.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="System.Data.SQLite.Linq, Version=1.0.108.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Data.SQLite.Linq.1.0.108.0\lib\net46\System.Data.SQLite.Linq.dll</HintPath>
     </Reference>
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
-    <Reference Include="System.IO, Version=2.6.10.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Bcl.1.1.10\lib\net40\System.IO.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
+    <Reference Include="System.IdentityModel" />
     <Reference Include="System.Net" />
-    <Reference Include="System.Runtime, Version=2.6.10.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Bcl.1.1.10\lib\net40\System.Runtime.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="System.Runtime.Remoting" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Speech" />
-    <Reference Include="System.Threading.Tasks, Version=2.6.10.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.Bcl.1.1.10\lib\net40\System.Threading.Tasks.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="System.Web" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xaml" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
     <Reference Include="UIAutomationProvider" />
     <Reference Include="WindowsBase" />
     <Reference Include="WindowsFormsIntegration" />
@@ -230,6 +224,12 @@
       <DependentUpon>SelectItemDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="Charging\SummaryList.cs" />
+    <Compile Include="Charging\TargetLocationDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Charging\TargetLocationDialog.Designer.cs">
+      <DependentUpon>TargetLocationDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="Dictionary\RelationCollection.cs" />
     <Compile Include="Dictionary\RelationControl.cs">
       <SubType>UserControl</SubType>
@@ -249,17 +249,14 @@
     <Compile Include="Dictionary\SelectDictionaryItemDialog.Designer.cs">
       <DependentUpon>SelectDictionaryItemDialog.cs</DependentUpon>
     </Compile>
+    <Compile Include="EntityForm\AuthorityForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="EntityForm\GetMergeStyleDialog.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="EntityForm\GetMergeStyleDialog.Designer.cs">
       <DependentUpon>GetMergeStyleDialog.cs</DependentUpon>
-    </Compile>
-    <Compile Include="EntityForm\MacroTableDialog.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="EntityForm\MacroTableDialog.Designer.cs">
-      <DependentUpon>MacroTableDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="EntityForm\MergePicture.cs" />
     <Compile Include="EntityForm\PartialDeniedDialog.cs">
@@ -267,6 +264,9 @@
     </Compile>
     <Compile Include="EntityForm\PartialDeniedDialog.Designer.cs">
       <DependentUpon>PartialDeniedDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="EntityForm\TimestampMismatchDialog.cs">
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="EntityRegister\AmazonSearch.cs" />
     <Compile Include="EntityRegister\BiblioAndEntities.cs" />
@@ -289,9 +289,7 @@
     <Compile Include="EntityRegister\EntityRegisterWizard.Designer.cs">
       <DependentUpon>EntityRegisterWizard.cs</DependentUpon>
     </Compile>
-    <Compile Include="EntityRegister\ImageManager.cs">
-      <SubType>Component</SubType>
-    </Compile>
+    <Compile Include="EntityRegister\ImageManager.cs" />
     <Compile Include="EntityRegister\KeyboardForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -340,24 +338,12 @@
     <Compile Include="Entity\InventoryForm.Designer.cs">
       <DependentUpon>InventoryForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Entity\InventoryForm0.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Entity\InventoryForm0.Designer.cs">
-      <DependentUpon>InventoryForm0.cs</DependentUpon>
-    </Compile>
     <Compile Include="Entity\ItemBarcodeLoader.cs" />
     <Compile Include="Entity\ItemEditControlBase.cs">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Entity\ItemEditFormBase.cs">
       <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Entity\NewInventoryForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Entity\NewInventoryForm.Designer.cs">
-      <DependentUpon>NewInventoryForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Entity\SelectBatchNoDialog.cs">
       <SubType>Form</SubType>
@@ -384,11 +370,36 @@
       <DependentUpon>ChatLoginDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="IM\MessageHub.cs" />
+    <Compile Include="IO\BiblioDupDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IO\BiblioDupDialog.Designer.cs">
+      <DependentUpon>BiblioDupDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="IO\ImportExportForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="IO\ImportExportForm.Designer.cs">
       <DependentUpon>ImportExportForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IO\MergeRegistry.cs" />
+    <Compile Include="IO\StringMapDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IO\StringMapDialog.Designer.cs">
+      <DependentUpon>StringMapDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IO\TwoStringDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IO\TwoStringDialog.Designer.cs">
+      <DependentUpon>TwoStringDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ISO2709Statis\ImportMarcForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ISO2709Statis\ImportMarcForm.Designer.cs">
+      <DependentUpon>ImportMarcForm.cs</DependentUpon>
     </Compile>
     <Compile Include="ItemHandOver\ScanBarcodeForm.cs">
       <SubType>Form</SubType>
@@ -448,11 +459,17 @@
     <Compile Include="MainForm\DbNameExtension.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="MainForm\DownloadExtension.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="MainForm\FirstRunDialog.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="MainForm\FirstRunDialog.Designer.cs">
       <DependentUpon>FirstRunDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="MainForm\FixedEntityFormExtension.cs">
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="MainForm\FixPanelExtension.cs">
       <SubType>Form</SubType>
@@ -509,6 +526,18 @@
     <Compile Include="Monitor\ChannelForm.Designer.cs">
       <DependentUpon>ChannelForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Monitor\StartBackupDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Monitor\StartBackupDialog.Designer.cs">
+      <DependentUpon>StartBackupDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Monitor\StartServerReplicationDlg.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Monitor\StartServerReplicationDlg.Designer.cs">
+      <DependentUpon>StartServerReplicationDlg.cs</DependentUpon>
+    </Compile>
     <Compile Include="Monitor\StartReplicationDlg.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -524,6 +553,46 @@
     <Compile Include="OperLogStatis\OperLogItemLoader.cs" />
     <Compile Include="OperLogStatis\OperLogLoader.cs" />
     <Compile Include="OperLogStatis\OperLogStatisTask1.cs" />
+    <Compile Include="Order\BatchOrder\BatchOrderForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Order\BatchOrder\BatchOrderForm.Designer.cs">
+      <DependentUpon>BatchOrderForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Order\BatchOrder\BiblioStoreCollection.cs" />
+    <Compile Include="Order\BatchOrder\ErrorInfoCollection.cs" />
+    <Compile Include="Order\BatchOrder\ExchangeRateDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Order\BatchOrder\ExchangeRateDialog.Designer.cs">
+      <DependentUpon>ExchangeRateDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Order\BatchOrder\OrderListScript.cs" />
+    <Compile Include="Order\BatchOrder\BatchOrderScript.cs" />
+    <Compile Include="Order\BatchOrder\OrderListViewerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Order\BatchOrder\OrderListViewerForm.Designer.cs">
+      <DependentUpon>OrderListViewerForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Order\DistributeDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Order\DistributeDialog.Designer.cs">
+      <DependentUpon>DistributeDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Order\BatchOrder\OrderList.cs" />
+    <Compile Include="Order\DistributeExcelFile.cs" />
+    <Compile Include="Order\OrderReport.cs" />
+    <Compile Include="Order\SaveDistributeExcelFileDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Order\SaveDistributeExcelFileDialog.Designer.cs">
+      <DependentUpon>SaveDistributeExcelFileDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Print\BindPrintOptionDlg.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Reader\AddFriendsDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -612,6 +681,12 @@
     <Compile Include="Reader\FilterPatronDialog.Designer.cs">
       <DependentUpon>FilterPatronDialog.cs</DependentUpon>
     </Compile>
+    <Compile Include="Reader\PrintReaderSheetDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reader\PrintReaderSheetDialog.Designer.cs">
+      <DependentUpon>PrintReaderSheetDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="Reader\SelectPatronDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -633,6 +708,9 @@
     <Compile Include="Script\StatisHostBase.cs" />
     <Compile Include="Script\StatisHostBase0.cs" />
     <Compile Include="SearchForms\ArriveSearchForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SearchForms\AuthoritySearchForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="SearchForms\BiblioLoader.cs" />
@@ -820,6 +898,14 @@
     <Compile Include="SearchForms\CommentSearchForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="SearchForms\DumpBiblioAndPartsSubItems.cs" />
+    <Compile Include="SearchForms\ExcelUtility.cs" />
+    <Compile Include="SearchForms\ExportMarcHoldingDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SearchForms\ExportMarcHoldingDialog.Designer.cs">
+      <DependentUpon>ExportMarcHoldingDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="SearchForms\InvoiceSearchForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -915,7 +1001,6 @@
     <Compile Include="Issue\TestJidaoForm.Designer.cs">
       <DependentUpon>TestJidaoForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Issue\VolumeInfo.cs" />
     <Compile Include="ItemHandOver\SelectTargetBiblioDbNameDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1303,6 +1388,12 @@
     <Compile Include="SearchForms\IssueSearchForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="SearchForms\ItemClassStatisDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SearchForms\ItemClassStatisDialog.Designer.cs">
+      <DependentUpon>ItemClassStatisDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="SearchForms\ItemSearchForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1383,6 +1474,7 @@
       <SubType>Designer</SubType>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="deleted.txt" />
     <Content Include="Docs\deleted.txt" />
     <Content Include="EntityRegister\servers.xml" />
     <Content Include="eula.txt">
@@ -1397,11 +1489,16 @@
     </Content>
     <Content Include="default\issue_change_actions.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
     </Content>
     <Content Include="default\item_change_actions.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
     </Content>
     <Content Include="message.css">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Microsoft.mshtml.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="nei.ico" />
@@ -1409,57 +1506,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="jquery.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_diagonals-thick_18_b81900_40x40.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_diagonals-thick_20_666666_40x40.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_flat_10_000000_40x100.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_glass_100_f6f6f6_1x400.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_glass_100_fdf5ce_1x400.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_glass_65_ffffff_1x400.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_gloss-wave_35_f6a828_500x100.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_highlight-soft_100_eeeeee_1x100.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-bg_highlight-soft_75_ffe45c_1x100.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-icons_222222_256x240.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-icons_228ef1_256x240.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-icons_ef8c08_256x240.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-icons_ffd27a_256x240.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\images\ui-icons_ffffff_256x240.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\css\jquery-ui-1.8.7.css">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\js\jquery-1.4.4.min.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="jquery\js\jquery-ui-1.8.7.min.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="no_order_24.png">
@@ -1470,8 +1516,28 @@
     </Content>
     <Content Include="default\order_change_actions.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
     </Content>
     <Content Include="default\patron_change_actions.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
+    </Content>
+    <Content Include="Order\OrderBase.js">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Order\OrderSheet.js">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Order\BatchOrder_dark.css">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Order\OrderSheet_light.css">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Order\BatchOrder_light.css">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Order\BatchOrder.js">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="printslice.css">
@@ -1510,6 +1576,9 @@
     <EmbeddedResource Include="Charging\SelectItemDialog.resx">
       <DependentUpon>SelectItemDialog.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Charging\TargetLocationDialog.resx">
+      <DependentUpon>TargetLocationDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Dictionary\RelationControl.resx">
       <DependentUpon>RelationControl.cs</DependentUpon>
     </EmbeddedResource>
@@ -1521,9 +1590,6 @@
     </EmbeddedResource>
     <EmbeddedResource Include="EntityForm\GetMergeStyleDialog.resx">
       <DependentUpon>GetMergeStyleDialog.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="EntityForm\MacroTableDialog.resx">
-      <DependentUpon>MacroTableDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="EntityForm\PartialDeniedDialog.resx">
       <DependentUpon>PartialDeniedDialog.cs</DependentUpon>
@@ -1565,17 +1631,11 @@
     <EmbeddedResource Include="Entity\InventoryForm.resx">
       <DependentUpon>InventoryForm.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="Entity\InventoryForm0.resx">
-      <DependentUpon>InventoryForm0.cs</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="Entity\ItemEditControlBase.resx">
       <DependentUpon>ItemEditControlBase.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Entity\ItemEditFormBase.resx">
       <DependentUpon>ItemEditFormBase.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Entity\NewInventoryForm.resx">
-      <DependentUpon>NewInventoryForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Entity\SelectBatchNoDialog.resx">
       <DependentUpon>SelectBatchNoDialog.cs</DependentUpon>
@@ -1589,8 +1649,20 @@
     <EmbeddedResource Include="IM\ChatLoginDialog.resx">
       <DependentUpon>ChatLoginDialog.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="IO\BiblioDupDialog.resx">
+      <DependentUpon>BiblioDupDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="IO\ImportExportForm.resx">
       <DependentUpon>ImportExportForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IO\StringMapDialog.resx">
+      <DependentUpon>StringMapDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="IO\TwoStringDialog.resx">
+      <DependentUpon>TwoStringDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ISO2709Statis\ImportMarcForm.resx">
+      <DependentUpon>ImportMarcForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ItemHandOver\ScanBarcodeForm.resx">
       <DependentUpon>ScanBarcodeForm.cs</DependentUpon>
@@ -1632,6 +1704,13 @@
     <EmbeddedResource Include="Monitor\ChannelForm.resx">
       <DependentUpon>ChannelForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Monitor\StartBackupDialog.resx">
+      <DependentUpon>StartBackupDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Monitor\StartServerReplicationDlg.resx">
+      <DependentUpon>StartServerReplicationDlg.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
     <EmbeddedResource Include="Monitor\StartReplicationDlg.resx">
       <DependentUpon>StartReplicationDlg.cs</DependentUpon>
       <SubType>Designer</SubType>
@@ -1639,6 +1718,21 @@
     <EmbeddedResource Include="Monitor\StartRebuildKeysDlg.resx">
       <DependentUpon>StartRebuildKeysDlg.cs</DependentUpon>
       <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Order\BatchOrder\BatchOrderForm.resx">
+      <DependentUpon>BatchOrderForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Order\BatchOrder\ExchangeRateDialog.resx">
+      <DependentUpon>ExchangeRateDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Order\BatchOrder\OrderListViewerForm.resx">
+      <DependentUpon>OrderListViewerForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Order\DistributeDialog.resx">
+      <DependentUpon>DistributeDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Order\SaveDistributeExcelFileDialog.resx">
+      <DependentUpon>SaveDistributeExcelFileDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Reader\AddFriendsDialog.resx">
       <DependentUpon>AddFriendsDialog.cs</DependentUpon>
@@ -1687,6 +1781,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Reader\FilterPatronDialog.resx">
       <DependentUpon>FilterPatronDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reader\PrintReaderSheetDialog.resx">
+      <DependentUpon>PrintReaderSheetDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Reader\SelectPatronDialog.resx">
       <DependentUpon>SelectPatronDialog.cs</DependentUpon>
@@ -2062,8 +2159,14 @@
     <EmbeddedResource Include="SearchForms\ChangeItemActionDialog.resx">
       <DependentUpon>ChangeItemActionDialog.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="SearchForms\ExportMarcHoldingDialog.resx">
+      <DependentUpon>ExportMarcHoldingDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="SearchForms\InvoiceSearchForm.resx">
       <DependentUpon>InvoiceSearchForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="SearchForms\ItemClassStatisDialog.resx">
+      <DependentUpon>ItemClassStatisDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="SearchForms\ItemSearchForm.resx">
       <SubType>Designer</SubType>
@@ -2170,6 +2273,12 @@
     <EmbeddedResource Include="SearchForms\OpenBiblioDumpFileDialog.resx">
       <DependentUpon>OpenBiblioDumpFileDialog.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="SearchForms\RunScriptDialog.resx">
+      <DependentUpon>RunScriptDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="SearchForms\VerifyEntityDialog.resx">
+      <DependentUpon>VerifyEntityDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="SettlementForm.resx">
       <SubType>Designer</SubType>
       <DependentUpon>SettlementForm.cs</DependentUpon>
@@ -2202,6 +2311,9 @@
     <EmbeddedResource Include="Statis\LibraryReportConfigForm.resx">
       <DependentUpon>LibraryReportConfigForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Statis\RecoverRecordDialog.resx">
+      <DependentUpon>RecoverRecordDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Statis\ReportApplyForm.resx">
       <DependentUpon>ReportApplyForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -2217,6 +2329,9 @@
     <EmbeddedResource Include="TestForm.resx">
       <SubType>Designer</SubType>
       <DependentUpon>TestForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Testing\TestingForm.resx">
+      <DependentUpon>TestingForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Testing\TestSearchForm.resx">
       <DependentUpon>TestSearchForm.cs</DependentUpon>
@@ -2259,17 +2374,34 @@
     <Content Include="B3901.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="default_getclass.fltx" />
-    <Content Include="default_printorder_classstatis.template" />
-    <Content Include="default_printorder_classstatis_accept.template" />
+    <Content Include="default_getclass.fltx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="default_printorder_classstatis.template">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="default_printorder_classstatis_accept.template">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="default_printaccept_exchangeratetable.template">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="default_printorder_publisherstatis.template" />
-    <Content Include="default_printorder_publisherstatis_accept.template" />
-    <None Include="dp2Circulation_9_TemporaryKey.pfx" />
-    <None Include="dp2Circulation_TemporaryKey.pfx" />
-    <None Include="packages.config" />
+    <Content Include="default_printorder_publisherstatis.template">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="default_printorder_publisherstatis_accept.template">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <None Include="dp2003.pfx" />
+    <Content Include="jquery.zip">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="OCR-B.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <None Include="packages.config">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="Properties\app.manifest" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -2360,8 +2492,20 @@
     <Compile Include="SearchForms\OrderSearchForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="SearchForms\RunScriptDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SearchForms\RunScriptDialog.Designer.cs">
+      <DependentUpon>RunScriptDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="SearchForms\SearchFormBase.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SearchForms\VerifyEntityDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SearchForms\VerifyEntityDialog.Designer.cs">
+      <DependentUpon>VerifyEntityDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="SettlementForm.cs">
       <SubType>Form</SubType>
@@ -2417,6 +2561,12 @@
     <Compile Include="Statis\LibraryReportConfigForm.Designer.cs">
       <DependentUpon>LibraryReportConfigForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Statis\RecoverRecordDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Statis\RecoverRecordDialog.Designer.cs">
+      <DependentUpon>RecoverRecordDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="Statis\ReportApplyForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -2450,6 +2600,13 @@
     <Compile Include="TestForm.Designer.cs">
       <DependentUpon>TestForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Testing\Permunation.cs" />
+    <Compile Include="Testing\TestingForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Testing\TestingForm.Designer.cs">
+      <DependentUpon>TestingForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Testing\TestSearchForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -2463,6 +2620,28 @@
       <DependentUpon>UrgentChargingForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Thread\ThreadBase.cs" />
+    <Content Include="Reader\patronSheetLayout_card_photo_2X5.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
+    </Content>
+    <Content Include="Reader\patronSheetLayout_card_2X5.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Reader\patronSheetLayout_card_QR2X5.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Reader\patronSheetLayout_QR4X5.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Reader\patronSheetLayout_QR3X4.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Reader\patronSheetLayout_3X7.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Reader\patronSheetLayout_3X9.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="readme.txt" />
     <Content Include="report_def\9212.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -2489,6 +2668,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="report_def\9101.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="select2\select2.min.css">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="select2\select2.min.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="unimarc_cfgs\dp2circulation_marc_autogen.cs">
@@ -2551,6 +2736,7 @@
     <Content Include="commenthtml.css" />
     <Content Include="cutter.xml">
       <SubType>Designer</SubType>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <None Include="Docs\Design.txt" />
     <Content Include="exchangeratetable.css" />
@@ -2742,6 +2928,10 @@
     <None Include="Docs\测试工作单.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\AsyncPluggableProtocol\AsyncPluggableProtocol.csproj">
+      <Project>{a01b6bf8-e951-4f09-ae63-1b97e3fc561e}</Project>
+      <Name>AsyncPluggableProtocol</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DigitalPlatform.AmazonInterface\DigitalPlatform.AmazonInterface.csproj">
       <Project>{CEF0E01B-7F8F-4F0E-B687-C66659AB1403}</Project>
       <Name>DigitalPlatform.AmazonInterface</Name>
@@ -2758,6 +2948,10 @@
       <Project>{3DCFCA4D-0205-4684-A9A6-1DB8640CD579}</Project>
       <Name>DigitalPlatform.CommonDialog</Name>
     </ProjectReference>
+    <ProjectReference Include="..\DigitalPlatform.DataMining\DigitalPlatform.DataMining.csproj">
+      <Project>{6d057a41-df66-4986-925a-4c59de86a1dc}</Project>
+      <Name>DigitalPlatform.DataMining</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DigitalPlatform.dp2.Statis\DigitalPlatform.dp2.Statis.csproj">
       <Project>{060DD22D-8C7A-4D17-AC72-06B45AE65174}</Project>
       <Name>DigitalPlatform.dp2.Statis</Name>
@@ -2769,10 +2963,6 @@
     <ProjectReference Include="..\DigitalPlatform.EasyMarc\DigitalPlatform.EasyMarc.csproj">
       <Project>{0413F979-C770-4AB0-886E-4B2BE2FB4F8C}</Project>
       <Name>DigitalPlatform.EasyMarc</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\DigitalPlatform.GcatClient\DigitalPlatform.GcatClient.csproj">
-      <Project>{FC226C5E-6AED-402B-B604-5DEEC6301AD6}</Project>
-      <Name>DigitalPlatform.GcatClient</Name>
     </ProjectReference>
     <ProjectReference Include="..\DigitalPlatform.Interfaces\DigitalPlatform.Interfaces.csproj">
       <Project>{3C4F8133-8652-40B6-B37B-200B25C2B043}</Project>
@@ -2826,6 +3016,10 @@
       <Project>{86E0817D-79A4-4769-B450-C8352D0D1907}</Project>
       <Name>DigitalPlatform.ResultSet</Name>
     </ProjectReference>
+    <ProjectReference Include="..\DigitalPlatform.rms.Client\DigitalPlatform.rms.Client.csproj">
+      <Project>{D63FAE14-7CD6-4BD3-90D7-7DBBCDF8EEEF}</Project>
+      <Name>DigitalPlatform.rms.Client</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DigitalPlatform.Script\DigitalPlatform.Script.csproj">
       <Project>{5107DE16-DDA1-4606-B3A3-840B24428329}</Project>
       <Name>DigitalPlatform.Script</Name>
@@ -2833,10 +3027,6 @@
     <ProjectReference Include="..\DigitalPlatform.Text\DigitalPlatform.Text.csproj">
       <Project>{26F96CC3-A4A9-4BC4-A10A-BC7E25581FF6}</Project>
       <Name>DigitalPlatform.Text</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\DigitalPlatform.XmlEditor\DigitalPlatform.XmlEditor.csproj">
-      <Project>{A70527A4-10CC-4959-9409-3E51EB8C7A39}</Project>
-      <Name>DigitalPlatform.XmlEditor</Name>
     </ProjectReference>
     <ProjectReference Include="..\DigitalPlatform.Xml\DigitalPlatform.Xml.csproj">
       <Project>{E6489E89-1349-4EE7-A00B-AC96B9912587}</Project>
@@ -2864,9 +3054,9 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <BootstrapperPackage Include=".NETFramework,Version=v4.0">
+    <BootstrapperPackage Include=".NETFramework,Version=v4.6.1">
       <Visible>False</Visible>
-      <ProductName>Microsoft .NET Framework 4 %28x86 和 x64%29</ProductName>
+      <ProductName>Microsoft .NET Framework 4.6.1 %28x86 和 x64%29</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
@@ -2883,11 +3073,6 @@
       <Visible>False</Visible>
       <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>false</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Windows.Installer.4.5">
-      <Visible>False</Visible>
-      <ProductName>Windows Installer 4.5</ProductName>
-      <Install>true</Install>
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
@@ -3231,16 +3416,6 @@
       <IncludeHash>True</IncludeHash>
       <FileType>File</FileType>
     </PublishFile>
-    <PublishFile Include="DocumentFormat.OpenXml">
-      <Visible>False</Visible>
-      <Group>
-      </Group>
-      <TargetPath>
-      </TargetPath>
-      <PublishState>Include</PublishState>
-      <IncludeHash>True</IncludeHash>
-      <FileType>Assembly</FileType>
-    </PublishFile>
     <PublishFile Include="EntityRegister\servers.xml">
       <Visible>False</Visible>
       <Group>
@@ -3341,6 +3516,16 @@
       <IncludeHash>True</IncludeHash>
       <FileType>File</FileType>
     </PublishFile>
+    <PublishFile Include="jquery.zip">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
     <PublishFile Include="Jurassic.xml">
       <Visible>False</Visible>
       <Group>
@@ -3361,6 +3546,16 @@
       <IncludeHash>True</IncludeHash>
       <FileType>File</FileType>
     </PublishFile>
+    <PublishFile Include="Microsoft.mshtml.dll">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>Include</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
     <PublishFile Include="no_order_24.png">
       <Visible>False</Visible>
       <Group>
@@ -3372,6 +3567,16 @@
       <FileType>File</FileType>
     </PublishFile>
     <PublishFile Include="null_order_32.png">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="OCR-B.ttf">
       <Visible>False</Visible>
       <Group>
       </Group>
@@ -3402,6 +3607,86 @@
       <FileType>File</FileType>
     </PublishFile>
     <PublishFile Include="orderorigin.css">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\BatchOrder.js">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\BatchOrder_dark.css">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\BatchOrder_light.css">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\jquery.scrollIntoView.js">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\jquery.scrollIntoView.min.js">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\OrderBase.js">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\OrderSheet.js">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Order\OrderSheet_light.css">
       <Visible>False</Visible>
       <Group>
       </Group>
@@ -3472,6 +3757,86 @@
       <FileType>File</FileType>
     </PublishFile>
     <PublishFile Include="readerhtml.css">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout.xml">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout_3X7.xml">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout_3X9.xml">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout_card_2X5.xml">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout_card_photo_2X5.xml">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout_card_QR2X5.xml">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout_QR3X4.xml">
+      <Visible>False</Visible>
+      <Group>
+      </Group>
+      <TargetPath>
+      </TargetPath>
+      <PublishState>DataFile</PublishState>
+      <IncludeHash>True</IncludeHash>
+      <FileType>File</FileType>
+    </PublishFile>
+    <PublishFile Include="Reader\patronSheetLayout_QR4X5.xml">
       <Visible>False</Visible>
       <Group>
       </Group>
@@ -3615,6 +3980,17 @@
   <ItemGroup>
     <Folder Include="BiblioTemplate\" />
   </ItemGroup>
+  <ItemGroup>
+    <COMReference Include="IWshRuntimeLibrary">
+      <Guid>{F935DC20-1CF0-11D0-ADB9-00C04FD58A0B}</Guid>
+      <VersionMajor>1</VersionMajor>
+      <VersionMinor>0</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>tlbimp</WrapperTool>
+      <Isolated>False</Isolated>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>ECHO copy sqlite.interop.dll to x86 and x64 from bin\debug directory
@@ -3630,15 +4006,13 @@ xcopy $(TargetDir)x64 x64 /Y</PostBuildEvent>
       <ErrorText>这台计算机上缺少此项目引用的 NuGet 程序包。启用“NuGet 程序包还原”可下载这些程序包。有关详细信息，请参阅 http://go.microsoft.com/fwlink/?LinkID=322105。缺少的文件是 {0}。</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('$(SolutionDir)\.nuget\NuGet.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\.nuget\NuGet.targets'))" />
-    <Error Condition="!Exists('..\packages\Microsoft.Bcl.Build.1.0.21\build\Microsoft.Bcl.Build.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Bcl.Build.1.0.21\build\Microsoft.Bcl.Build.targets'))" />
-    <Error Condition="!Exists('..\packages\System.Data.SQLite.Core.1.0.99.0\build\net40\System.Data.SQLite.Core.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\System.Data.SQLite.Core.1.0.99.0\build\net40\System.Data.SQLite.Core.targets'))" />
+    <Error Condition="!Exists('..\packages\System.Data.SQLite.Core.1.0.108.0\build\net46\System.Data.SQLite.Core.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\System.Data.SQLite.Core.1.0.108.0\build\net46\System.Data.SQLite.Core.targets'))" />
   </Target>
   <PropertyGroup>
     <PreBuildEvent>CD /D $(ProjectDir)
 CALL copyinterop.bat</PreBuildEvent>
   </PropertyGroup>
-  <Import Project="..\packages\Microsoft.Bcl.Build.1.0.21\build\Microsoft.Bcl.Build.targets" Condition="Exists('..\packages\Microsoft.Bcl.Build.1.0.21\build\Microsoft.Bcl.Build.targets')" />
-  <Import Project="..\packages\System.Data.SQLite.Core.1.0.99.0\build\net40\System.Data.SQLite.Core.targets" Condition="Exists('..\packages\System.Data.SQLite.Core.1.0.99.0\build\net40\System.Data.SQLite.Core.targets')" />
+  <Import Project="..\packages\System.Data.SQLite.Core.1.0.108.0\build\net46\System.Data.SQLite.Core.targets" Condition="Exists('..\packages\System.Data.SQLite.Core.1.0.108.0\build\net46\System.Data.SQLite.Core.targets')" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

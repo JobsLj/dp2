@@ -1,17 +1,11 @@
 ﻿
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Net;
-using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security.Permissions;
-using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using System.Xml;
@@ -151,12 +145,12 @@ namespace dp2Circulation
         void _biblio_GetEntityDefault(object sender, GetDefaultItemEventArgs e)
         {
             // 获得册登记缺省值。快速册登记
-            e.Xml = this.MainForm.AppInfo.GetString(
+            e.Xml = Program.MainForm.AppInfo.GetString(
 "entityform_optiondlg",
 "quickRegister_default",
 "<root />");
 #if NO
-            string strQuickDefault = this.MainForm.AppInfo.GetString(
+            string strQuickDefault = Program.MainForm.AppInfo.GetString(
     "entityform_optiondlg",
     "quickRegister_default",
     "<root />");
@@ -255,11 +249,11 @@ namespace dp2Circulation
 
         private void EntityRegisterWizard_Load(object sender, EventArgs e)
         {
-            _biblio.MainForm = this.MainForm;
-            _base.MainForm = this.MainForm;
+            //_biblio.MainForm = Program.MainForm;
+            //_base.MainForm = Program.MainForm;
 
             if (this._imageManager != null)
-                this._imageManager.TempFileDir = this.MainForm.UserTempDir;
+                this._imageManager.TempFileDir = Program.MainForm.UserTempDir;
 
             this._originTitle = this.Text;
 
@@ -283,15 +277,15 @@ namespace dp2Circulation
 #endif
 
 #if NO
-            this.MainForm.Move += new EventHandler(MainForm_Move);
+            Program.MainForm.Move += new EventHandler(MainForm_Move);
 #endif
-            this.MainForm.Activated += MainForm_Activated;
-            this.MainForm.Deactivate += MainForm_Deactivate;
+            Program.MainForm.Activated += MainForm_Activated;
+            Program.MainForm.Deactivate += MainForm_Deactivate;
 
-            // this.MainForm.MessageFilter += MainForm_MessageFilter;
+            // Program.MainForm.MessageFilter += MainForm_MessageFilter;
 
             {
-                this.UiState = this.MainForm.AppInfo.GetString("entityRegisterWizard", "uistate", "");
+                this.UiState = Program.MainForm.AppInfo.GetString("entityRegisterWizard", "uistate", "");
                 // 缺省值 检索途径
                 if (string.IsNullOrEmpty(this.comboBox_from.Text) == true
                     && this.comboBox_from.Items.Count > 0)
@@ -306,7 +300,7 @@ namespace dp2Circulation
             SetControlsColor(this._colorStyle);
 
             this._genData = new GenerateData(this, this);
-            this._genData.ScriptFileName = "dp2circulation_marc_autogen_2.cs";
+            this._genData.ScriptFileName = "dp2circulation_marc_autogen_2.cs";  // 故意制造一个找不到的文件名。这样会自动用到默认 BiblioItemsHost 对象
             this._genData.DetailHostType = typeof(BiblioItemsHost);
 
             // 刚打开窗口，设定输入焦点
@@ -521,19 +515,19 @@ MessageBoxDefaultButton.Button1);
                 this._genData.Close();
             }
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "entityRegisterWizard",
                     "uistate",
                     this.UiState);
 
-                // this.MainForm.MessageFilter -= MainForm_MessageFilter;
+                // Program.MainForm.MessageFilter -= MainForm_MessageFilter;
 #if NO
-                this.MainForm.Move -= new EventHandler(MainForm_Move);
+                Program.MainForm.Move -= new EventHandler(MainForm_Move);
 #endif
-                this.MainForm.Activated -= MainForm_Activated;
-                this.MainForm.Deactivate -= MainForm_Deactivate;
+                Program.MainForm.Activated -= MainForm_Activated;
+                Program.MainForm.Deactivate -= MainForm_Deactivate;
 
             }
 
@@ -595,15 +589,15 @@ MessageBoxDefaultButton.Button1);
 
             // TODO: 目录名和当前用户相关
             // 当前登录的主要服务器不同，则需要的 xml 配置文件是不同的。应当存储在各自的目录中
-            string strFileName = Path.Combine(this.MainForm.ServerCfgDir, ReportForm.GetValidPathString(this.MainForm.GetCurrentUserName()) + "\\servers.xml");
+            string strFileName = Path.Combine(Program.MainForm.ServerCfgDir, ReportForm.GetValidPathString(Program.MainForm.GetCurrentUserName()) + "\\servers.xml");
 
-            PathUtil.CreateDirIfNeed(Path.GetDirectoryName(strFileName));
+            PathUtil.TryCreateDir(Path.GetDirectoryName(strFileName));
 
             if (File.Exists(strFileName) == false
                 || MainForm.GetServersCfgFileVersion(strFileName) < MainForm.SERVERSXML_VERSION)
             {
                 // 创建 servers.xml 配置文件
-                int nRet = this.MainForm.BuildServersCfgFile(strFileName,
+                int nRet = Program.MainForm.BuildServersCfgFile(strFileName,
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;
@@ -626,7 +620,7 @@ MessageBoxDefaultButton.Button1);
 
             _base.ServersDom = dom;
             return;
-        ERROR1:
+            ERROR1:
             this.ShowMessage(strError, "red", true);
         }
 
@@ -730,8 +724,7 @@ MessageBoxDefaultButton.Button1);
         // 检索
         private void button_search_Click(object sender, EventArgs e)
         {
-            DoSearch(this.textBox_queryWord.Text,
-                this.comboBox_from.Text);
+            DoSearch(this.textBox_queryWord.Text, this.comboBox_from.Text);
         }
 
         public string QueryWord
@@ -837,8 +830,8 @@ MessageBoxDefaultButton.Button1);
                 }
 
                 // 检索共享网络
-                if (this.MainForm != null && this.MainForm.MessageHub != null
-                    && this.MainForm.MessageHub.ShareBiblio == true)
+                if (Program.MainForm != null && Program.MainForm.MessageHub != null
+                    && Program.MainForm.MessageHub.ShareBiblio == true)
                 {
                     nRet = SearchLineMessage(
                         strQueryWord,
@@ -884,7 +877,7 @@ MessageBoxDefaultButton.Button1);
             }
 #endif
             return;
-        ERROR1:
+            ERROR1:
             this.ShowMessage(strError, "red", true);
             MessageBox.Show(this, strError);
         }
@@ -930,17 +923,17 @@ MessageBoxDefaultButton.Button1);
                 "progress", false);
 
             AmazonSearch search = new AmazonSearch();
-            // search.MainForm = this.MainForm;
-            search.TempFileDir = this.MainForm.UserTempDir;
+            // search.MainForm = Program.MainForm;
+            search.TempFileDir = Program.MainForm.UserTempDir;
 
-            search.Timeout = 5 * 1000;
+            search.Timeout = 5 * 1000; // 5
             search.Idle += search_Idle;
             try
             {
 
                 // 多行检索中的一行检索
                 int nRedoCount = 0;
-            REDO:
+                REDO:
                 int nRet = search.Search(
                     account.ServerUrl,
                     strQueryWord.Replace("-", ""),
@@ -1000,7 +993,7 @@ MessageBoxDefaultButton.Button1);
                 this.ClearMessage();
             }
 
-        ERROR1:
+            ERROR1:
             strError = "针对服务器 '" + account.ServerName + "' 检索出错: " + strError;
             AddBiblioBrowseLine(strError, TYPE_ERROR, bAutoSetFocus);
             return -1;
@@ -1111,7 +1104,7 @@ MessageBoxDefaultButton.Button1);
             {
                 try
                 {
-                    strFromStyle = this.MainForm.GetBiblioFromStyle(strFrom);
+                    strFromStyle = BiblioSearchForm.GetBiblioFromStyle(strFrom);
                 }
                 catch (Exception ex)
                 {
@@ -1161,14 +1154,15 @@ MessageBoxDefaultButton.Button1);
             _searchParam._searchComplete = false;
             _searchParam._searchCount = 0;
             _searchParam._serverPushEncoding = "utf-7";
-            this.MainForm.MessageHub.SearchResponseEvent += MessageHub_SearchResponseEvent;
+            Program.MainForm.MessageHub.SearchResponseEvent += MessageHub_SearchResponseEvent;
 
             try
             {
                 string strOutputSearchID = "";
-                nRet = this.MainForm.MessageHub.BeginSearchBiblio(
+                nRet = Program.MainForm.MessageHub.BeginSearchBiblio(
                     "*",
                     new SearchRequest(strSearchID,
+                        new LoginInfo("public", false),
                         "searchBiblio",
                         "<全部>",
                         strQueryWord,
@@ -1214,12 +1208,12 @@ MessageBoxDefaultButton.Button1);
             {
                 this.ClearMessage();
                 {
-                    this.MainForm.MessageHub.SearchResponseEvent -= MessageHub_SearchResponseEvent;
+                    Program.MainForm.MessageHub.SearchResponseEvent -= MessageHub_SearchResponseEvent;
                     _searchParam._searchID = "";
                 }
             }
 
-        ERROR1:
+            ERROR1:
             strError = "针对 共享网络 检索出错: " + strError;
             AddBiblioBrowseLine(strError, TYPE_ERROR, bAutoSetFocus);
             return -1;
@@ -1320,7 +1314,7 @@ out strError);
             }
 #endif
             return;
-        ERROR1:
+            ERROR1:
             // 加入一个文本行
             AddBiblioBrowseLine(
                 TYPE_ERROR,
@@ -1379,7 +1373,7 @@ out strError);
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 AddBiblioBrowseLine(
@@ -1456,7 +1450,7 @@ false);
             {
                 try
                 {
-                    strFromStyle = this.MainForm.GetBiblioFromStyle(strFrom);
+                    strFromStyle = BiblioSearchForm.GetBiblioFromStyle(strFrom);
                 }
                 catch (Exception ex)
                 {
@@ -1709,7 +1703,7 @@ false);
                 this.ClearMessage();
             }
 
-        ERROR1:
+            ERROR1:
             AddBiblioBrowseLine(strError, TYPE_ERROR, bAutoSetFocus);
             return -1;
         }
@@ -2081,11 +2075,6 @@ out strError);
                 }
             }
 
-#if NO
-            if (StringUtil.HasHead(strUrl, "http:") == true)
-                return;
-#endif
-
             if (info != null
                 && bRetry == false
                 && info.CoverImageRquested == true)
@@ -2108,24 +2097,6 @@ out strError);
             }
         }
 
-#if NO
-        public override MainForm MainForm
-        {
-            get
-            {
-                return base.MainForm;
-            }
-            set
-            {
-                base.MainForm = value;
-                if (value != null && this._imageManager != null)
-                {
-                    this._imageManager.TempFileDir = value.UserTempDir;
-                }
-            }
-        }
-#endif
-
         internal ImageManager _imageManager = null;
 
         internal void AsyncGetImageFile(object sender,
@@ -2138,7 +2109,7 @@ out strError);
                 goto ERROR1;
             }
 
-            if (StringUtil.HasHead(e.ObjectPath, "http:") == true)
+            if (StringUtil.IsHttpUrl(e.ObjectPath) == true)
             {
                 EventFilter filter = new EventFilter();
                 // filter.BiblioRegister = biblioRegister;
@@ -2168,9 +2139,9 @@ out strError);
                 string strUserName = account.UserName;
 
                 if (EntityRegisterBase.IsDot(strServerUrl) == true)
-                    strServerUrl = this.MainForm.LibraryServerUrl;
+                    strServerUrl = Program.MainForm.LibraryServerUrl;
                 if (EntityRegisterBase.IsDot(strUserName) == true)
-                    strUserName = this.MainForm.DefaultUserName;
+                    strUserName = Program.MainForm.DefaultUserName;
 
                 EventFilter filter = new EventFilter();
                 // filter.BiblioRegister = biblioRegister;
@@ -2188,7 +2159,7 @@ out strError);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             this.AsyncGetImageComplete(e.Row,
                 "",
                 null,
@@ -2288,7 +2259,7 @@ out strError);
                 return -1;
             {
                 if (this._genData != null
-    && this.MainForm.PanelFixedVisible == true
+    && Program.MainForm.PanelFixedVisible == true
     && this._biblio != null)
                     this._genData.AutoGenerate(this.easyMarcControl1,
                         new GenerateDataEventArgs(),
@@ -2418,7 +2389,7 @@ out strError);
 #endif
             }
             return;
-        ERROR1:
+            ERROR1:
             if (string.IsNullOrEmpty(strError) == false)
             {
                 // MessageBox.Show(this, strError);
@@ -2529,10 +2500,10 @@ MessageBoxDefaultButton.Button1);
             {
                 // TODO: 如何知道 MARC 记录是什么具体的 MARC 格式?
                 // 可能需要在服务器信息中增加一个首选的 MARC 格式属性
-                string strFileName = Path.Combine(this.MainForm.DataDir, "unimarc_cfgs/" + strPath);
+                string strFileName = Path.Combine(Program.MainForm.DataDir, "unimarc_cfgs/" + strPath);
 
                 // 在cache中寻找
-                e.XmlDocument = this.MainForm.DomCache.FindObject(strFileName);
+                e.XmlDocument = Program.MainForm.DomCache.FindObject(strFileName);
                 if (e.XmlDocument != null)
                     return;
 
@@ -2547,7 +2518,7 @@ MessageBoxDefaultButton.Button1);
                     goto ERROR1;
                 }
                 e.XmlDocument = dom;
-                this.MainForm.DomCache.SetObject(strFileName, dom);  // 保存到缓存
+                Program.MainForm.DomCache.SetObject(strFileName, dom);  // 保存到缓存
                 return;
             }
 
@@ -2572,7 +2543,7 @@ MessageBoxDefaultButton.Button1);
             }
 
             // 在cache中寻找
-            e.XmlDocument = this.MainForm.DomCache.FindObject(strCfgFilePath);
+            e.XmlDocument = Program.MainForm.DomCache.FindObject(strCfgFilePath);
             if (e.XmlDocument == null)
             {
 
@@ -2612,7 +2583,7 @@ MessageBoxDefaultButton.Button1);
                         goto ERROR1;
                     }
                     e.XmlDocument = dom;
-                    this.MainForm.DomCache.SetObject(strCfgFilePath, dom);  // 保存到缓存
+                    Program.MainForm.DomCache.SetObject(strCfgFilePath, dom);  // 保存到缓存
                 }
             }
 
@@ -2622,12 +2593,12 @@ MessageBoxDefaultButton.Button1);
 
                 string strMarcSyntax = GetMarcSyntax(e.XmlDocument);
                 if (strMarcSyntax == "usmarc")
-                    strFileName = Path.Combine(this.MainForm.DataDir, "usmarc_cfgs/" + strPureFileName);
+                    strFileName = Path.Combine(Program.MainForm.DataDir, "usmarc_cfgs/" + strPureFileName);
                 else
-                    strFileName = Path.Combine(this.MainForm.DataDir, "unimarc_cfgs/" + strPureFileName);
+                    strFileName = Path.Combine(Program.MainForm.DataDir, "unimarc_cfgs/" + strPureFileName);
 
                 // 在cache中寻找
-                e.XmlDocument = this.MainForm.DomCache.FindObject(strFileName);
+                e.XmlDocument = Program.MainForm.DomCache.FindObject(strFileName);
                 if (e.XmlDocument != null)
                     return;
 
@@ -2642,10 +2613,10 @@ MessageBoxDefaultButton.Button1);
                     goto ERROR1;
                 }
                 e.XmlDocument = dom;
-                this.MainForm.DomCache.SetObject(strFileName, dom);  // 保存到缓存
+                Program.MainForm.DomCache.SetObject(strFileName, dom);  // 保存到缓存
             }
             return;
-        ERROR1:
+            ERROR1:
             this.ShowMessage(e.ErrorInfo, "red", true);
         }
 
@@ -2723,7 +2694,7 @@ MessageBoxDefaultButton.Button1);
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -2862,7 +2833,7 @@ MessageBoxDefaultButton.Button1);
                         lCount = lResultCount - lStart;
                 }
 
-            END1:
+                END1:
                 this._biblio.AddPlus();
                 return nCount;
             }
@@ -2934,7 +2905,7 @@ MessageBoxDefaultButton.Button1);
                 this.Progress.OnStop -= new StopEventHandler(this.DoStop);
                 // this.Progress.Initial("");
             }
-        ERROR1:
+            ERROR1:
             SetEditErrorInfo(edit, strError);
             //line._biblioRegister.BarColor = "R";   // 红色
             //this.SetColorList();
@@ -3132,11 +3103,11 @@ int nCount)
 #endif
                         List<string> names = BiblioError.GetFieldNames(errors);
                         if (names.Count > 0)
-                            this.easyMarcControl1.HideFields(names, true); // null, false 可显示全部隐藏字段
+                            this.easyMarcControl1.HideFields(names, false); // null, false 可显示全部隐藏字段
                     }
 
                     bool bTemp = false;
-                    // TODO: 如果保持窗口修改后的尺寸位置?
+                    // TODO: 如何保持窗口修改后的尺寸位置?
                     MessageDialog.Show(this,
                         "书目记录格式不正确",
                         BiblioError.GetListString(errors, "\r\n"),
@@ -3397,7 +3368,7 @@ int nCount)
                 this.Progress.OnStop -= new StopEventHandler(this.DoStop);
                 // this.Progress.Initial("");
             }
-        ERROR1:
+            ERROR1:
             this.ShowMessage(strError, "red", true);
             return -1;
         }
@@ -3471,7 +3442,7 @@ int nCount)
                 }
 
                 return 1;
-            ERROR1:
+                ERROR1:
                 return -1;
             }
             finally
@@ -3728,7 +3699,7 @@ int nCount)
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             this.ShowMessage(strError, "red", true);
             // MessageBox.Show(this, strError);
             return -1;
@@ -3737,7 +3708,7 @@ int nCount)
         int DeleteBiblioRecordFromDatabase(
     string strServerName,
     string strPath,
-            // string strXml,
+    // string strXml,
     byte[] baTimestamp,
     out byte[] baNewTimestamp,
     out string strError)
@@ -3792,7 +3763,7 @@ int nCount)
                 }
 
                 return 1;
-            ERROR1:
+                ERROR1:
                 return -1;
             }
             finally
@@ -4062,7 +4033,7 @@ MessageBoxDefaultButton.Button1);
                 goto ERROR1;
 
             return 0;
-        ERROR1:
+            ERROR1:
             if (bAutoSetFocus)
             {
                 if (string.IsNullOrEmpty(strError) == false)
@@ -4331,7 +4302,7 @@ MessageBoxDefaultButton.Button1);
         {
             EntityFormOptionDlg dlg = new EntityFormOptionDlg();
             MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.DisplayStyle = "quick_entity";
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog(this);
@@ -4340,7 +4311,7 @@ MessageBoxDefaultButton.Button1);
         private void easyMarcControl1_Enter(object sender, EventArgs e)
         {
             if (this._genData != null
-                && this.MainForm.PanelFixedVisible == true
+                && Program.MainForm.PanelFixedVisible == true
                 && this._biblio != null)
                 this._genData.AutoGenerate(this.easyMarcControl1,
                     new GenerateDataEventArgs(),
@@ -4369,7 +4340,7 @@ MessageBoxDefaultButton.Button1);
                     && control is EntityEditControl)
                 {
                     if (this._genData != null
-                        && this.MainForm.PanelFixedVisible == true
+                        && Program.MainForm.PanelFixedVisible == true
                         && this._biblio != null)
                     {
                         GenerateDataEventArgs e1 = new GenerateDataEventArgs();
@@ -4390,7 +4361,7 @@ MessageBoxDefaultButton.Button1);
                 if (edit != null)
                 {
                     if (this._genData != null
-        && this.MainForm.PanelFixedVisible == true)
+        && Program.MainForm.PanelFixedVisible == true)
                     {
                         GenerateDataEventArgs e1 = new GenerateDataEventArgs();
                         e1.FocusedControl = edit;
@@ -4448,16 +4419,17 @@ MessageBoxDefaultButton.Button2);
         {
             get
             {
-                if (this.MainForm != null && this.MainForm.AppInfo != null)
-                    return this.MainForm.AppInfo.GetBoolean("entityRegisterWizard", "keyboardFormFloating", true);
+                if (Program.MainForm != null && Program.MainForm.AppInfo != null)
+                    return Program.MainForm.AppInfo.GetBoolean("entityRegisterWizard", "keyboardFormFloating", true);
                 return true;
             }
             set
             {
-                if (this.MainForm != null && this.MainForm.AppInfo != null)
-                    this.MainForm.AppInfo.SetBoolean("entityRegisterWizard", "keyboardFormFloating", value);
+                if (Program.MainForm != null && Program.MainForm.AppInfo != null)
+                    Program.MainForm.AppInfo.SetBoolean("entityRegisterWizard", "keyboardFormFloating", value);
             }
         }
+
         // parameters:
         //      bFloatingWindow 是否打开为浮动的对话框？ false 表示停靠在固定面板区
         void OpenKeyboardForm(bool bFloatingWindow)
@@ -4474,7 +4446,7 @@ MessageBoxDefaultButton.Button2);
                 this._keyboardForm.Text = "向导";
                 this._keyboardForm.BaseForm = this;
 
-                // this._keyboardForm.Show(this.MainForm);
+                // this._keyboardForm.Show(Program.MainForm);
             }
             // this.easyMarcControl1.HideSelection = false;    // 当 EasyMarcControl 不拥有输入焦点时也能看到蓝色选定字段的标记
 
@@ -4482,15 +4454,15 @@ MessageBoxDefaultButton.Button2);
             {
                 if (_keyboardForm.Visible == false)
                 {
-                    this.MainForm.AppInfo.LinkFormState(_keyboardForm, "keyboardform_state");
+                    Program.MainForm.AppInfo.LinkFormState(_keyboardForm, "keyboardform_state");
 
-                    _keyboardForm.Show(this.MainForm);
+                    _keyboardForm.Show(Program.MainForm);
                     _keyboardForm.Activate();
 
                     if (this._keyboardForm != null)
                         this._keyboardForm.SetColorStyle(this.ColorStyle);
 
-                    this.MainForm.CurrentAcceptControl = null;
+                    Program.MainForm.CurrentAcceptControl = null;
                 }
                 else
                 {
@@ -4507,7 +4479,7 @@ MessageBoxDefaultButton.Button2);
                 }
                 else
                 {
-                    if (this.MainForm.CurrentAcceptControl != _keyboardForm.Table)
+                    if (Program.MainForm.CurrentAcceptControl != _keyboardForm.Table)
                     {
                         _keyboardForm.DoDock(true); // false 不会自动显示FixedPanel
                         _keyboardForm.Initialize(); // 没有 .Show() 的就用 .Initialize()
@@ -4522,15 +4494,15 @@ MessageBoxDefaultButton.Button2);
         {
             if (this._keyboardForm.Docked == false)
             {
-                if (this.MainForm.CurrentAcceptControl != this._keyboardForm.Table)
-                    this.MainForm.CurrentAcceptControl = this._keyboardForm.Table;
+                if (Program.MainForm.CurrentAcceptControl != this._keyboardForm.Table)
+                    Program.MainForm.CurrentAcceptControl = this._keyboardForm.Table;
 
                 if (e.ShowFixedPanel == true)
                 {
-                    if (this.MainForm.PanelFixedVisible == false)
-                        this.MainForm.PanelFixedVisible = true;
+                    if (Program.MainForm.PanelFixedVisible == false)
+                        Program.MainForm.PanelFixedVisible = true;
                     // 把 acceptpage 翻出来
-                    this.MainForm.ActivateAcceptPage();
+                    Program.MainForm.ActivateAcceptPage();
                 }
 
                 this._keyboardForm.Docked = true;
@@ -4554,7 +4526,7 @@ MessageBoxDefaultButton.Button2);
         {
 #if NO
             if (this._keyboardForm != null)
-                this.MainForm.AppInfo.UnlinkFormState(_keyboardForm);
+                Program.MainForm.AppInfo.UnlinkFormState(_keyboardForm);
 #endif
 
             this.checkBox_settings_keyboardWizard.Checked = false;
@@ -4564,8 +4536,8 @@ MessageBoxDefaultButton.Button2);
         {
             if (this._keyboardForm != null)
             {
-                if (this.MainForm.CurrentAcceptControl == _keyboardForm.Table)
-                    this.MainForm.CurrentAcceptControl = null;
+                if (Program.MainForm.CurrentAcceptControl == _keyboardForm.Table)
+                    Program.MainForm.CurrentAcceptControl = null;
 
                 this._keyboardForm.Close();
                 this._keyboardForm = null;
@@ -4804,8 +4776,8 @@ MessageBoxDefaultButton.Button2);
             // 样本记录
             MarcRecord record = new MarcRecord();
             record.add(new MarcField('$', "001???????"));
-            record.add(new MarcField('$', "200$a书名$f作者"));
-            record.add(new MarcField('$', "701$a作者"));
+            record.add(new MarcField('$', "200  $a书名$f作者"));
+            record.add(new MarcField('$', "701  $a作者"));
 
             string strXml = "";
             int nRet = MarcUtil.Marc2Xml(record.Text,
@@ -5061,13 +5033,13 @@ out strError);
             try
             {
                 string strError = "";
-                // string strFileName = Path.Combine(this.MainForm.ServerCfgDir, "servers.xml");
+                // string strFileName = Path.Combine(Program.MainForm.ServerCfgDir, "servers.xml");
                 // 当前登录的主要服务器不同，则需要的 xml 配置文件是不同的。应当存储在各自的目录中
-                string strFileName = Path.Combine(this.MainForm.ServerCfgDir, ReportForm.GetValidPathString(this.MainForm.GetCurrentUserName()) + "\\servers.xml");
-                PathUtil.CreateDirIfNeed(Path.GetDirectoryName(strFileName));
+                string strFileName = Path.Combine(Program.MainForm.ServerCfgDir, ReportForm.GetValidPathString(Program.MainForm.GetCurrentUserName()) + "\\servers.xml");
+                PathUtil.TryCreateDir(Path.GetDirectoryName(strFileName));
 
                 // 创建 servers.xml 配置文件
-                int nRet = this.MainForm.BuildServersCfgFile(strFileName,
+                int nRet = Program.MainForm.BuildServersCfgFile(strFileName,
                     out strError);
                 if (nRet == -1)
                 {
@@ -5091,13 +5063,13 @@ out strError);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("entityRegisterWizard",
+                return Program.MainForm.AppInfo.GetString("entityRegisterWizard",
                     "unimarcBiblioDefault",
                     "010  $a$dCNY??\r\n2001 $a$f\r\n210  $a$c$d\r\n215  $a??页$d??cm\r\n690  $a\r\n701  $a");
             }
             set
             {
-                this.MainForm.AppInfo.SetString("entityRegisterWizard",
+                Program.MainForm.AppInfo.SetString("entityRegisterWizard",
                     "unimarcBiblioDefault",
                     value);
             }
@@ -5107,13 +5079,13 @@ out strError);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("entityRegisterWizard",
+                return Program.MainForm.AppInfo.GetString("entityRegisterWizard",
                     "marc21BiblioDefault",
                     "010  $a$d\r\n200  $a$f\r\n210\r\n215\r\n690\r\n701  $a");
             }
             set
             {
-                this.MainForm.AppInfo.SetString("entityRegisterWizard",
+                Program.MainForm.AppInfo.SetString("entityRegisterWizard",
                     "marc21BiblioDefault",
                     value);
             }
@@ -5124,13 +5096,13 @@ out strError);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("entityRegisterWizard",
+                return Program.MainForm.AppInfo.GetString("entityRegisterWizard",
                     "unimarcImportantFields",
                     "010,200,210,215,686,69*,7**");
             }
             set
             {
-                this.MainForm.AppInfo.SetString("entityRegisterWizard",
+                Program.MainForm.AppInfo.SetString("entityRegisterWizard",
                     "unimarcImportantFields",
                     value);
                 OnImportantFieldsChanged();
@@ -5141,13 +5113,13 @@ out strError);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("entityRegisterWizard",
+                return Program.MainForm.AppInfo.GetString("entityRegisterWizard",
                     "marc21ImportantFields",
                     "010,200,210,215,686,69*,7**");
             }
             set
             {
-                this.MainForm.AppInfo.SetString("entityRegisterWizard",
+                Program.MainForm.AppInfo.SetString("entityRegisterWizard",
                     "marc21ImportantFields",
                     value);
                 OnImportantFieldsChanged();
@@ -5158,13 +5130,13 @@ out strError);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("entityRegisterWizard",
+                return Program.MainForm.AppInfo.GetString("entityRegisterWizard",
                     "unimarcHiddenFields",
                     "00*,1**,856,9**");
             }
             set
             {
-                this.MainForm.AppInfo.SetString("entityRegisterWizard",
+                Program.MainForm.AppInfo.SetString("entityRegisterWizard",
                     "unimarcHiddenFields",
                     value);
                 OnHiddenFieldsChanged();
@@ -5175,13 +5147,13 @@ out strError);
         {
             get
             {
-                return this.MainForm.AppInfo.GetString("entityRegisterWizard",
+                return Program.MainForm.AppInfo.GetString("entityRegisterWizard",
                     "marc21HiddenFields",
                     "00*,856");
             }
             set
             {
-                this.MainForm.AppInfo.SetString("entityRegisterWizard",
+                Program.MainForm.AppInfo.SetString("entityRegisterWizard",
                     "marc21HiddenFields",
                     value);
                 OnHiddenFieldsChanged();
@@ -5201,7 +5173,7 @@ out strError);
             dlg.Marc21HiddenFields = this.Marc21BiblioHiddenFields.Replace(",", "\r\n");
 
             dlg.StartPosition = FormStartPosition.CenterScreen;
-            this.MainForm.AppInfo.LinkFormState(dlg, "entityRegisterWizard_biblioDefault");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "entityRegisterWizard_biblioDefault");
             dlg.ShowDialog(this);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)

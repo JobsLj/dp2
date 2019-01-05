@@ -1,14 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.Serialization;
 using System.ServiceModel;
-using System.Text;
 using System.Xml;
 using System.IO;
 using System.Diagnostics;
 using System.Threading;
-// using System.ServiceProcess;
 using System.ServiceModel.Channels;
 
 using DigitalPlatform;
@@ -129,7 +125,7 @@ namespace dp2Kernel
                     strDataDir = DomUtil.GetAttr(dom.DocumentElement, "datadir");
                 }
 
-            START:
+                START:
                 info.App = new KernelApplication();
                 // parameter:
                 //		strDataDir	data目录
@@ -185,16 +181,14 @@ namespace dp2Kernel
         {
             strError = "";
 
-            string strIP = "";
-            string strVia = "";
-            GetClientAddress(out strIP, out strVia);
+            GetClientAddress(out string strIP, out string strVia);
 
             sessioninfo = new SessionInfo();
             // return:
             //      -1  出错
             //      0   成功
             int nRet = sessioninfo.Initial(app,
-                 OperationContext.Current.SessionId,
+                OperationContext.Current.SessionId,
                 strIP,
                 strVia,
                 out strError);
@@ -228,6 +222,9 @@ namespace dp2Kernel
                 Debug.Assert(this.app != null, "");
             }
 
+            // 2018/10/14
+            this.app.CancelToken.ThrowIfCancellationRequested();
+
             if (bPrepareSessionInfo == true
                 && this.sessioninfo == null)
             {
@@ -248,9 +245,7 @@ namespace dp2Kernel
         // 准备this.user对象
         int PrepareUser(ref Result result)
         {
-            string strError = "";
-
-            this.user = this.GetUser(out strError);
+            this.user = this.GetUser(out string strError);
             if (user == null)
             {
                 result.Value = -1;
@@ -265,7 +260,6 @@ namespace dp2Kernel
         // 得到用户对象
         public User GetUser(out string strError)
         {
-            User user = null;
             // string strError = "";
             if (app == null)
             {
@@ -283,6 +277,14 @@ namespace dp2Kernel
                 strError = "app.Users == null";
                 return null;
             }
+
+            // 2018/10/14
+            if (app.CancelToken.IsCancellationRequested)
+            {
+                strError = "Application 正在 downing ...";
+                return null;
+            }
+
             // 不管UserName对应的用户对象是否在内存, 都可以找到或创建
             // return:
             //      -1  出错
@@ -291,7 +293,8 @@ namespace dp2Kernel
             int nRet = app.Users.GetUserSafety(
                 false,
                 this.sessioninfo.UserName,
-                out user,
+                app.CancelToken,
+                out User user,
                 out strError);
             if (nRet != 1)
             {
@@ -304,30 +307,13 @@ namespace dp2Kernel
 
         // 2012/1/5
         // 获得版本号
-        //      2.2 第一个具有版本号的版本。特点是增加了SearchEx() API，另外Record结构也有改动，增加了RecordBody成员
-        //      2.3 records 表中会自动增加一个列 newdptimestamp
-        //      2.4 records 表中会自动增加两个列 filename newfilename -- 2012/2/8
-        //      2.5 支持4种数据库引擎
-        //      2.51 新增freetime时间类型 2012/5/15
-        //      2.52 Dir() API 中检索途径节点的 TypeString 对时间检索途径包含 _time _freetime _rfc1123time _utime 子串
-        //      2.53 将GetRes() API的nStart参数从int修改为long类型 2012/8/26
-        //      2.54 实现全局结果集 2013/1/4
-        //      2.55 GetRecords()/GetBrowse()等的 strStyle 新增 format:@coldef:xxx|xxx 功能
-        //      2.56 大幅度改进 WriteRecords() 等 API，提高了批处理 I/O 的速度 2013/2/21
-        //      2.57 2015/1/21 改进 CopyRecord() API 增加了 strMergeStyle 和 strIdChangeList 参数。允许源和目标的对象都保留在目标记录中
-        //      2.58 2015/8/25 修改空值检索的错误。( keycount 和 keyid 风格之下 不正确的 not in ... union 语句)
-        //      2.59 2015/8/27 GetRecords()/GetBrowse()等 API 中 strStyle 的 format:@coldef:xxx|xxx 格式，其中 xxx 除了原先 xpath 用法外，还可以使用 xpath->convert 格式。
-        //      2.60 2015/9/26 WriteXml() 对整个操作超过一秒的情况，会将时间构成详情写入错误日志
-        //      2.61 2015/11/8 Search() 和 SearchEx() 中，XML 检索式的 target 元素增加了 hint 属性。如果 hint 属性包含 first 子串，则当 target 元素的 list 属性包含多个数据库时，顺次检索的过程中只要有一次命中，就立即停止检索返回。此方式能提高检索速度，但不保证能检索全命中结果。比较适合用于册条码号等特定的检索途径进行借书还书操作
-        //      2.62 2015/11/14 GetBrowse() API 允许获得对象记录的 metadata 和 timestamp
-        //      2.63 2015/11/16 WriteRes() API WriteRes() API 允许通过 lTotalLength 为 -1 调用，作用是仅修改 metadata
-        //      2.64 2016/1/6 MySQL 版本在删除和创建检索点的时候所使用的 SQL 语句多了一个分号。此 Bug 已经排除
-        //      2.65 2016/5/14 WriteRecords() API 支持上载结果集。XML 检索式为 item 元素增加 resultset 属性，允许已有结果集参与逻辑运算。优化 resultset[] 操作符速度。
         public Result GetVersion()
         {
-            Result result = new Result();
-            result.Value = 0;
-            result.ErrorString = "2.65";
+            Result result = new Result
+            {
+                Value = 0,
+                ErrorString = KernelApplication.Version
+            };
             return result;
         }
 
@@ -431,7 +417,7 @@ namespace dp2Kernel
                 this.sessioninfo.UserName = user.Name;
                 result.Value = 1;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorString = strError;
                 result.ErrorCode = ErrorCodeValue.CommonError;
@@ -590,8 +576,7 @@ namespace dp2Kernel
                 if (PrepareUser(ref result) == -1)
                     return result;
 
-                ChannelHandle handle = new ChannelHandle();
-                handle.App = app;
+                ChannelHandle handle = new ChannelHandle(app);
                 handle.Idle += new ChannelIdleEventHandler(handle_Idle);
                 handle.Stop += new EventHandler(handle_Stop);
 
@@ -662,7 +647,7 @@ namespace dp2Kernel
 
                     // GC.Collect();    // 可以确认结果集临时文件立即删除了
 
-                    if (lRecordCount != 0)
+                    if (lRecordCount != 0 && resultSet.Count > 0)
                     {
                         // 获得若干记录
                         // result:
@@ -684,6 +669,11 @@ namespace dp2Kernel
                             return result;
                         }
                     }
+                    else
+                    {
+                        records = new Record[0];    // 2017/8/23
+                    }
+
                 } // end of lock
             }
             catch (Exception ex)    // TODO: 将来把异常处理在中层函数内
@@ -733,7 +723,6 @@ namespace dp2Kernel
                 app.MyWriteDebugInfo("因后一个search的到来，前一个search不得不中断 ");
             }
 
-
             sessioninfo.BeginSearch();
             try
             {
@@ -755,8 +744,7 @@ namespace dp2Kernel
                     new Delegate_isConnected(this.myIsConnected);
 #endif
 
-                ChannelHandle handle = new ChannelHandle();
-                handle.App = app;
+                ChannelHandle handle = new ChannelHandle(app);
                 handle.Idle += new ChannelIdleEventHandler(handle_Idle);
                 handle.Stop += new EventHandler(handle_Stop);
 
@@ -1045,7 +1033,6 @@ namespace dp2Kernel
 
             try
             {
-
                 if (this.sessioninfo.UserName == "")
                 {
                     result.Value = -1;
@@ -1057,10 +1044,7 @@ namespace dp2Kernel
                 if (PrepareUser(ref result) == -1)
                     return result;
 
-
                 string strError = "";
-
-
 
                 // DateTime time = DateTime.Now;
 
@@ -1070,6 +1054,7 @@ namespace dp2Kernel
                 int nRet = 0;
                 // return:
                 //		-1  出错
+                //      -4  strResPath 对应的对象没有找到
                 //      -6  权限不够
                 //		0   正常
                 nRet = app.Dbs.API_Dir(strResPath,
@@ -1096,7 +1081,6 @@ namespace dp2Kernel
                 }
 
                 result.Value = nTotalLength;
-
                 return result;
             }
             catch (Exception ex)
@@ -1254,11 +1238,9 @@ namespace dp2Kernel
         //		strLang	语言版本，用来获得记录路径
         //		strStyle	样式,以逗号分隔，id:表示取id,cols表示取浏览格式
         //		records	得到的记录数组，成员为类型为Record
-        // result:
-        //		Result对象,
-        //		value == -1	出错
-        //			  >= 1	结果集的总数
-        //			  == 0	0条
+        // Result.Value
+        //		value == -1	出错。如果错误码为 ErrorCodeValue.NotFound，表示结果集不存在
+        //			  >= 0	结果集内的记录总数
         public Result GetRecords(
             string strResultSetName,
             long lStart,
@@ -1310,7 +1292,7 @@ namespace dp2Kernel
                     {
                         result.Value = -1;
                         result.ErrorCode = ErrorCodeValue.NotFound;
-                        result.ErrorString = "结果集 '"+strResultSetName+"' 不存在";
+                        result.ErrorString = "结果集 '" + strResultSetName + "' 不存在";
                         return result;
                     }
                 }
@@ -1376,7 +1358,7 @@ namespace dp2Kernel
                 return result;
             }
 
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorCode = ErrorCodeValue.CommonError;
             result.ErrorString = strError;
@@ -1564,7 +1546,7 @@ namespace dp2Kernel
                 result.ErrorString = strErrorText;
                 return result;
             }
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorCode = ErrorCodeValue.CommonError;
             result.ErrorString = strError;
@@ -1709,6 +1691,15 @@ namespace dp2Kernel
 
                 result.Value = nRet;   // 总长度
 
+                // 压缩内容
+                // 2017/10/6
+                if (StringUtil.IsInList("gzip", strStyle)
+                    && baContent != null && baContent.Length > 0)
+                {
+                    baContent = ByteArray.CompressGzip(baContent);
+                    result.ErrorCode = ErrorCodeValue.Compressed;
+                }
+
                 if (nAdditionError == -50)
                 {
                     result.ErrorCode = ErrorCodeValue.NotFoundSubRes;    // 2006/7/3
@@ -1803,7 +1794,7 @@ namespace dp2Kernel
                     {
                         if (KernelApplication.IsGlobalResultSetName(strNewName) == false)
                         {
-                            strError = "strStyle '"+strStyle+"' 中 newname 参数值 '"+strNewName+"' 应该和 oldname 一致，为全局结果集名称形态";
+                            strError = "strStyle '" + strStyle + "' 中 newname 参数值 '" + strNewName + "' 应该和 oldname 一致，为全局结果集名称形态";
                             throw new ArgumentException(strError);
                         }
 
@@ -1920,7 +1911,7 @@ namespace dp2Kernel
             }
             catch (Exception ex)
             {
-                string strErrorText = "BulkWriteRes() API出现异常: " + ExceptionUtil.GetDebugText(ex);
+                string strErrorText = "WriteRecords() API出现异常: " + ExceptionUtil.GetDebugText(ex);
                 app.WriteErrorLog(strErrorText);
 
                 // result依然返回错误
@@ -2070,7 +2061,7 @@ namespace dp2Kernel
         //						对象资源: 库名/记录号/object/资源ID
         //						部分记录体: 库名/记录/xpath/<locate>hitcount</locate><action>AddInteger</action> 或者 库名/记录/xpath/@hitcount
         //		strRanges		目标的位置,多个range用逗号分隔,null认为是空字符串，空字符串认为是0-(lTotalLength-1)
-        //		lTotalLength	资源总长度,可以为0
+        //		lTotalLength	资源总长度,可以为 0。如果为 -1，表示仅修改 metadata
         //		baContent		用byte[]数据传送的资源内容，如果为null则表示是0字节的数组
         //		strAttachmentID	用附件传送的资源内容,null认为是空字符串
         //		strMetadata		元数据内容，null认为是空字符串，注:有些元数据虽然传过来，但服务器不认，比如长度
@@ -2173,10 +2164,14 @@ namespace dp2Kernel
                 if (PrepareUser(ref result) == -1)
                     return result;
 
+                // 2017/10/7
+                if (StringUtil.IsInList("gzip", strStyle)
+                    && baContent != null && baContent.Length > 0)
+                {
+                    baContent = ByteArray.DecompressGzip(baContent);
+                }
+
                 // 调数据库集合的WriteRes();
-                int nRet = 0;
-                string strError = "";
-                string strOutputValue = "";
                 // return:
                 //		-1	一般性错误
                 //		-2	时间戳不匹配
@@ -2187,7 +2182,7 @@ namespace dp2Kernel
                 //		-8	已经存在同名同类型的项
                 //		-9	已经存在同名但不同类型的项
                 //		0	成功
-                nRet = app.Dbs.API_WriteRes(strResPath,
+                int nRet = app.Dbs.API_WriteRes(strResPath,
                     strRanges,
                     lTotalLength,
                     baContent,
@@ -2198,8 +2193,8 @@ namespace dp2Kernel
                     user,
                     out strOutputResPath,
                     out baOutputTimestamp,
-                    out strOutputValue,
-                    out strError);
+                    out string strOutputValue,
+                    out string strError);
                 if (nRet <= -1)
                 {
                     result.Value = -1;
@@ -2225,7 +2220,6 @@ namespace dp2Kernel
                 result.ErrorString = strErrorText;
                 return result;
             }
-
         }
 
         // 删除资源，可以是记录 或 配置事项，不支持对象资源或部分记录体
@@ -3013,7 +3007,7 @@ namespace dp2Kernel
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCodeValue.CommonError;
                 result.ErrorString = strError;
@@ -3080,6 +3074,10 @@ namespace dp2Kernel
         ServiceHostBase owner = null;
         public KernelApplication App = null;
         public string DataDir = ""; // 数据目录
+
+        // 2017/9/3
+        // 实例名
+        public string InstanceName { get; set; }
 
         void IExtension<ServiceHostBase>.Attach(ServiceHostBase owner)
         {

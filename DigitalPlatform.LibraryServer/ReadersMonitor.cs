@@ -156,14 +156,17 @@ namespace DigitalPlatform.LibraryServer
 
             List<string> bodytypes = new List<string>();
 
-            string strBodyTypesDef = GetBodyTypesDef();
+            string strBodyTypesDef = GetBodyTypesDef(); // 已经处理了默认值情况
 
+#if NO
             if (string.IsNullOrEmpty(strBodyTypesDef) == true)
             {
                 strBodyTypesDef = "dpmail,email";   // 空表示只使用两种保守的类型
                 bodytypes = StringUtil.SplitList(strBodyTypesDef);
             }
-            else if (strBodyTypesDef == "[all]")
+            else 
+#endif
+            if (strBodyTypesDef == "[all]")
             {
                 // 全部类型。包括 mq 和外部接口
                 bodytypes.Add("dpmail");
@@ -317,7 +320,7 @@ namespace DigitalPlatform.LibraryServer
                         // 循环并不停止
                     }
 
-                CONTINUE:
+                    CONTINUE:
                     continue;
                 } // end of for
 
@@ -346,21 +349,21 @@ namespace DigitalPlatform.LibraryServer
             }
 
             return;
-        ERROR1:
+            ERROR1:
             AppendResultText("ReadersMonitor thread error : " + strError + "\r\n");
             this.App.WriteErrorLog("ReadersMonitor thread error : " + strError + "\r\n");
             return;
         }
 
         // 获得通知类型的定义
-        // monitors/readersMonitor 元素的 types 属性。缺省为空
+        // monitors/readersMonitor 元素的 types 属性值。缺省为"dpmail,email"
         string GetBodyTypesDef()
         {
             if (this.App.LibraryCfgDom == null || this.App.LibraryCfgDom.DocumentElement == null)
-                return "";
+                return "";  // DOM 对象，或者根元素不存在
             XmlElement def_node = this.App.LibraryCfgDom.DocumentElement.SelectSingleNode("monitors/readersMonitor") as XmlElement;
             if (def_node == null)
-                return "";
+                return "dpmail,email";  // 属性缺省后，缺省值是 "dpmail,mail"
             return def_node.GetAttribute("types");
         }
 
@@ -380,7 +383,7 @@ namespace DigitalPlatform.LibraryServer
             RmsChannel channel = this.RmsChannels.GetChannel(this.App.WsUrl);
             int nRedoCount = 0;
 
-        REDO:
+            REDO:
             byte[] output_timestamp = null;
 
             XmlDocument readerdom = new XmlDocument();
@@ -451,7 +454,7 @@ namespace DigitalPlatform.LibraryServer
                         strReaderEmailAddress = strValue;
                     }
 #endif
-                    strReaderEmailAddress = LibraryApplication.GetEmailAddress(strValue);
+                    strReaderEmailAddress = LibraryServerUtil.GetEmailAddress(strValue);
                     // 读者记录中没有email地址，就无法进行email方式的通知了
                     if (String.IsNullOrEmpty(strReaderEmailAddress) == true)
                         continue;
@@ -502,12 +505,12 @@ namespace DigitalPlatform.LibraryServer
                 nRet = this.App.DoNotifyReaderScriptFunction(
                         readerdom,
                         calendar,
-                    // notifiedBarcodes,
+                        // notifiedBarcodes,
                         strBodyType,
                         out nResultValue,
                         out strBody,
                         out strMime,
-                    // out wantNotifyBarcodes,
+                        // out wantNotifyBarcodes,
                         out strError);
                 if (nRet == -1)
                 {
@@ -541,7 +544,7 @@ namespace DigitalPlatform.LibraryServer
                     // 发送邮件
 
                     // 2016/4/10
-                    if (strBodyType == "mq")
+                    if (strBodyType == "mq" && this._queue != null)
                     {
                         // 向 MSMQ 消息队列发送消息
                         nRet = SendToQueue(this._queue,
@@ -797,6 +800,21 @@ namespace DigitalPlatform.LibraryServer
             if (nRet == 1)
                 bChanged = true;
 
+            // 2016/12/27
+            // return:
+            //      -1  出错
+            //      0   读者记录没有改变
+            //      1   读者记录发生改变
+            nRet = ChangeEmailField(readerdom,
+    out strError);
+            if (nRet == -1)
+            {
+                strError = "在为读者记录修改 email 元素时发生错误: " + strError;
+                this.AppendResultText(strError + "\r\n");
+            }
+            if (nRet == 1)
+                bChanged = true;
+
             // 2016/4/10
             // 如果读者记录中没有 refID 元素，自动创建它
             // return:
@@ -878,6 +896,12 @@ namespace DigitalPlatform.LibraryServer
         {
             strError = "";
 
+            if (myQueue == null)
+            {
+                strError = "SendToQueue() 的 myQueue 参数值不能为 null";
+                return -1;
+            }
+
             XmlDocument dom = new XmlDocument();
             dom.LoadXml("<root />");
             DomUtil.SetElementText(dom.DocumentElement, "type", "patronNotify");
@@ -895,9 +919,50 @@ namespace DigitalPlatform.LibraryServer
             }
             catch (Exception ex)
             {
-                strError = "发送消息到 MQ 失败: " + ex.Message;
+                strError = "发送消息到 MQ 出现异常: " + ExceptionUtil.GetDebugText(ex);
                 return -1;
             }
+        }
+
+        // 2016/12/27
+        // 将旧形态的 email 元素内容修改为新的形态
+        // return:
+        //      -1  出错
+        //      0   读者记录没有改变
+        //      1   读者记录发生改变
+        int ChangeEmailField(XmlDocument readerdom,
+            out string strError)
+        {
+            strError = "";
+
+            string strEmail = DomUtil.GetElementText(readerdom.DocumentElement, "email");
+            if (string.IsNullOrEmpty(strEmail) == false)
+            {
+                string[] parts = strEmail.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0)
+                    return 0;
+                bool bChanged = false;
+                List<string> results = new List<string>();
+                foreach (string s in parts)
+                {
+                    if (s.IndexOf(":") == -1)
+                    {
+                        results.Add("email:" + s);
+                        bChanged = true;
+                    }
+                    else
+                        results.Add(s);
+                }
+
+                if (bChanged)
+                {
+                    DomUtil.SetElementText(readerdom.DocumentElement, "email", StringUtil.MakePathList(results));
+                    return 1;
+                }
+                return 0;
+            }
+
+            return 0;
         }
 
         // 2016/4/10

@@ -30,17 +30,18 @@ namespace dp2Circulation
 
         public MyForm _myForm = null;
 
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
 
         public IBiblioItemsWindow DetailWindow = null;
 
+        // 拥有
         GenerateDataForm m_genDataViewer = null;
 
         public GenerateData(MyForm myform,
             IBiblioItemsWindow detailWindow)
         {
             this._myForm = myform;
-            this.MainForm = myform.MainForm;
+            // this.MainForm = myform.MainForm;
             this.DetailWindow = detailWindow;
         }
 
@@ -48,6 +49,9 @@ namespace dp2Circulation
         {
             if (m_detailHostObj != null)
                 m_detailHostObj.Dispose();
+
+            // 2017/4/23
+            this.Close();
         }
 
         public void Close()
@@ -69,9 +73,9 @@ namespace dp2Circulation
                 {
                     // 2015/11/7
                     // 注意解除 dock 时建立的关系。便于后面 Dispose()
-                    if (this.MainForm.CurrentGenerateDataControl == m_genDataViewer.Table)
+                    if (Program.MainForm.CurrentGenerateDataControl == m_genDataViewer.Table)
                     {
-                        this.MainForm.CurrentGenerateDataControl = null;
+                        Program.MainForm.CurrentGenerateDataControl = null;
                     }
 
                     this.m_genDataViewer.Close();
@@ -107,6 +111,7 @@ namespace dp2Circulation
         string m_strAutogenDataCfgFilename = "";    // 自动创建数据的.cs文件路径，全路径，包括库名部分
         object m_autogenSender = null;
 
+        // 拥有
         IDetailHost m_detailHostObj = null;
         public IDetailHost DetailHostObj
         {
@@ -166,23 +171,21 @@ namespace dp2Circulation
                 m_strAutogenDataCfgFilename = strAutogenDataCfgFilename;
 
                 this.m_autogenDataAssembly = Assembly.GetAssembly(this.GetType());  // 充数
-
                 return 1;
             }
 
-            Encoding encoding;
-                    // 能自动识别文件内容的编码方式的读入文本文件内容模块
-        // parameters:
-        //      lMaxLength  装入的最大长度。如果超过，则超过的部分不装入。如果为-1，表示不限制装入长度
-        // return:
-        //      -1  出错 strError中有返回值
-        //      0   文件不存在 strError中有返回值
-        //      1   文件存在
-        //      2   读入的内容不是全部
+            // 能自动识别文件内容的编码方式的读入文本文件内容模块
+            // parameters:
+            //      lMaxLength  装入的最大长度。如果超过，则超过的部分不装入。如果为-1，表示不限制装入长度
+            // return:
+            //      -1  出错 strError中有返回值
+            //      0   文件不存在 strError中有返回值
+            //      1   文件存在
+            //      2   读入的内容不是全部
             int nRet = FileUtil.ReadTextFileContent(strAutogenDataCfgFilename,
                 -1,
             out strCode,
-            out encoding,
+            out Encoding encoding,
             out strError);
             if (nRet != 1)
                 return -1;
@@ -201,7 +204,6 @@ namespace dp2Circulation
 
             return 0;
         }
-
 
         // 从服务器获得两个配置文件的内容
         // return:
@@ -288,7 +290,7 @@ namespace dp2Circulation
             if (StringUtil.HasHead(strBiblioRecPath, "format:") == true)
             {
                 strFormat = strBiblioRecPath.Substring("format:".Length);
-                strAutogenDataCfgFilename = Path.Combine(this.MainForm.DataDir, strFormat + "_cfgs/" + this.ScriptFileName);
+                strAutogenDataCfgFilename = Path.Combine(Program.MainForm.DataDir, strFormat + "_cfgs/" + this.ScriptFileName);
             }
             else
             {
@@ -307,7 +309,7 @@ namespace dp2Circulation
             if (m_autogenDataAssembly == null
                 || m_strAutogenDataCfgFilename != strAutogenDataCfgFilename)
             {
-                this.m_autogenDataAssembly = this.MainForm.AssemblyCache.FindObject(strAutogenDataCfgFilename);
+                this.m_autogenDataAssembly = Program.MainForm.AssemblyCache.FindObject(strAutogenDataCfgFilename);
                 this.m_detailHostObj = null;
 
                 // 如果Cache中没有现成的Assembly
@@ -386,11 +388,10 @@ out strError);
                     try
                     {
                         // 准备Assembly
-                        Assembly assembly = null;
                         nRet = GetCsScriptAssembly(
                             strCode,
                             strRef,
-                            out assembly,
+                            out Assembly assembly,
                             out strError);
                         if (nRet == -1)
                         {
@@ -398,7 +399,7 @@ out strError);
                             goto ERROR1;
                         }
                         // 记忆到缓存
-                        this.MainForm.AssemblyCache.SetObject(strAutogenDataCfgFilename, assembly);
+                        Program.MainForm.AssemblyCache.SetObject(strAutogenDataCfgFilename, assembly);
 
                         this.m_autogenDataAssembly = assembly;
 
@@ -497,7 +498,7 @@ out strError);
 
                 if (this.AutoGenNewStyle == true)
                 {
-                    bool bDisplayWindow = this.MainForm.PanelFixedVisible == false ? true : false;
+                    bool bDisplayWindow = Program.MainForm.PanelFixedVisible == false ? true : false;
                     if (bDisplayWindow == true)
                     {
                         if (String.IsNullOrEmpty(e.ScriptEntry) != true
@@ -521,9 +522,9 @@ out strError);
                     DisplayAutoGenMenuWindow(bDisplayWindow);   // 可能会改变 .ActionTable以及 .Count
                     if (bOnlyFillMenu == false)
                     {
-                        if (this.MainForm.PanelFixedVisible == true
+                        if (Program.MainForm.PanelFixedVisible == true
                             && e.Parameter == null) // 2015/6/5
-                            MainForm.ActivateGenerateDataPage();
+                            Program.MainForm.ActivateGenerateDataPage();
                     }
 
                     if (this.m_genDataViewer != null)
@@ -555,7 +556,7 @@ out strError);
                     if (this._myForm.Focused == true 
                         // || this.m_marcEditor.Focused TODO: 这里要研究一下如何实现
                         )
-                        this.MainForm.CurrentGenerateDataControl = null;
+                        Program.MainForm.CurrentGenerateDataControl = null;
 
                     // 如果意图仅仅为填充菜单
                     if (bOnlyFillMenu == true)
@@ -600,11 +601,11 @@ out strError);
                         }
                         else
                         {
-                            if (this.MainForm.PanelFixedVisible == true
+                            if (Program.MainForm.PanelFixedVisible == true
                                 && bOnlyFillMenu == false
-                                && this.MainForm.CurrentGenerateDataControl != null)
+                                && Program.MainForm.CurrentGenerateDataControl != null)
                             {
-                                TableLayoutPanel table = (TableLayoutPanel)this.MainForm.CurrentGenerateDataControl;
+                                TableLayoutPanel table = (TableLayoutPanel)Program.MainForm.CurrentGenerateDataControl;
                                 for (int i = 0; i < table.Controls.Count; i++)
                                 {
                                     Control control = table.Controls[i];
@@ -664,7 +665,7 @@ out strError);
             // 优化，避免无谓地进行服务器调用
             if (bOpenWindow == false)
             {
-                if (this.MainForm.PanelFixedVisible == false
+                if (Program.MainForm.PanelFixedVisible == false
                     && (m_genDataViewer == null || m_genDataViewer.Visible == false))
                     return;
             }
@@ -675,12 +676,12 @@ out strError);
             {
                 m_genDataViewer = new GenerateDataForm();
 
-                m_genDataViewer.AutoRun = this.MainForm.AppInfo.GetBoolean("detailform", "gen_auto_run", false);
+                m_genDataViewer.AutoRun = Program.MainForm.AppInfo.GetBoolean("detailform", "gen_auto_run", false);
                 // MainForm.SetControlFont(m_genDataViewer, this.Font, false);
 
                 {	// 恢复列宽度
 
-                    string strWidths = this.MainForm.AppInfo.GetString(
+                    string strWidths = Program.MainForm.AppInfo.GetString(
                                    "gen_data_dlg",
                                     "column_width",
                                    "");
@@ -692,7 +693,7 @@ out strError);
                     }
                 }
 
-                // m_genDataViewer.MainForm = this.MainForm;  // 必须是第一句
+                // m_genDataViewer.MainForm = Program.MainForm;  // 必须是第一句
                 m_genDataViewer.Text = "创建数据";
 
                 m_genDataViewer.DoDockEvent -= new DoDockEventHandler(m_genDataViewer_DoDockEvent);
@@ -715,11 +716,11 @@ out strError);
             {
                 if (m_genDataViewer.Visible == false)
                 {
-                    this.MainForm.AppInfo.LinkFormState(m_genDataViewer, "autogen_viewer_state");
+                    Program.MainForm.AppInfo.LinkFormState(m_genDataViewer, "autogen_viewer_state");
                     m_genDataViewer.Show(this._myForm);
                     m_genDataViewer.Activate();
 
-                    this.MainForm.CurrentGenerateDataControl = null;
+                    Program.MainForm.CurrentGenerateDataControl = null;
                 }
                 else
                 {
@@ -736,7 +737,7 @@ out strError);
                 }
                 else
                 {
-                    if (this.MainForm.CurrentGenerateDataControl != m_genDataViewer.Table)
+                    if (Program.MainForm.CurrentGenerateDataControl != m_genDataViewer.Table)
                         m_genDataViewer.DoDock(false); // 不会自动显示FixedPanel
                 }
             }
@@ -753,23 +754,23 @@ out strError);
 
         void m_genDataViewer_DoDockEvent(object sender, DoDockEventArgs e)
         {
-            if (this.MainForm.CurrentGenerateDataControl != m_genDataViewer.Table)
+            if (Program.MainForm.CurrentGenerateDataControl != m_genDataViewer.Table)
             {
-                this.MainForm.CurrentGenerateDataControl = m_genDataViewer.Table;
+                Program.MainForm.CurrentGenerateDataControl = m_genDataViewer.Table;
                 // 防止内存泄漏
                 m_genDataViewer.AddFreeControl(m_genDataViewer.Table);
             }
 
             if (e.ShowFixedPanel == true
-                && this.MainForm.PanelFixedVisible == false)
-                this.MainForm.PanelFixedVisible = true;
+                && Program.MainForm.PanelFixedVisible == false)
+                Program.MainForm.PanelFixedVisible = true;
 
             /*
-            this.MainForm.AppInfo.SetBoolean("detailform", "gen_auto_run", m_genDataViewer.AutoRun);
+            Program.MainForm.AppInfo.SetBoolean("detailform", "gen_auto_run", m_genDataViewer.AutoRun);
 
             {	// 保存列宽度
                 string strWidths = DpTable.GetColumnWidthListString(m_genDataViewer.ActionTable);
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "gen_data_dlg",
                     "column_width",
                     strWidths);
@@ -798,18 +799,29 @@ out strError);
                 e1.sender = e.sender;
                 e1.e = e.e;
 
+                ScriptUtil.InvokeMember(classType,
+                    strFuncName,
+                    this.m_detailHostObj,
+                    new object[] { sender, e1 });
+#if NO
                 classType = m_detailHostObj.GetType();
                 while (classType != null)
                 {
                     try
                     {
                         // 有两个参数的成员函数
-                        /* TODO: 也可以用 GetMember 先探索看看函数是否存在
+                        // 用 GetMember 先探索看看函数是否存在
                         MemberInfo [] infos = classType.GetMember(strFuncName,
                             BindingFlags.DeclaredOnly |
                             BindingFlags.Public | BindingFlags.NonPublic |
                             BindingFlags.Instance | BindingFlags.InvokeMethod);
-                         * */
+                        if (infos == null || infos.Length == 0)
+                        {
+                            classType = classType.BaseType;
+                            if (classType == null)
+                                break;
+                            continue;
+                        }
 
                         classType.InvokeMember(strFuncName,
                             BindingFlags.DeclaredOnly |
@@ -828,6 +840,8 @@ out strError);
                             break;
                     }
                 }
+
+#endif
             }
         }
 
@@ -877,17 +891,17 @@ out strError);
         {
             if (m_genDataViewer != null)
             {
-                this.MainForm.AppInfo.SetBoolean("detailform", "gen_auto_run", m_genDataViewer.AutoRun);
+                Program.MainForm.AppInfo.SetBoolean("detailform", "gen_auto_run", m_genDataViewer.AutoRun);
 
                 {	// 保存列宽度
                     string strWidths = DpTable.GetColumnWidthListString(m_genDataViewer.ActionTable);
-                    this.MainForm.AppInfo.SetString(
+                    Program.MainForm.AppInfo.SetString(
                         "gen_data_dlg",
                         "column_width",
                         strWidths);
                 }
 
-                this.MainForm.AppInfo.UnlinkFormState(m_genDataViewer);
+                Program.MainForm.AppInfo.UnlinkFormState(m_genDataViewer);
 #if NO
                 this.m_genDataViewer = null;
 #endif
@@ -899,17 +913,17 @@ out strError);
         {
             if (m_genDataViewer != null)
             {
-                this.MainForm.AppInfo.SetBoolean("detailform", "gen_auto_run", m_genDataViewer.AutoRun);
+                Program.MainForm.AppInfo.SetBoolean("detailform", "gen_auto_run", m_genDataViewer.AutoRun);
 
                 {	// 保存列宽度
                     string strWidths = DpTable.GetColumnWidthListString(m_genDataViewer.ActionTable);
-                    this.MainForm.AppInfo.SetString(
+                    Program.MainForm.AppInfo.SetString(
                         "gen_data_dlg",
                         "column_width",
                         strWidths);
                 }
 
-                this.MainForm.AppInfo.UnlinkFormState(m_genDataViewer);
+                Program.MainForm.AppInfo.UnlinkFormState(m_genDataViewer);
                 // this.m_genDataViewer = null;
                 CloseGenDataViewer();
             }
@@ -972,6 +986,11 @@ out strError);
             strError = "";
             assembly = null;
 
+            // 2018/8/18
+            // 为了兼容以前代码，对 using 部分进行修改
+            strCode = ScriptManager.ModifyCode(strCode);
+
+
             string[] saRef = null;
             int nRet;
 
@@ -1003,7 +1022,7 @@ out strError);
 									Environment.CurrentDirectory + "\\digitalplatform.marcdom.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.marcquery.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
+									//Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.script.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.commoncontrol.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.circulationclient.dll",

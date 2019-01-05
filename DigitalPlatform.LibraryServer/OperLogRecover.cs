@@ -7,6 +7,7 @@ using System.Xml;
 using System.Diagnostics;
 
 using DigitalPlatform.Xml;
+using DigitalPlatform.Text;
 
 namespace DigitalPlatform.LibraryServer
 {
@@ -43,7 +44,7 @@ namespace DigitalPlatform.LibraryServer
         }
 
         // 解析 开始 参数
-        static int ParseLogRecorverStart(string strStart,
+        static int ParseLogRecoverStart(string strStart,
             out long index,
             out string strFileName,
             out string strError)
@@ -106,12 +107,14 @@ namespace DigitalPlatform.LibraryServer
             out string strRecoverLevel,
             out bool bClearFirst,
             out bool bContinueWhenError,
+            out string strStyle,
             out string strError)
         {
             strError = "";
             bClearFirst = false;
             strRecoverLevel = "";
             bContinueWhenError = false;
+            strStyle = "";
 
             if (String.IsNullOrEmpty(strParam) == true)
                 return 0;
@@ -149,17 +152,16 @@ namespace DigitalPlatform.LibraryServer
             bContinueWhenError = DomUtil.GetBooleanParam(dom.DocumentElement,
                 "continueWhenError",
                 false);
-
+            strStyle = DomUtil.GetAttr(dom.DocumentElement, "style");
             return 0;
         }
-
 
         // 一次操作循环
         public override void Worker()
         {
             // 把系统挂起
             // this.App.HangupReason = HangupReason.LogRecover;
-            this.App.HangupList.Add("LogRecover");
+            this.App.AddHangup("LogRecover");
             try
             {
                 string strError = "";
@@ -170,13 +172,13 @@ namespace DigitalPlatform.LibraryServer
 
                 long lStartIndex = 0;// 开始位置
                 string strStartFileName = "";// 开始文件名
-                int nRet = ParseLogRecorverStart(startinfo.Start,
+                int nRet = ParseLogRecoverStart(startinfo.Start,
                     out lStartIndex,
                     out strStartFileName,
                     out strError);
                 if (nRet == -1)
                 {
-                    this.AppendResultText("启动失败: " + strError + "\r\n");
+                    this.AppendErrorText("启动失败: " + strError + "\r\n");
                     return;
                 }
 
@@ -184,15 +186,17 @@ namespace DigitalPlatform.LibraryServer
                 string strRecoverLevel = "";
                 bool bClearFirst = false;
                 bool bContinueWhenError = false;
+                string strStyle = "";
 
                 nRet = ParseLogRecoverParam(startinfo.Param,
                     out strRecoverLevel,
                     out bClearFirst,
                     out bContinueWhenError,
+                    out strStyle,
                     out strError);
                 if (nRet == -1)
                 {
-                    this.AppendResultText("启动失败: " + strError + "\r\n");
+                    this.AppendErrorText("启动失败: " + strError + "\r\n");
                     return;
                 }
 
@@ -205,7 +209,7 @@ namespace DigitalPlatform.LibraryServer
                 }
                 catch (Exception ex)
                 {
-                    this.AppendResultText("启动失败: 启动参数Param中的recoverLevel枚举值 '" + strRecoverLevel + "' 错误: " + ex.Message + "\r\n");
+                    this.AppendErrorText("启动失败: 启动参数Param中的recoverLevel枚举值 '" + strRecoverLevel + "' 错误: " + ex.Message + "\r\n");
                     return;
                 }
 
@@ -222,12 +226,12 @@ namespace DigitalPlatform.LibraryServer
                     nRet = this.App.DetectReaderDbFroms(out strError);
                     if (nRet == -1)
                     {
-                        this.AppendResultText("检查读者库检索点时发生错误: " + strError + "\r\n");
+                        this.AppendErrorText("检查读者库检索点时发生错误: " + strError + "\r\n");
                         return;
                     }
                     if (nRet == 0)
                     {
-                        this.AppendResultText("在容错恢复级别下，当前读者库中有部分或全部读者库缺乏“所借册条码号”检索点，无法进行日志恢复。请按照日志恢复要求，刷新所有读者库的检索点配置，然后再进行日志恢复\r\n");
+                        this.AppendErrorText("在容错恢复级别下，当前读者库中有部分或全部读者库缺乏“所借册条码号”检索点，无法进行日志恢复。请按照日志恢复要求，刷新所有读者库的检索点配置，然后再进行日志恢复\r\n");
                         return;
                     }
                 }
@@ -241,7 +245,7 @@ namespace DigitalPlatform.LibraryServer
                         out strError);
                     if (nRet == -1)
                     {
-                        this.AppendResultText("清除全部数据库记录时发生错误: " + strError + "\r\n");
+                        this.AppendErrorText("清除全部数据库记录时发生错误: " + strError + "\r\n");
                         return;
                     }
                 }
@@ -262,7 +266,6 @@ namespace DigitalPlatform.LibraryServer
                 // BUG!!! 以前缺乏排序。2008/2/1
                 Array.Sort(fis, new FileInfoCompare());
 
-
                 for (int i = 0; i < fis.Length; i++)
                 {
                     if (this.Stopped == true)
@@ -270,7 +273,7 @@ namespace DigitalPlatform.LibraryServer
 
                     string strFileName = fis[i].Name;
 
-                    this.AppendResultText("检查文件 " + strFileName + "\r\n");
+                    // this.AppendResultText("检查文件 " + strFileName + "\r\n");
 
                     if (bStart == false)
                     {
@@ -289,6 +292,7 @@ namespace DigitalPlatform.LibraryServer
                         nRet = DoOneLogFile(strFileName,
                             lStartIndex,
                             bContinueWhenError,
+                            strStyle,
                             out strError);
                         if (nRet == -1)
                             goto ERROR1;
@@ -301,15 +305,31 @@ namespace DigitalPlatform.LibraryServer
 
                 this.App.WriteErrorLog("日志恢复 任务结束。");
 
+                // this.ErrorInfo = StringUtil.MakePathList(_errors, "\r\n");
+                // TODO: 可以考虑从 result 文本文件中搜集所有错误信息行，放入 ErrorInfo 中，不过得有个极限行数限制
                 return;
 
             ERROR1:
+                this.ErrorInfo = strError;
                 return;
+            }
+            catch (Exception ex)
+            {
+                // 2017/11/30
+                string strError = "*** 日志恢复任务出现异常: " + ExceptionUtil.GetDebugText(ex);
+                this.AppendErrorText(strError);
+                this.App.WriteErrorLog(strError);
+                this.ErrorInfo = strError;
             }
             finally
             {
                 // this.App.HangupReason = HangupReason.None;
                 this.App.ClearHangup("LogRecover");
+
+                string strFinish = "批处理任务结束";
+                if (string.IsNullOrEmpty(this.ErrorInfo) == false)
+                    strFinish += ":" + this.ErrorInfo;
+                SetProgressText(strFinish);
             }
         }
 
@@ -335,6 +355,7 @@ namespace DigitalPlatform.LibraryServer
         int DoOneLogFile(string strFileName,
             long lStartIndex,
             bool bContinueWhenError,
+            string strStyle,
             out string strError)
         {
             strError = "";
@@ -371,6 +392,8 @@ namespace DigitalPlatform.LibraryServer
                         //      strFileName 纯文件名,不含路径部分
                         //      lHint   记录位置暗示性参数。这是一个只有服务器才能明白含义的值，对于前端来说是不透明的。
                         //              目前的含义是记录起始位置。
+                        //      attachment  承载输出的附件部分的 Stream 对象。如果为 null，表示不输出附件部分
+                        //                  本函数返回后，attachment 的文件指针在文件末尾。调用时需引起注意
                         // return:
                         //      -1  error
                         //      0   file not found
@@ -410,13 +433,16 @@ namespace DigitalPlatform.LibraryServer
                         if (lIndex == 1 || lIndex == 2)
                             continue;
  * */
-
-                        nRet = DoOperLogRecord(strXml,
+                        // TODO: 如何搜集出错信息并返回给前端？ 特别是测试时启动后台任务的情况
+                        nRet = DoOperLogRecord(
+                            this.RecoverLevel,
+                            strXml,
                             attachment,
+                            strStyle,
                             out strError);
                         if (nRet == -1)
                         {
-                            this.AppendResultText("*** 做日志记录 " + strFileName + " " + (lIndex).ToString() + " 时发生错误：" + strError + "\r\n");
+                            this.AppendErrorText("*** 做日志记录 " + strFileName + " " + (lIndex).ToString() + " 时发生错误：" + strError + "\r\n");
 
                             // 2007/6/25
                             // 如果为纯逻辑恢复(并且 bContinueWhenError 为 false)，遇到错误就停下来。这便于进行测试。
@@ -435,193 +461,6 @@ namespace DigitalPlatform.LibraryServer
                 File.Delete(strTempFileName);
             }
         }
-
-        // 执行一个日志记录的恢复动作
-        int DoOperLogRecord(string strXml,
-            Stream attachment,
-            out string strError)
-        {
-            strError = "";
-            int nRet = 0;
-
-            XmlDocument dom = new XmlDocument();
-            try
-            {
-                dom.LoadXml(strXml);
-            }
-            catch (Exception ex)
-            {
-                strError = "日志记录装载到DOM时出错: " + ex.Message;
-                return -1;
-            }
-
-            string strOperation = DomUtil.GetElementText(dom.DocumentElement,
-                "operation");
-            if (strOperation == "borrow")
-            {
-                nRet = this.App.RecoverBorrow(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    false,
-                    out strError);
-            }
-            else if (strOperation == "return")
-            {
-                nRet = this.App.RecoverReturn(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    false,
-                    out strError);
-            }
-            else if (strOperation == "setEntity")
-            {
-                nRet = this.App.RecoverSetEntity(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "setOrder")
-            {
-                nRet = this.App.RecoverSetOrder(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "setIssue")
-            {
-                nRet = this.App.RecoverSetIssue(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "setComment")
-            {
-                nRet = this.App.RecoverSetComment(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "changeReaderPassword")
-            {
-                nRet = this.App.RecoverChangeReaderPassword(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "changeReaderTempPassword")
-            {
-                // 2013/11/3
-            }
-            else if (strOperation == "setReaderInfo")
-            {
-                nRet = this.App.RecoverSetReaderInfo(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "devolveReaderInfo")
-            {
-                nRet = this.App.RecoverDevolveReaderInfo(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    attachment,
-                    out strError);
-            }
-            else if (strOperation == "amerce")
-            {
-                nRet = this.App.RecoverAmerce(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "setBiblioInfo")
-            {
-                nRet = this.App.RecoverSetBiblioInfo(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "hire")
-            {
-                nRet = this.App.RecoverHire(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "foregift")
-            {
-                // 2008/11/11
-                nRet = this.App.RecoverForegift(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "settlement")
-            {
-                nRet = this.App.RecoverSettlement(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    out strError);
-            }
-            else if (strOperation == "writeRes")
-            {
-                // 2011/5/26
-                nRet = this.App.RecoverWriteRes(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    attachment,
-                    out strError);
-            }
-            else if (strOperation == "repairBorrowInfo")
-            {
-                // 2012/6/21
-                nRet = this.App.RecoverRepairBorrowInfo(this.RmsChannels,
-                    this.RecoverLevel,
-                    dom,
-                    attachment,
-                    out strError);
-            }
-            else if (strOperation == "reservation")
-            {
-                // 暂未实现
-            }
-            else if (strOperation == "setUser")
-            {
-                // 暂未实现
-            }
-            else if (strOperation == "passgate")
-            {
-                // 只读
-            }
-            else if (strOperation == "getRes")
-            {
-                // 只读 2015/7/14
-            }
-            else if (strOperation == "crashReport")
-            {
-                // 只读 2015/7/16
-            }
-            else if (strOperation == "memo")
-            {
-                // 注记 2015/9/8
-            }
-            else
-            {
-                strError = "不能识别的日志操作类型 '" + strOperation + "'";
-                return -1;
-            }
-
-            if (nRet == -1)
-            {
-                string strAction = DomUtil.GetElementText(dom.DocumentElement,
-                        "action");
-                strError = "operation=" + strOperation + ";action=" + strAction + ": " + strError;
-                return -1;
-            }
-
-            return 0;
-        }
-
 
     }
 }

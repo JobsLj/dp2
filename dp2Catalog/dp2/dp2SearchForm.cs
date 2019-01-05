@@ -1,4 +1,6 @@
-﻿using System;
+﻿
+
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -56,8 +58,10 @@ namespace dp2Catalog
 
         //DigitalPlatform.Stop stop = null;
 
+#if OLD_CHANNEL
         public LibraryChannelCollection Channels = null;
         internal LibraryChannel Channel = null;
+#endif
 
 #if NO
         public string Lang = "zh";
@@ -80,6 +84,8 @@ namespace dp2Catalog
         {
             InitializeComponent();
 
+            this.dp2ResTree1.OnSetMenu += Dp2ResTree1_OnSetMenu;
+
             ListViewProperty prop = new ListViewProperty();
             this.listView_browse.Tag = prop;
             // 第一列特殊，记录路径
@@ -88,6 +94,25 @@ namespace dp2Catalog
             prop.GetColumnTitles += new GetColumnTitlesEventHandler(prop_GetColumnTitles);
             prop.ParsePath -= new ParsePathEventHandler(prop_ParsePath);
             prop.ParsePath += new ParsePathEventHandler(prop_ParsePath);
+        }
+
+        private void Dp2ResTree1_OnSetMenu(object sender, GuiAppendMenuEventArgs e)
+        {
+            ContextMenuStrip contextMenu = e.ContextMenuStrip;
+            ToolStripMenuItem menuItem = null;
+
+            // --
+            contextMenu.Items.Add(new ToolStripSeparator());
+
+            // Z39.50初始化
+            menuItem = new ToolStripMenuItem("配置 dp2 服务器(&S)");
+            menuItem.Click += new EventHandler(menuItem_configDp2Server_Click);
+            contextMenu.Items.Add(menuItem);
+        }
+
+        void menuItem_configDp2Server_Click(object sender, EventArgs e)
+        {
+            Program.MainForm.ManageServers(false);
         }
 
         void prop_ParsePath(object sender, ParsePathEventArgs e)
@@ -219,14 +244,16 @@ namespace dp2Catalog
 
             SetLayout(this.LayoutName);
 
-            this.MainForm.AppInfo.LoadMdiSize += new EventHandler(AppInfo_LoadMdiSize);
-            this.MainForm.AppInfo.SaveMdiSize += new EventHandler(AppInfo_SaveMdiSize);
+            this.MainForm.AppInfo.LoadMdiLayout += new EventHandler(AppInfo_LoadMdiLayout);
+            this.MainForm.AppInfo.SaveMdiLayout += new EventHandler(AppInfo_SaveMdiLayout);
 
             LoadSize();
 
+#if OLD_CHANNEL
             this.Channels = new LibraryChannelCollection();
             this.Channels.BeforeLogin += new BeforeLoginEventHandle(Channels_BeforeLogin);
             this.Channels.AfterLogin += new AfterLoginEventHandle(Channels_AfterLogin);
+#endif
 
 #if NO
             stop = new DigitalPlatform.Stop();
@@ -240,7 +267,10 @@ namespace dp2Catalog
 
             this.dp2ResTree1.Servers = MainForm.Servers;	// 引用
 
+#if OLD_CHANNEL
             this.dp2ResTree1.Channels = this.Channels;	// 引用
+#endif
+            this.dp2ResTree1.ChannelManager = Program.MainForm;
 
             this.dp2ResTree1.cfgCache = this.MainForm.cfgCache;
 
@@ -314,6 +344,7 @@ namespace dp2Catalog
             comboBox_matchStyle_TextChanged(null, null);
         }
 
+#if NO
         void Channels_AfterLogin(object sender, AfterLoginEventArgs e)
         {
             LibraryChannel channel = (LibraryChannel)sender;
@@ -352,13 +383,14 @@ namespace dp2Catalog
 #endif
             server.Verified = true;
         }
-
+#endif
 
         void commander_IsBusy(object sender, IsBusyEventArgs e)
         {
             e.IsBusy = this.m_nInViewing > 0;
         }
 
+#if NO
         void Channels_BeforeLogin(object sender, BeforeLoginEventArgs e)
         {
             LibraryChannel channel = (LibraryChannel)sender;
@@ -519,7 +551,7 @@ namespace dp2Catalog
 
             return dlg;
         }
-
+#endif
 
         protected override void DefWndProc(ref Message m)
         {
@@ -608,7 +640,7 @@ namespace dp2Catalog
             return true;    // 可以启动
         }
 
-        public void AppInfo_LoadMdiSize(object sender, EventArgs e)
+        public void AppInfo_LoadMdiLayout(object sender, EventArgs e)
         {
             if (sender != this)
                 return;
@@ -692,7 +724,7 @@ namespace dp2Catalog
             }
         }
 
-        void AppInfo_SaveMdiSize(object sender, EventArgs e)
+        void AppInfo_SaveMdiLayout(object sender, EventArgs e)
         {
             if (sender != this)
                 return;
@@ -855,12 +887,14 @@ namespace dp2Catalog
 
                 SaveSize();
 
-                this.MainForm.AppInfo.LoadMdiSize -= new EventHandler(AppInfo_LoadMdiSize);
-                this.MainForm.AppInfo.SaveMdiSize -= new EventHandler(AppInfo_SaveMdiSize);
+                this.MainForm.AppInfo.LoadMdiLayout -= new EventHandler(AppInfo_LoadMdiLayout);
+                this.MainForm.AppInfo.SaveMdiLayout -= new EventHandler(AppInfo_SaveMdiLayout);
             }
 
+#if OLD_CHANNEL
             if (this.Channels != null)
                 this.Channels.BeforeLogin -= new BeforeLoginEventHandle(Channels_BeforeLogin);
+#endif
 
             if (this.m_commentViewer != null)
                 this.m_commentViewer.Close();
@@ -878,7 +912,12 @@ namespace dp2Catalog
                 this.EnableControlsInSearching(false);
 
                 // 展开到指定的节点
-                this.dp2ResTree1.ExpandPath(respath);
+                string strError = "";
+                if (this.dp2ResTree1.ExpandPath(respath, out strError) == -1)
+                {
+                    this.Activate();
+                    MessageBox.Show(this, strError);
+                }
 
                 this.EnableControlsInSearching(true);
 
@@ -947,10 +986,12 @@ namespace dp2Catalog
             this.textBox_resPath.Text = e.Node.FullPath;
         }
 
+#if OLD_CHANNEL
         public LibraryChannel GetChannel(string strServerUrl)
         {
             return this.Channels.GetChannel(strServerUrl);
         }
+#endif
 
         public string GetServerUrl(string strServerName)
         {
@@ -1179,111 +1220,116 @@ namespace dp2Catalog
 
                         TargetItem item = (TargetItem)targets[i];
 
+#if OLD_CHANNEL
                         this.Channel = this.Channels.GetChannel(item.Url);
                         Debug.Assert(this.Channel != null, "Channels.GetChannel 异常");
+#endif
+                        LibraryChannel channel = Program.MainForm.GetChannel(item.Url);
 
-                        // textBox_simpleQuery_comment.Text += "检索式XML:\r\n" + item.Xml + "\r\n";
-
-                        // 2010/5/18
-                        string strBrowseStyle = "id,cols";
-                        string strOutputStyle = "";
-                        if (bOutputKeyID == true)
+                        try
                         {
-                            strOutputStyle = "keyid";
-                            strBrowseStyle = "keyid,id,key,cols";
-                        }
+                            // textBox_simpleQuery_comment.Text += "检索式XML:\r\n" + item.Xml + "\r\n";
 
-                        if (bFillBrowseLine == false)
-                            StringUtil.SetInList(ref strBrowseStyle, "cols", false);
-
-                        // MessageBox.Show(this, item.Xml);
-                        long lRet = this.Channel.Search(
-                            stop,
-                            item.Xml,
-                            "default",
-                            strOutputStyle,
-                            out strError);
-                        if (lRet == -1)
-                        {
-                            // textBox_simpleQuery_comment.Text += "出错: " + strError + "\r\n";
-                            MessageBox.Show(this, strError);
-                            continue;
-                        }
-                        long lHitCount = lRet;
-                        lTotalCount += lRet;
-
-                        stop.SetProgressRange(0, lTotalCount);
-
-                        // textBox_simpleQuery_comment.Text += "命中记录数: " + Convert.ToString(nRet) + "\r\n";
-                        this.textBox_resultInfo.Text += "检索词 '" + this.textBox_simple_queryWord.Text + "' 命中 " + lTotalCount.ToString() + " 条记录\r\n";
-
-                        if (lHitCount == 0)
-                            continue;
-
-                        long lStart = 0;
-                        long lPerCount = Math.Min(50, lHitCount);
-                        DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-                        // 装入浏览格式
-                        for (; ; )
-                        {
-                            Application.DoEvents();	// 出让界面控制权
-
-                            if (stop != null)
+                            // 2010/5/18
+                            string strBrowseStyle = "id,cols";
+                            string strOutputStyle = "";
+                            if (bOutputKeyID == true)
                             {
-                                if (stop.State != 0)
-                                {
-                                    strError = "用户中断";
-                                    goto ERROR1;
-                                }
+                                strOutputStyle = "keyid";
+                                strBrowseStyle = "keyid,id,key,cols";
                             }
 
-                            stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " (命中 " + lHitCount.ToString() + " 条记录) ...");
+                            if (bFillBrowseLine == false)
+                                StringUtil.SetInList(ref strBrowseStyle, "cols", false);
 
-                            lRet = Channel.GetSearchResult(
+                            // MessageBox.Show(this, item.Xml);
+                            long lRet = channel.Search(
                                 stop,
-                                null,   // strResultSetName
-                                lStart,
-                                lPerCount,
-                                strBrowseStyle,
-                                this.Lang,
-                                out searchresults,
+                                item.Xml,
+                                "default",
+                                strOutputStyle,
                                 out strError);
                             if (lRet == -1)
-                                goto ERROR1;
-
-                            if (lRet == 0)
                             {
-                                strError = "未命中";
-                                goto ERROR1;
+                                // textBox_simpleQuery_comment.Text += "出错: " + strError + "\r\n";
+                                MessageBox.Show(this, strError);
+                                continue;
+                            }
+                            long lHitCount = lRet;
+                            lTotalCount += lRet;
+
+                            stop.SetProgressRange(0, lTotalCount);
+
+                            // textBox_simpleQuery_comment.Text += "命中记录数: " + Convert.ToString(nRet) + "\r\n";
+                            this.textBox_resultInfo.Text += "检索词 '" + this.textBox_simple_queryWord.Text + "' 命中 " + lTotalCount.ToString() + " 条记录\r\n";
+
+                            if (lHitCount == 0)
+                                continue;
+
+                            long lStart = 0;
+                            long lPerCount = Math.Min(50, lHitCount);
+                            DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                            // 装入浏览格式
+                            for (; ; )
+                            {
+                                Application.DoEvents();	// 出让界面控制权
+
+                                if (stop != null)
+                                {
+                                    if (stop.State != 0)
+                                    {
+                                        strError = "用户中断";
+                                        goto ERROR1;
+                                    }
+                                }
+
+                                stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " (命中 " + lHitCount.ToString() + " 条记录) ...");
+
+                                lRet = channel.GetSearchResult(
+                                    stop,
+                                    null,   // strResultSetName
+                                    lStart,
+                                    lPerCount,
+                                    strBrowseStyle,
+                                    this.Lang,
+                                    out searchresults,
+                                    out strError);
+                                if (lRet == -1)
+                                    goto ERROR1;
+
+                                if (lRet == 0)
+                                {
+                                    strError = "未命中";
+                                    goto ERROR1;
+                                }
+
+                                // 处理浏览结果
+                                for (int j = 0; j < searchresults.Length; j++)
+                                {
+
+                                    NewLine(
+                                        this.listView_browse,
+                                        searchresults[j].Path + "@" + item.ServerName,
+                                        searchresults[j].Cols);
+                                }
+
+                                lStart += searchresults.Length;
+                                lFillCount += searchresults.Length;
+                                // lCount -= searchresults.Length;
+                                if (lStart >= lHitCount || lPerCount <= 0)
+                                    break;
+
+                                stop.SetProgressValue(lFillCount);
                             }
 
-                            // 处理浏览结果
-                            for (int j = 0; j < searchresults.Length; j++)
-                            {
-
-                                NewLine(
-                                    this.listView_browse,
-                                    searchresults[j].Path + "@" + item.ServerName,
-                                    searchresults[j].Cols);
-                            }
-
-                            lStart += searchresults.Length;
-                            lFillCount += searchresults.Length;
-                            // lCount -= searchresults.Length;
-                            if (lStart >= lHitCount || lPerCount <= 0)
-                                break;
-
-                            stop.SetProgressValue(lFillCount);
+                            /// 
+                        }
+                        finally
+                        {
+                            Program.MainForm.ReturnChannel(channel);
                         }
                     }
-
-                    /*
-                if (targets.Count > 1)
-                {
-                    textBox_simpleQuery_comment.Text += "命中总条数: " + Convert.ToString(lTotalCount) + "\r\n";
-                }
-                     * */
 
                 }
                 finally
@@ -1294,7 +1340,6 @@ namespace dp2Catalog
                     stop.OnStop -= new StopEventHandler(this.DoStop);
                     stop.Initial("");
                     stop.HideProgress();
-
 
                     this.EnableControlsInSearching(true);
 
@@ -1403,89 +1448,102 @@ namespace dp2Catalog
                         }
 
                         string strServerUrl = server.Url;
+#if OLD_CHANNEL
                         this.Channel = this.Channels.GetChannel(strServerUrl);
-
-                        string strOutputStyle = "id";
-
-                        long lRet = Channel.Search(stop,
-                            item.QueryXml,
-                            "default",
-                            strOutputStyle,
-                            out strError);
-                        if (lRet == -1)
+#endif
+                        LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+                        try
                         {
-                            this.textBox_resultInfo.Text += "检索式 '" + item.QueryXml + "' 检索时发生错误：" + strError + "\r\n";
-                            nErrorCount++;
-                            continue;
-                        }
 
-                        lHitCount = lRet;
+                            string strOutputStyle = "id";
 
-                        lTotalHitCount += lHitCount;
-
-                        stop.SetProgressRange(0, lTotalHitCount);
-
-                        this.textBox_resultInfo.Text += "已命中 " + lTotalHitCount.ToString() + " 条，检索尚未结束...\r\n";
-
-                        if (lHitCount == 0)
-                            continue;
-
-                        long lStart = 0;
-                        long lPerCount = Math.Min(50, lHitCount);
-                        DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-                        // 装入浏览格式
-                        for (; ; )
-                        {
-                            Application.DoEvents();	// 出让界面控制权
-
-                            if (stop != null)
-                            {
-                                if (stop.State != 0)
-                                {
-                                    strError = "用户中断";
-                                    goto ERROR1;
-                                }
-                            }
-
-                            stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " (命中 " + lHitCount.ToString() + " 条记录) ...");
-
-                            lRet = Channel.GetSearchResult(
-                                stop,
-                                null,   // strResultSetName
-                                lStart,
-                                lPerCount,
-                                bFillBrowseLine == true ? "id,cols" : "id",
-                                this.Lang,
-                                out searchresults,
+                            long lRet = channel.Search(stop,
+                                item.QueryXml,
+                                "default",
+                                strOutputStyle,
                                 out strError);
                             if (lRet == -1)
-                                goto ERROR1;
-
-                            if (lRet == 0)
                             {
-                                strError = "未命中";
-                                goto ERROR1;
+                                this.textBox_resultInfo.Text += "检索式 '" + item.QueryXml + "' 检索时发生错误：" + strError + "\r\n";
+                                nErrorCount++;
+                                continue;
                             }
 
-                            // 处理浏览结果
-                            for (int i = 0; i < searchresults.Length; i++)
-                            {
-                                NewLine(
-                                    this.listView_browse,
-                                    searchresults[i].Path + "@" + strServerName,
-                                    searchresults[i].Cols);
+                            lHitCount = lRet;
 
-                                lLoaded++;
-                                stop.SetProgressValue(lLoaded);
+                            lTotalHitCount += lHitCount;
+
+                            stop.SetProgressRange(0, lTotalHitCount);
+
+                            this.textBox_resultInfo.Text += "已命中 " + lTotalHitCount.ToString() + " 条，检索尚未结束...\r\n";
+
+                            if (lHitCount == 0)
+                                continue;
+
+                            long lStart = 0;
+                            long lPerCount = Math.Min(50, lHitCount);
+                            DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                            // 装入浏览格式
+                            for (; ; )
+                            {
+                                Application.DoEvents();	// 出让界面控制权
+
+                                if (stop != null)
+                                {
+                                    if (stop.State != 0)
+                                    {
+                                        strError = "用户中断";
+                                        goto ERROR1;
+                                    }
+                                }
+
+                                stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " (命中 " + lHitCount.ToString() + " 条记录) ...");
+
+                                lRet = channel.GetSearchResult(
+                                    stop,
+                                    null,   // strResultSetName
+                                    lStart,
+                                    lPerCount,
+                                    bFillBrowseLine == true ? "id,cols" : "id",
+                                    this.Lang,
+                                    out searchresults,
+                                    out strError);
+                                if (lRet == -1)
+                                    goto ERROR1;
+
+                                if (lRet == 0)
+                                {
+                                    strError = "未命中";
+                                    goto ERROR1;
+                                }
+
+                                // 处理浏览结果
+                                for (int i = 0; i < searchresults.Length; i++)
+                                {
+                                    NewLine(
+                                        this.listView_browse,
+                                        searchresults[i].Path + "@" + strServerName,
+                                        searchresults[i].Cols);
+
+                                    lLoaded++;
+                                    stop.SetProgressValue(lLoaded);
+                                }
+
+                                lStart += searchresults.Length;
+                                // lCount -= searchresults.Length;
+                                if (lStart >= lHitCount || lPerCount <= 0)
+                                    break;
+
                             }
 
-                            lStart += searchresults.Length;
-                            // lCount -= searchresults.Length;
-                            if (lStart >= lHitCount || lPerCount <= 0)
-                                break;
-
+                            ///
                         }
+                        finally
+                        {
+                            Program.MainForm.ReturnChannel(channel);
+                        }
+
                     } // end of items
 
                     if (nErrorCount == 0)
@@ -1554,27 +1612,20 @@ namespace dp2Catalog
                 if (nRet == -1)
                     goto ERROR1;
 
+                if (string.IsNullOrEmpty(strServerUrl))
+                {
+                    strError = "尚未选定要检索的服务器";
+                    goto ERROR1;
+                }
+
                 strFromStyle = dp2ResTree.GetDisplayFromStyle(strFromStyle, true, false);   // 注意，去掉 __ 开头的那些，应该还剩下至少一个 style。_ 开头的不要滤出
 
+#if OLD_CHANNEL
                 this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
 
                 // 修改窗口标题
                 this.Text = "dp2检索窗 " + this.textBox_simple_queryWord.Text;
-
-
-#if NO
-            ClearListViewPropertyCache();
-
-            if ((Control.ModifierKeys & Keys.Control) == Keys.Control)
-            {
-                // 按住Ctrl键的时候，不清除listview中的原有内容
-            }
-            else
-            {
-                // this.listView_browse.Items.Clear();
-                ClearListViewItems();
-            }
-#endif
 
                 bool bFillBrowseLine = true;
                 if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift)
@@ -1585,6 +1636,8 @@ namespace dp2Catalog
                 this.textBox_resultInfo.Clear();
 
                 this.EnableControlsInSearching(false);
+
+                LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
                 stop.OnStop += new StopEventHandler(this.DoStop);
                 stop.Initial("正在检索 ...");
@@ -1636,7 +1689,7 @@ namespace dp2Catalog
                     }
 
                     string strQueryXml = "";
-                    long lRet = Channel.SearchBiblio(stop,
+                    long lRet = channel.SearchBiblio(stop,
                         strDbName,
                         this.textBox_simple_queryWord.Text,
                         this.SearchMaxCount,    // 1000,
@@ -1683,7 +1736,7 @@ namespace dp2Catalog
 
                         stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " (命中 " + lHitCount.ToString() + " 条记录) ...");
 
-                        lRet = Channel.GetSearchResult(
+                        lRet = channel.GetSearchResult(
                             stop,
                             null,   // strResultSetName
                             lStart,
@@ -1728,6 +1781,8 @@ namespace dp2Catalog
                     stop.OnStop -= new StopEventHandler(this.DoStop);
                     stop.Initial("");
                     stop.HideProgress();
+
+                    Program.MainForm.ReturnChannel(channel);
 
                     this.EnableControlsInSearching(true);
 
@@ -1943,87 +1998,96 @@ namespace dp2Catalog
 
                             TargetItem item = (TargetItem)targets[i];
 
+#if OLD_CHANNEL
                             this.Channel = this.Channels.GetChannel(item.Url);
                             Debug.Assert(this.Channel != null, "Channels.GetChannel 异常");
-
-                            long lRet = this.Channel.Search(
-                stop,
-                item.Xml,
-                "default",
-                "", // strOutputStyle,
-                out strError);
-                            if (lRet == -1)
+#endif
+                            LibraryChannel channel = Program.MainForm.GetChannel(item.Url);
+                            try
                             {
-                                this.textBox_resultInfo.Text += "检索词 '" + strLine + "' 检索时发生错误：" + strError + "\r\n";
-                                continue;
-                            }
-
-                            lHitCount = lRet;
-                            lTotalCount += lHitCount;
-                            lPerLineHitCount += lHitCount;
-
-                            if (lHitCount == 0)
-                                continue;
-
-                            // stop.SetProgressRange(0, lTotalCount);
-
-                            long lStart = 0;
-                            long lPerCount = Math.Min(50, lHitCount);
-                            DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-                            // this.listView_browse.Focus();
-
-                            // 装入浏览格式
-                            for (; ; )
-                            {
-                                Application.DoEvents();	// 出让界面控制权
-
-                                if (stop != null)
+                                long lRet = channel.Search(
+                    stop,
+                    item.Xml,
+                    "default",
+                    "", // strOutputStyle,
+                    out strError);
+                                if (lRet == -1)
                                 {
-                                    if (stop.State != 0)
+                                    this.textBox_resultInfo.Text += "检索词 '" + strLine + "' 检索时发生错误：" + strError + "\r\n";
+                                    continue;
+                                }
+
+                                lHitCount = lRet;
+                                lTotalCount += lHitCount;
+                                lPerLineHitCount += lHitCount;
+
+                                if (lHitCount == 0)
+                                    continue;
+
+                                // stop.SetProgressRange(0, lTotalCount);
+
+                                long lStart = 0;
+                                long lPerCount = Math.Min(50, lHitCount);
+                                DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                                // this.listView_browse.Focus();
+
+                                // 装入浏览格式
+                                for (; ; )
+                                {
+                                    Application.DoEvents();	// 出让界面控制权
+
+                                    if (stop != null)
                                     {
-                                        strError = "用户中断";
+                                        if (stop.State != 0)
+                                        {
+                                            strError = "用户中断";
+                                            goto ERROR1;
+                                        }
+                                    }
+
+                                    stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " ('" + strLine + "' 命中 " + lHitCount.ToString() + " 条记录) ...");
+
+                                    lRet = channel.GetSearchResult(
+                                        stop,
+                                        "default",   // strResultSetName
+                                        lStart,
+                                        lPerCount,
+                                        bFillBrowseLine == true ? "id,cols" : "id",
+                                        this.Lang,
+                                        out searchresults,
+                                        out strError);
+                                    if (lRet == -1)
+                                        goto ERROR1;
+
+                                    if (lRet == 0)
+                                    {
+                                        strError = "未命中";
                                         goto ERROR1;
                                     }
+
+                                    // 处理浏览结果
+                                    for (int k = 0; k < searchresults.Length; k++)
+                                    {
+                                        ListViewItem new_item = NewLine(
+                                            this.listView_browse,
+                                            searchresults[k].Path + "@" + item.ServerName,
+                                            searchresults[k].Cols);
+                                        new_items.Add(new_item);
+                                    }
+
+                                    lStart += searchresults.Length;
+                                    lFillCount += searchresults.Length;
+                                    // stop.SetProgressValue(lFillCount);
+                                    // lCount -= searchresults.Length;
+                                    if (lStart >= lHitCount || lPerCount <= 0)
+                                        break;
+
                                 }
-
-                                stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " ('" + strLine + "' 命中 " + lHitCount.ToString() + " 条记录) ...");
-
-                                lRet = Channel.GetSearchResult(
-                                    stop,
-                                    "default",   // strResultSetName
-                                    lStart,
-                                    lPerCount,
-                                    bFillBrowseLine == true ? "id,cols" : "id",
-                                    this.Lang,
-                                    out searchresults,
-                                    out strError);
-                                if (lRet == -1)
-                                    goto ERROR1;
-
-                                if (lRet == 0)
-                                {
-                                    strError = "未命中";
-                                    goto ERROR1;
-                                }
-
-                                // 处理浏览结果
-                                for (int k = 0; k < searchresults.Length; k++)
-                                {
-                                    ListViewItem new_item = NewLine(
-                                        this.listView_browse,
-                                        searchresults[k].Path + "@" + item.ServerName,
-                                        searchresults[k].Cols);
-                                    new_items.Add(new_item);
-                                }
-
-                                lStart += searchresults.Length;
-                                lFillCount += searchresults.Length;
-                                // stop.SetProgressValue(lFillCount);
-                                // lCount -= searchresults.Length;
-                                if (lStart >= lHitCount || lPerCount <= 0)
-                                    break;
-
+                            }
+                            finally
+                            {
+                                Program.MainForm.ReturnChannel(channel);
                             }
                         }
 
@@ -2190,24 +2254,18 @@ namespace dp2Catalog
                 if (nRet == -1)
                     goto ERROR1;
 
+                if (string.IsNullOrEmpty(strServerUrl))
+                {
+                    strError = "尚未选定要检索的服务器";
+                    goto ERROR1;
+                }
+
+#if OLD_CHANNEL
                 this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
 
                 // 修改窗口标题
                 this.Text = "dp2检索窗 " + this.textBox_simple_queryWord.Text;
-
-#if NO
-            ClearListViewPropertyCache();
-
-            if ((Control.ModifierKeys & Keys.Control) == Keys.Control)
-            {
-                // 按住Ctrl键的时候，不清除listview中的原有内容
-            }
-            else
-            {
-                // this.listView_browse.Items.Clear();
-                ClearListViewItems();
-            }
-#endif
 
                 bool bFillBrowseLine = true;
                 if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift)
@@ -2218,6 +2276,8 @@ namespace dp2Catalog
                 this.textBox_resultInfo.Clear();
 
                 this.EnableControlsInSearching(false);
+
+                LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
                 stop.OnStop += new StopEventHandler(this.DoStop);
                 stop.Initial("正在检索 ...");
@@ -2288,7 +2348,7 @@ namespace dp2Catalog
                             continue;
 
                         string strQueryXml = "";
-                        long lRet = Channel.SearchBiblio(stop,
+                        long lRet = channel.SearchBiblio(stop,
                             strDbName,
                             strLine,
                             this.SearchMaxCount,    // 1000,
@@ -2341,7 +2401,7 @@ namespace dp2Catalog
 
                             stop.SetMessage("正在装入浏览信息 " + (lStart + 1).ToString() + " - " + (lStart + lPerCount).ToString() + " ('" + strLine + "' 命中 " + lHitCount.ToString() + " 条记录) ...");
 
-                            lRet = Channel.GetSearchResult(
+                            lRet = channel.GetSearchResult(
                                 stop,
                                 null,   // strResultSetName
                                 lStart,
@@ -2409,6 +2469,8 @@ namespace dp2Catalog
                     stop.Initial("");
                     stop.HideProgress();
 
+                    Program.MainForm.ReturnChannel(channel);
+
                     this.EnableControlsInSearching(true);
 
                     this.m_bInSearching = false;
@@ -2451,8 +2513,11 @@ namespace dp2Catalog
 
         void DoStop(object sender, StopEventArgs e)
         {
+#if NO
             if (this.Channel != null)
                 this.Channel.Abort();
+#endif
+            Program.MainForm.DoStop(sender, e);
         }
 
         // 在listview最后追加一行
@@ -2668,19 +2733,21 @@ namespace dp2Catalog
             }
             string strServerUrl = server.Url;
 
+#if OLD_CHANNEL
             this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在删除记录 ...");
             stop.BeginLoop();
 
-            this.Update();
-            this.MainForm.Update();
+            //this.Update();
+            //this.MainForm.Update();
 
             try
             {
                 stop.SetMessage("正在删除书目记录 " + strPurePath + " ...");
-
 
                 string[] formats = null;
                 formats = new string[1];
@@ -2691,7 +2758,7 @@ namespace dp2Catalog
 
                 string strOutputBibilioRecPath = "";
 
-                long lRet = Channel.SetBiblioInfo(
+                long lRet = channel.SetBiblioInfo(
                     stop,
                     "delete",
                     strPurePath,
@@ -2710,6 +2777,8 @@ namespace dp2Catalog
                 stop.EndLoop();
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
+
+                Program.MainForm.ReturnChannel(channel);
             }
             return 0;
         ERROR1:
@@ -3131,6 +3200,8 @@ namespace dp2Catalog
             string strServerUrl = server.Url;
 
             Stop temp_stop = this.stop;
+
+#if OLD_CHANNEL
             LibraryChannel channel = null;
 
             bool bUseNewChannel = false;
@@ -3147,6 +3218,8 @@ namespace dp2Catalog
                 this.Channel = this.Channels.GetChannel(strServerUrl);
                 channel = this.Channel;
             }
+#endif
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
             if (bUseLoop == true)
             {
@@ -3231,6 +3304,8 @@ namespace dp2Catalog
                     temp_stop.Initial("");
                 }
 
+                Program.MainForm.ReturnChannel(channel);
+#if OLD_CHANNEL
                 if (bUseNewChannel == true)
                 {
                     this.Channels.RemoveChannel(channel);
@@ -3239,6 +3314,7 @@ namespace dp2Catalog
                     temp_stop.Unregister();	// 和容器关联
                     temp_stop = null;
                 }
+#endif
             }
 
         SKIP0:
@@ -3576,7 +3652,7 @@ namespace dp2Catalog
                     if (strStyle == "fixed")
                     {
                         form.Fixed = true;
-                        form.SupressSizeSetting = true;
+                        form.SuppressSizeSetting = true;
                         this.MainForm.SetMdiToNormal();
                     }
                     else
@@ -3584,7 +3660,7 @@ namespace dp2Catalog
                         // 在已经有左侧窗口的情况下，普通窗口需要显示在右侧
                         if (exist_fixed != null)
                         {
-                            form.SupressSizeSetting = true;
+                            form.SuppressSizeSetting = true;
                             this.MainForm.SetMdiToNormal();
                         }
                     }
@@ -3772,8 +3848,10 @@ namespace dp2Catalog
             {
                 info = this.MainForm.ServerInfos.GetServerInfo(stop,
                     bUseNewChannel,
+#if OLD_CHANNEL
                     this.Channels,
-                    strServerName,
+#endif
+ strServerName,
                     strServerUrl,
                     this.MainForm.TestMode,
                     out strError);
@@ -3840,8 +3918,10 @@ namespace dp2Catalog
             {
                 info = this.MainForm.ServerInfos.GetServerInfo(stop,
                     this.m_bInSearching,
+#if OLD_CHANNEL
                     this.Channels,
-                    strServerName,
+#endif
+ strServerName,
                     strServerUrl,
                     this.MainForm.TestMode,
                     out strError);
@@ -3892,6 +3972,8 @@ namespace dp2Catalog
             }
             string strServerUrl = server.Url;
 
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在获得出版社信息 ...");
             stop.BeginLoop();
@@ -3917,11 +3999,12 @@ namespace dp2Catalog
                     return -1;
                 }
 
+#if NO
                 this.Channel = this.Channels.GetChannel(strServerUrl);
-
+#endif
                 string strAction = "";
 
-                long lRet = Channel.GetUtilInfo(
+                long lRet = channel.GetUtilInfo(
                     stop,
                     strAction,
                     strDbName,
@@ -3942,6 +4025,8 @@ namespace dp2Catalog
                 stop.EndLoop();
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
+
+                Program.MainForm.ReturnChannel(channel);
             }
 
 
@@ -3992,25 +4077,35 @@ namespace dp2Catalog
                     return -1;
                 }
 
+#if OLD_CHANNEL
                 this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
+                LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
-                string strAction = "";
+                try
+                {
+                    string strAction = "";
 
-                long lRet = Channel.SetUtilInfo(
-                    stop,
-                    strAction,
-                    strDbName,
-                    "ISBN",
-                    "r",
-                    "i",
-                    "v210",
-                    strPublisherNumber,
-                    str210,
-                    out strError);
-                if (lRet == -1)
-                    return -1;
+                    long lRet = channel.SetUtilInfo(
+                        stop,
+                        strAction,
+                        strDbName,
+                        "ISBN",
+                        "r",
+                        "i",
+                        "v210",
+                        strPublisherNumber,
+                        str210,
+                        out strError);
+                    if (lRet == -1)
+                        return -1;
 
-                return (int)lRet;
+                    return (int)lRet;
+                }
+                finally
+                {
+                    Program.MainForm.ReturnChannel(channel);
+                }
             }
             finally
             {
@@ -4065,26 +4160,34 @@ namespace dp2Catalog
                     return -1;
                 }
 
+#if OLD_CHANNEL
                 this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
+                LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+                try
+                {
 
+                    string strAction = "";
 
-                string strAction = "";
+                    long lRet = channel.GetUtilInfo(
+                        stop,
+                        strAction,
+                        strDbName,
+                        "ISBN",
+                        strPublisherNumber,
+                        "v102",
+                        out str102,
+                        out strError);
+                    if (lRet == -1)
+                        return -1;
 
-                long lRet = Channel.GetUtilInfo(
-                    stop,
-                    strAction,
-                    strDbName,
-                    "ISBN",
-                    strPublisherNumber,
-                    "v102",
-                    out str102,
-                    out strError);
-                if (lRet == -1)
-                    return -1;
-
-                if (lRet == 0)
-                    return 0;
-
+                    if (lRet == 0)
+                        return 0;
+                }
+                finally
+                {
+                    Program.MainForm.ReturnChannel(channel);
+                }
             }
             finally
             {
@@ -4140,25 +4243,35 @@ namespace dp2Catalog
                     return -1;
                 }
 
+#if OLD_CHANNEL
                 this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
+                LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
-                string strAction = "";
+                try
+                {
+                    string strAction = "";
 
-                long lRet = Channel.SetUtilInfo(
-                    stop,
-                    strAction,
-                    strDbName,
-                    "ISBN",
-                    "r",
-                    "i",
-                    "v102",
-                    strPublisherNumber,
-                    str102,
-                    out strError);
-                if (lRet == -1)
-                    return -1;
+                    long lRet = channel.SetUtilInfo(
+                        stop,
+                        strAction,
+                        strDbName,
+                        "ISBN",
+                        "r",
+                        "i",
+                        "v102",
+                        strPublisherNumber,
+                        str102,
+                        out strError);
+                    if (lRet == -1)
+                        return -1;
 
-                return (int)lRet;
+                    return (int)lRet;
+                }
+                finally
+                {
+                    Program.MainForm.ReturnChannel(channel);
+                }
             }
             finally
             {
@@ -4169,17 +4282,6 @@ namespace dp2Catalog
 
         }
 
-        /*
-        static string GetDbName(string strPurePath)
-        {
-            int nRet = 0;
-
-            nRet = strPurePath.IndexOf("/");
-            if (nRet != -1)
-                return strPurePath.Substring(0, nRet).Trim();
-
-            return strPurePath;
-        }*/
         // 从路径中取出库名部分
         // parammeters:
         //      strPath 路径。例如"中文图书/3"
@@ -4219,6 +4321,8 @@ namespace dp2Catalog
             return false;
         }
 
+        public string CurrentRights { get; set; }
+
         public int GetChannelRights(
             string strServerName,
             out string strRights,
@@ -4236,6 +4340,7 @@ namespace dp2Catalog
             }
             string strServerUrl = server.Url;
 
+#if OLD_CHANNEL
             this.Channel = this.Channels.GetChannel(strServerUrl);
             if (string.IsNullOrEmpty(this.Channel.Rights) == true)
             {
@@ -4252,8 +4357,35 @@ namespace dp2Catalog
             strRights = this.Channel.Rights;
 
             return 0;
+#endif
+            if (string.IsNullOrEmpty(this.CurrentRights) == true)
+            {
+                LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+
+                try
+                {
+                    string strValue = "";
+                    long lRet = channel.GetSystemParameter(stop,
+                        "biblio",
+                        "dbnames",
+                        out strValue,
+                        out strError);
+                    if (lRet == -1)
+                        return -1;
+                    this.CurrentRights = channel.Rights;
+                    strRights = this.CurrentRights;
+                }
+                finally
+                {
+                    Program.MainForm.ReturnChannel(channel);
+                }
+            }
+
+            return 0;
         }
 
+        // 2016/11/21
+        public string CurrentUserName { get; set; }
 
         public int ForceLogin(
     Stop stop,
@@ -4270,6 +4402,7 @@ namespace dp2Catalog
             }
             string strServerUrl = server.Url;
 
+#if OLD_CHANNEL
             this.Channel = this.Channels.GetChannel(strServerUrl);
             string strValue = "";
             long lRet = this.Channel.GetSystemParameter(stop,
@@ -4279,8 +4412,26 @@ namespace dp2Catalog
                 out strError);
             if (lRet == -1)
                 return -1;
+#endif
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+            try
+            {
+                string strValue = "";
+                long lRet = channel.GetSystemParameter(stop,
+                    "biblio",
+                    "dbnames",
+                    out strValue,
+                    out strError);
+                if (lRet == -1)
+                    return -1;
 
-            return 0;
+                this.CurrentUserName = channel.UserName;
+                return 0;
+            }
+            finally
+            {
+                Program.MainForm.ReturnChannel(channel);
+            }
         }
 
         // 获得一个数据库的数据syntax
@@ -4385,6 +4536,8 @@ namespace dp2Catalog
             string strServerUrl = server.Url;
 
             Stop temp_stop = this.stop;
+
+#if OLD_CHANNEL
             LibraryChannel channel = null;
 
             bool bUseNewChannel = false;
@@ -4400,6 +4553,8 @@ namespace dp2Catalog
                 this.Channel = this.Channels.GetChannel(strServerUrl);
                 channel = this.Channel;
             }
+#endif
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
             if (bUseLoop == true)
             {
@@ -4407,10 +4562,9 @@ namespace dp2Catalog
                 temp_stop.Initial("正在初始化浏览器组件 ...");
                 temp_stop.BeginLoop();
 
-                this.Update();
-                this.MainForm.Update();
+                //this.Update();
+                //this.MainForm.Update();
             }
-
 
             try
             {
@@ -4423,7 +4577,7 @@ namespace dp2Catalog
                 //      0   not found
                 //      1   found
                 nRet = GetDbSyntax(this.stop,
-                    bUseNewChannel,
+                    false,  // bUseNewChannel,
                     strServerName,
                     strServerUrl,
                     strDbName,
@@ -4529,6 +4683,8 @@ namespace dp2Catalog
                     temp_stop.OnStop -= new StopEventHandler(this.DoStop);
                 }
 
+                Program.MainForm.ReturnChannel(channel);
+#if OLD_CHANNEL
                 if (bUseNewChannel == true)
                 {
                     this.Channels.RemoveChannel(channel);
@@ -4537,6 +4693,7 @@ namespace dp2Catalog
                     temp_stop.Unregister();	// 和容器关联
                     temp_stop = null;
                 }
+#endif
             }
             return 0;
         ERROR1:
@@ -4578,14 +4735,17 @@ namespace dp2Catalog
             }
             string strServerUrl = server.Url;
 
+#if OLC_CHANNEL
             this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在初始化浏览器组件 ...");
             stop.BeginLoop();
 
-            this.Update();
-            this.MainForm.Update();
+            //this.Update();
+            //this.MainForm.Update();
 
             try
             {
@@ -4594,12 +4754,11 @@ namespace dp2Catalog
                 if (IsAppendRecPath(strPath) == true)
                     strAction = "new";
 
-
                 stop.SetMessage("正在保存书目记录 " + strPath + " ...");
 
                 string strOutputBiblioRecPath = "";
 
-                long lRet = Channel.SetBiblioInfo(
+                long lRet = channel.SetBiblioInfo(
                     stop,
                     strAction,
                     strPurePath,
@@ -4614,15 +4773,14 @@ namespace dp2Catalog
                     goto ERROR1;
 
                 strOutputPath = strOutputBiblioRecPath + "@" + strServerName;
-                // this.BiblioTimestamp = baTimestamp;
-
-
             }
             finally
             {
                 stop.EndLoop();
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
+
+                Program.MainForm.ReturnChannel(channel);
             }
             return 0;
         ERROR1:
@@ -4684,6 +4842,8 @@ namespace dp2Catalog
             string strServerUrl = server.Url;
 
             Stop temp_stop = this.stop;
+
+#if OLD_CHANNEL
             LibraryChannel channel = null;
 
             if (bNewChannel == false)
@@ -4697,7 +4857,9 @@ namespace dp2Catalog
                 temp_stop = new Stop();
                 temp_stop.Register(MainForm.stopManager, true);	// 和容器关联
             }
+#endif
 
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
             temp_stop.OnStop += new StopEventHandler(this.DoStop);
             temp_stop.Initial("正在下载配置文件 ...");
@@ -4738,6 +4900,8 @@ namespace dp2Catalog
                 temp_stop.OnStop -= new StopEventHandler(this.DoStop);
                 temp_stop.Initial("");
 
+                Program.MainForm.ReturnChannel(channel);
+#if OLD_CHANNEL
                 if (bNewChannel == true)
                 {
                     this.Channels.RemoveChannel(channel);
@@ -4746,6 +4910,7 @@ namespace dp2Catalog
                     temp_stop.Unregister();	// 和容器关联
                     temp_stop = null;
                 }
+#endif
             }
 
             return 1;
@@ -4782,9 +4947,10 @@ namespace dp2Catalog
             }
             string strServerUrl = server.Url;
 
+#if NO
             this.Channel = this.Channels.GetChannel(strServerUrl);
-
-
+#endif
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在保存配置文件 ...");
@@ -4792,14 +4958,12 @@ namespace dp2Catalog
 
             try
             {
-                // string strPath = strBiblioDbName + "/cfgs/" + strCfgFileName;
-
                 stop.SetMessage("正在保存配置文件 " + strPurePath + " ...");
 
                 byte[] output_timestamp = null;
                 string strOutputPath = "";
 
-                long lRet = Channel.WriteRes(
+                long lRet = channel.WriteRes(
                     stop,
                     strPurePath,
                     strContent,
@@ -4818,6 +4982,8 @@ namespace dp2Catalog
                 stop.EndLoop();
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
+
+                Program.MainForm.ReturnChannel(channel);
             }
 
             return 1;
@@ -5388,6 +5554,7 @@ MessageBoxDefaultButton.Button2);
                     {
                         MarcRecord temp = new MarcRecord(strRecord);
                         temp.select("field[@name='998']").detach();
+                        temp.select("field[@name='997']").detach();
                         strRecord = temp.Text;
                     }
 
@@ -5855,7 +6022,6 @@ MessageBoxDefaultButton.Button2);
             strError = "";
             host = null;
 
-
             string strContent = "";
             Encoding encoding;
             // 能自动识别文件内容的编码方式的读入文本文件内容模块
@@ -6050,7 +6216,11 @@ MessageBoxDefaultButton.Button2);
                     items.Add(item);
                 }
 
-                ListViewBiblioLoader loader = new ListViewBiblioLoader(this.Channels,
+                ListViewBiblioLoader loader = new ListViewBiblioLoader(
+#if OLD_CHANNEL
+                    this.Channels,
+#endif
+Program.MainForm,
                     this.dp2ResTree1.Servers,
                     stop,
                     items,
@@ -6403,29 +6573,79 @@ MessageBoxDefaultButton.Button2);
                     }
                     string strServerUrl = server.Url;
 
+#if OLD_CHANNEL
                     this.Channel = this.Channels.GetChannel(strServerUrl);
-
-                    string strOutputPath = "";
-
-                    byte[] baNewTimestamp = null;
-
-                    long lRet = Channel.SetBiblioInfo(
-                        stop,
-                        "change",
-                        strPurePath,
-                        "xml",
-                        info.NewXml,
-                        info.Timestamp,
-                        "",
-                        out strOutputPath,
-                        out baNewTimestamp,
-                        out strError);
-                    if (lRet == -1)
+#endif
+                    LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+                    try
                     {
-                        if (Channel.ErrorCode == ErrorCode.TimestampMismatch)
+                        string strOutputPath = "";
+
+                        byte[] baNewTimestamp = null;
+
+                        long lRet = channel.SetBiblioInfo(
+                            stop,
+                            "change",
+                            strPurePath,
+                            "xml",
+                            info.NewXml,
+                            info.Timestamp,
+                            "",
+                            out strOutputPath,
+                            out baNewTimestamp,
+                            out strError);
+                        if (lRet == -1)
+                        {
+                            if (channel.ErrorCode == ErrorCode.TimestampMismatch)
+                            {
+                                DialogResult result = MessageBox.Show(this,
+        "保存书目记录 " + strRecPath + " 时遭遇时间戳不匹配: " + strError + "。\r\n\r\n此记录已无法被保存。\r\n\r\n请问现在是否要顺便重新装载此记录? \r\n\r\n(Yes 重新装载；\r\nNo 不重新装载、但继续处理后面的记录保存; \r\nCancel 中断整批保存操作)",
+        "BiblioSearchForm",
+        MessageBoxButtons.YesNoCancel,
+        MessageBoxIcon.Question,
+        MessageBoxDefaultButton.Button1);
+                                if (result == System.Windows.Forms.DialogResult.Cancel)
+                                    break;
+                                if (result == System.Windows.Forms.DialogResult.No)
+                                    goto CONTINUE;
+
+                                // 重新装载书目记录到 OldXml
+                                string[] results = null;
+                                // byte[] baTimestamp = null;
+                                lRet = channel.GetBiblioInfos(
+                                    stop,
+                                    strPurePath,
+                                    "",
+                                    new string[] { "xml" },   // formats
+                                    out results,
+                                    out baNewTimestamp,
+                                    out strError);
+                                if (lRet == 0)
+                                {
+                                    // TODO: 警告后，把 item 行移除？
+                                    return -1;
+                                }
+                                if (lRet == -1)
+                                    return -1;
+                                if (results == null || results.Length == 0)
+                                {
+                                    strError = "results error";
+                                    return -1;
+                                }
+                                info.OldXml = results[0];
+                                info.Timestamp = baNewTimestamp;
+                                nReloadCount++;
+                                goto CONTINUE;
+                            }
+
+                            return -1;
+                        }
+
+                        // 检查是否有部分字段被拒绝
+                        if (channel.ErrorCode == ErrorCode.PartialDenied)
                         {
                             DialogResult result = MessageBox.Show(this,
-    "保存书目记录 " + strRecPath + " 时遭遇时间戳不匹配: " + strError + "。\r\n\r\n此记录已无法被保存。\r\n\r\n请问现在是否要顺便重新装载此记录? \r\n\r\n(Yes 重新装载；\r\nNo 不重新装载、但继续处理后面的记录保存; \r\nCancel 中断整批保存操作)",
+    "保存书目记录 " + strRecPath + " 时部分字段被拒绝。\r\n\r\n此记录已部分保存成功。\r\n\r\n请问现在是否要顺便重新装载此记录以便观察? \r\n\r\n(Yes 重新装载(到旧记录部分)；\r\nNo 不重新装载、但继续处理后面的记录保存; \r\nCancel 中断整批保存操作)",
     "BiblioSearchForm",
     MessageBoxButtons.YesNoCancel,
     MessageBoxIcon.Question,
@@ -6434,11 +6654,10 @@ MessageBoxDefaultButton.Button2);
                                 break;
                             if (result == System.Windows.Forms.DialogResult.No)
                                 goto CONTINUE;
-
                             // 重新装载书目记录到 OldXml
                             string[] results = null;
                             // byte[] baTimestamp = null;
-                            lRet = Channel.GetBiblioInfos(
+                            lRet = channel.GetBiblioInfos(
                                 stop,
                                 strPurePath,
                                 "",
@@ -6464,62 +6683,24 @@ MessageBoxDefaultButton.Button2);
                             goto CONTINUE;
                         }
 
-                        return -1;
-                    }
-
-                    // 检查是否有部分字段被拒绝
-                    if (Channel.ErrorCode == ErrorCode.PartialDenied)
-                    {
-                        DialogResult result = MessageBox.Show(this,
-"保存书目记录 " + strRecPath + " 时部分字段被拒绝。\r\n\r\n此记录已部分保存成功。\r\n\r\n请问现在是否要顺便重新装载此记录以便观察? \r\n\r\n(Yes 重新装载(到旧记录部分)；\r\nNo 不重新装载、但继续处理后面的记录保存; \r\nCancel 中断整批保存操作)",
-"BiblioSearchForm",
-MessageBoxButtons.YesNoCancel,
-MessageBoxIcon.Question,
-MessageBoxDefaultButton.Button1);
-                        if (result == System.Windows.Forms.DialogResult.Cancel)
-                            break;
-                        if (result == System.Windows.Forms.DialogResult.No)
-                            goto CONTINUE;
-                        // 重新装载书目记录到 OldXml
-                        string[] results = null;
-                        // byte[] baTimestamp = null;
-                        lRet = Channel.GetBiblioInfos(
-                            stop,
-                            strPurePath,
-                            "",
-                            new string[] { "xml" },   // formats
-                            out results,
-                            out baNewTimestamp,
-                            out strError);
-                        if (lRet == 0)
-                        {
-                            // TODO: 警告后，把 item 行移除？
-                            return -1;
-                        }
-                        if (lRet == -1)
-                            return -1;
-                        if (results == null || results.Length == 0)
-                        {
-                            strError = "results error";
-                            return -1;
-                        }
-                        info.OldXml = results[0];
                         info.Timestamp = baNewTimestamp;
-                        nReloadCount++;
-                        goto CONTINUE;
+                        info.OldXml = info.NewXml;
+                        info.NewXml = "";
+
+                        item.BackColor = SystemColors.Window;
+                        item.ForeColor = SystemColors.WindowText;
+
+                        nSavedCount++;
+
+                        this.m_nChangedCount--;
+                        Debug.Assert(this.m_nChangedCount >= 0, "");
+
+                        ///
                     }
-
-                    info.Timestamp = baNewTimestamp;
-                    info.OldXml = info.NewXml;
-                    info.NewXml = "";
-
-                    item.BackColor = SystemColors.Window;
-                    item.ForeColor = SystemColors.WindowText;
-
-                    nSavedCount++;
-
-                    this.m_nChangedCount--;
-                    Debug.Assert(this.m_nChangedCount >= 0, "");
+                    finally
+                    {
+                        Program.MainForm.ReturnChannel(channel);
+                    }
 
                 CONTINUE:
                     stop.SetProgressValue(i);
@@ -6666,53 +6847,62 @@ MessageBoxDefaultButton.Button2);
                     }
                     string strServerUrl = server.Url;
 
+#if NO
                     this.Channel = this.Channels.GetChannel(strServerUrl);
-
-                    string[] results = null;
-                    byte[] baTimestamp = null;
-                    string strOutputPath = "";
-
-                    stop.SetMessage("正在删除书目记录 " + strPurePath);
-
-                    long lRet = Channel.GetBiblioInfos(
-                        stop,
-                        strPurePath,
-                        "",
-                        null,   // formats
-                        out results,
-                        out baTimestamp,
-                        out strError);
-                    if (lRet == -1)
+#endif
+                    LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+                    try
                     {
-                        result = MessageBox.Show(this,
-    "在获得记录 '" + strRecPath + "' 的时间戳的过程中出现错误: " + strError + "。\r\n\r\n是否继续强行删除此记录? (Yes 强行删除；No 不删除；Cancel 放弃当前未完成的全部删除操作)",
-    "dp2SearchForm",
-    MessageBoxButtons.YesNoCancel,
-    MessageBoxIcon.Question,
-    MessageBoxDefaultButton.Button1);
-                        if (result == System.Windows.Forms.DialogResult.Cancel)
+                        string[] results = null;
+                        byte[] baTimestamp = null;
+                        string strOutputPath = "";
+
+                        stop.SetMessage("正在删除书目记录 " + strPurePath);
+
+                        long lRet = channel.GetBiblioInfos(
+                            stop,
+                            strPurePath,
+                            "",
+                            null,   // formats
+                            out results,
+                            out baTimestamp,
+                            out strError);
+                        if (lRet == -1)
+                        {
+                            result = MessageBox.Show(this,
+        "在获得记录 '" + strRecPath + "' 的时间戳的过程中出现错误: " + strError + "。\r\n\r\n是否继续强行删除此记录? (Yes 强行删除；No 不删除；Cancel 放弃当前未完成的全部删除操作)",
+        "dp2SearchForm",
+        MessageBoxButtons.YesNoCancel,
+        MessageBoxIcon.Question,
+        MessageBoxDefaultButton.Button1);
+                            if (result == System.Windows.Forms.DialogResult.Cancel)
+                                goto ERROR1;
+                            if (result == System.Windows.Forms.DialogResult.No)
+                                continue;
+                        }
+                        if (lRet == -1 || lRet == 0)
                             goto ERROR1;
-                        if (result == System.Windows.Forms.DialogResult.No)
-                            continue;
+
+                        byte[] baNewTimestamp = null;
+
+                        lRet = channel.SetBiblioInfo(
+                            stop,
+                            "delete",
+                            strPurePath,
+                            "xml",
+                            "", // strXml,
+                            baTimestamp,
+                            "",
+                            out strOutputPath,
+                            out baNewTimestamp,
+                            out strError);
+                        if (lRet == -1)
+                            goto ERROR1;
                     }
-                    if (lRet == -1 || lRet == 0)
-                        goto ERROR1;
-
-                    byte[] baNewTimestamp = null;
-
-                    lRet = Channel.SetBiblioInfo(
-                        stop,
-                        "delete",
-                        strPurePath,
-                        "xml",
-                        "", // strXml,
-                        baTimestamp,
-                        "",
-                        out strOutputPath,
-                        out baNewTimestamp,
-                        out strError);
-                    if (lRet == -1)
-                        goto ERROR1;
+                    finally
+                    {
+                        Program.MainForm.ReturnChannel(channel);
+                    }
 
                     stop.SetProgressValue(i);
 
@@ -7315,33 +7505,43 @@ out string strError)
             }
             string strServerUrl = server.Url;
 
+#if OLD_CHANNEL
             this.Channel = this.Channels.GetChannel(strServerUrl);
+#endif
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
 
-
-            string[] paths = new string[1];
-            paths[0] = strPurePath;
-            DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-            long lRet = this.Channel.GetBrowseRecords(
-                this.stop,
-                paths,
-                "id,cols",
-                out searchresults,
-                out strError);
-            if (lRet == -1)
-                return -1;
-
-            if (searchresults == null || searchresults.Length == 0)
+            try
             {
-                strError = "searchresults == null || searchresults.Length == 0";
-                return -1;
+                string[] paths = new string[1];
+                paths[0] = strPurePath;
+                DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                long lRet = channel.GetBrowseRecords(
+                    this.stop,
+                    paths,
+                    "id,cols",
+                    out searchresults,
+                    out strError);
+                if (lRet == -1)
+                    return -1;
+
+                if (searchresults == null || searchresults.Length == 0)
+                {
+                    strError = "searchresults == null || searchresults.Length == 0";
+                    return -1;
+                }
+
+                for (int i = 0; i < searchresults[0].Cols.Length; i++)
+                {
+                    ListViewUtil.ChangeItemText(item,
+                        i + 1,
+                        searchresults[0].Cols[i]);
+                }
+
             }
-
-            for (int i = 0; i < searchresults[0].Cols.Length; i++)
+            finally
             {
-                ListViewUtil.ChangeItemText(item,
-                    i + 1,
-                    searchresults[0].Cols[i]);
+                Program.MainForm.ReturnChannel(channel);
             }
 
             return 0;
@@ -7376,7 +7576,9 @@ out string strError)
 
         void dlg_GetDp2SearchParam(object sender, GetDp2SearchParamEventArgs e)
         {
+#if OLD_CHANNEL
             e.dp2Channels = this.Channels;
+#endif
             e.MainForm = this.MainForm;
         }
 
@@ -7974,7 +8176,11 @@ out string strError)
                     stop.SetProgressRange(0, items.Count);
 
                 BrowseLoader loader = new BrowseLoader();
+#if OLD_CHANNEL
                 loader.Channels = this.Channels;
+#endif
+                loader.ChannelManager = Program.MainForm;
+
                 loader.Servers = this.dp2ResTree1.Servers;
                 loader.Stop = stop;
                 loader.RecPaths = recpaths;
@@ -8660,43 +8866,52 @@ out string strError)
                 }
                 string strServerUrl = server.Url;
 
+#if OLD_CHANNEL
                 this.Channel = this.Channels.GetChannel(strServerUrl);
-
-                string[] results = null;
-                byte[] baTimestamp = null;
-                // 获得书目记录
-                long lRet = Channel.GetBiblioInfos(
-                    stop,
-                    strPurePath,
-                    "",
-                    new string[] { "xml" },   // formats
-                    out results,
-                    out baTimestamp,
-                    out strError);
-                if (lRet == 0)
-                    return -1;  // 是否设定为特殊状态?
-                if (lRet == -1)
-                    return -1;
-
-                if (results == null || results.Length == 0)
+#endif
+                LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl);
+                try
                 {
-                    strError = "results error";
-                    return -1;
-                }
+                    string[] results = null;
+                    byte[] baTimestamp = null;
+                    // 获得书目记录
+                    long lRet = channel.GetBiblioInfos(
+                        stop,
+                        strPurePath,
+                        "",
+                        new string[] { "xml" },   // formats
+                        out results,
+                        out baTimestamp,
+                        out strError);
+                    if (lRet == 0)
+                        return -1;  // 是否设定为特殊状态?
+                    if (lRet == -1)
+                        return -1;
 
-                string strXml = results[0];
+                    if (results == null || results.Length == 0)
+                    {
+                        strError = "results error";
+                        return -1;
+                    }
 
-                // 滞后创建新对象，避免在 hashtable 中存在一个尚未初始化的对象，而被其他线程抢先使用了
-                if (info == null)
-                {
-                    info = new BiblioInfo();
+                    string strXml = results[0];
+
+                    // 滞后创建新对象，避免在 hashtable 中存在一个尚未初始化的对象，而被其他线程抢先使用了
+                    if (info == null)
+                    {
+                        info = new BiblioInfo();
+                        info.RecPath = strRecPath;
+                        this.m_biblioTable[strRecPath] = info;
+                    }
+
+                    info.OldXml = strXml;
+                    info.Timestamp = baTimestamp;
                     info.RecPath = strRecPath;
-                    this.m_biblioTable[strRecPath] = info;
                 }
-
-                info.OldXml = strXml;
-                info.Timestamp = baTimestamp;
-                info.RecPath = strRecPath;
+                finally
+                {
+                    Program.MainForm.ReturnChannel(channel);
+                }
             }
 
             return 1;
@@ -8807,7 +9022,7 @@ out string strError)
                 bNew = true;
             }
 
-            m_commentViewer.MainForm = this.MainForm;  // 必须是第一句
+            // m_commentViewer.MainForm = this.MainForm;  // 必须是第一句
 
             if (bNew == true)
             {
@@ -9065,14 +9280,21 @@ out string strError)
 
         BiblioLoader m_loader = null;
 
-        public ListViewBiblioLoader(LibraryChannelCollection channels,
+        public ListViewBiblioLoader(
+#if OLD_CHANNEL
+            LibraryChannelCollection channels,
+#endif
+IChannelManager channelManager,
             dp2ServerCollection servers,
             Stop stop,
             List<ListViewItem> items,
             Hashtable cacheTable)
         {
             m_loader = new BiblioLoader();
+#if OLD_CHANNEL
             m_loader.Channels = channels;
+#endif
+            m_loader.ChannelManager = channelManager;
             m_loader.Servers = servers;
             m_loader.Stop = stop;
             m_loader.Format = "xml";

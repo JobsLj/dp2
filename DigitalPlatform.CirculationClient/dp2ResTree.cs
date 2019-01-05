@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
-using System.Data;
 using System.Text;
 using System.Windows.Forms;
 using System.Diagnostics;
@@ -12,7 +10,6 @@ using System.Xml;
 using DigitalPlatform.Text;
 using DigitalPlatform.Xml;
 
-// using DigitalPlatform.LibraryClient.localhost;
 using DigitalPlatform.GUI;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.LibraryClient.localhost;
@@ -24,6 +21,8 @@ namespace DigitalPlatform.CirculationClient
     /// </summary>
     public partial class dp2ResTree : System.Windows.Forms.TreeView
     {
+        public event GuiAppendMenuEventHandle OnSetMenu;
+
         public CfgCache cfgCache = null;
 
         public bool SortTableChanged = false;
@@ -34,16 +33,21 @@ namespace DigitalPlatform.CirculationClient
         public string Lang = "zh";
 
         public dp2ServerCollection Servers = null;	// 引用
+#if OLD_CHANNEL
         public LibraryChannelCollection Channels = null;    // 引用
+#endif
+        public IChannelManager ChannelManager = null;   // 引用
 
         public bool TestMode = false;   // 是否为评估模式
 
         public DigitalPlatform.StopManager stopManager = null;
 
+#if OLD_CHANNEL
         /// <summary>
         /// 通讯通道。引用外面的对象
         /// </summary>
         LibraryChannel channel = null;
+#endif
 
         public int[] EnabledIndices = null;	// null表示全部发黑。如果对象存在，但是元素个数为0，表示全部发灰
 
@@ -63,6 +67,7 @@ namespace DigitalPlatform.CirculationClient
             InitializeComponent();
         }
 
+#if OLD_CHANNEL
         // 2011/11/23
         // 当前用户名
         // 最后一次使用过Channel的当前用户名
@@ -75,6 +80,7 @@ namespace DigitalPlatform.CirculationClient
                 return this.channel.UserName;
             }
         }
+#endif
 
         // 刷新风格
         [Flags]
@@ -151,8 +157,7 @@ namespace DigitalPlatform.CirculationClient
                 {
                     try
                     {
-                        MessageBox.Show(this,
-                            strError);
+                        MessageBox.Show(this, strError);
                     }
                     catch
                     {
@@ -362,7 +367,7 @@ namespace DigitalPlatform.CirculationClient
             if (sort_table == null)
                 return "";
 
-            StringBuilder strResult = new StringBuilder(4096);
+            StringBuilder strResult = new StringBuilder();
             foreach (string key in sort_table.Keys)
             {
                 List<string> values = (List<string>)sort_table[key];
@@ -384,7 +389,7 @@ namespace DigitalPlatform.CirculationClient
             if (String.IsNullOrEmpty(strText) == true)
                 return table;
 
-            string[] parts = strText.Split(new char[] {';'});
+            string[] parts = strText.Split(new char[] { ';' });
             foreach (string part in parts)
             {
                 string strName = "";
@@ -406,20 +411,36 @@ namespace DigitalPlatform.CirculationClient
 
         void DoStop(object sender, StopEventArgs e)
         {
+#if OLD_CHANNEL
             if (this.channel != null)
                 this.channel.Abort();
+#endif
+            if (this.ChannelManager != null)
+                this.ChannelManager.DoStop(sender, e);
+        }
+
+        public void ExpandPath(ResPath respath)
+        {
+            string strError = "";
+            if (ExpandPath(respath, out strError) == -1)
+                MessageBox.Show(this, strError);
         }
 
         // 根据路径逐步展开
         // 注意：respath的Url中是服务器的URL，而TreeView的第一级为服务器名，不一样
-        public void ExpandPath(ResPath respath)
+        // return:
+        //      -1  出错
+        //      0   没有出错
+        public int ExpandPath(ResPath respath, out string strError)
         {
+            strError = "";
+
+            List<string> errors = new List<string>(); 
 
             string[] aName = respath.Path.Split(new Char[] { '/' });
 
             TreeNode node = null;
             TreeNode nodeThis = null;
-
 
             string[] temp = new string[aName.Length + 1];
             Array.Copy(aName, 0, temp, 1, aName.Length);
@@ -477,7 +498,20 @@ namespace DigitalPlatform.CirculationClient
                 // 需要展开
                 if (IsLoading(node) == true)
                 {
-                    Fill(node);
+#if NO
+                    if (Fill(node) == -1)
+                    {
+                        bError = true;
+                        break;  // 2017/1/9
+                    }
+#endif
+                    int nRet = Fill(node, out strError);
+                    if (nRet == -1)
+                    {
+                        errors.Add(strError);
+                        break;  // 2017/1/9
+                    }
+
                 }
                 node.Expand();  // 即便最终层次没有找到，也要展开中间层次
             }
@@ -486,6 +520,12 @@ namespace DigitalPlatform.CirculationClient
                 nodeThis.Parent.Expand();
 
             this.SelectedNode = nodeThis;
+            if (errors.Count > 0)
+            {
+                strError = StringUtil.MakePathList(errors, "\r\n");
+                return -1;
+            }
+            return 0;
         }
 
 
@@ -634,9 +674,9 @@ namespace DigitalPlatform.CirculationClient
                 ResPath respath = OldPath.Clone();
 
                 // 刷新
-
                 respath.Path = "";
                 ExpandPath(respath);	// 选中服务器，以下节点清除
+
                 SetLoading(this.SelectedNode);
 
                 ExpandPath(OldPath);
@@ -687,16 +727,23 @@ namespace DigitalPlatform.CirculationClient
             int nRet = 0;
             properties = new List<NormalDbProperty>();
 
+#if OLD_CHANNEL
             if (this.Channels == null)
             {
                 strError = "this.Channels == null";
                 return -1;
             }
-
-            this.channel = this.Channels.GetChannel(strServerUrl);
-            if (this.channel == null)
+#endif
+            if (this.ChannelManager == null)
             {
-                strError = "GetChannel() error. strServerUrl '"+strServerUrl+"'";
+                strError = "this.ChannelManager == null";
+                return -1;
+            }
+
+            LibraryChannel channel = this.ChannelManager.GetChannel(strServerUrl);
+            if (channel == null)
+            {
+                strError = "GetChannel() error. strServerUrl '" + strServerUrl + "'";
                 return -1;
             }
 
@@ -707,7 +754,7 @@ namespace DigitalPlatform.CirculationClient
                 stop.Register(this.stopManager, true);	// 和容器关联
 
                 stop.OnStop += new StopEventHandler(this.DoStop);
-                stop.Initial("正在获得服务器 "+strServerUrl+" 的库名列表 ...");
+                stop.Initial("正在获得服务器 " + strServerUrl + " 的库名列表 ...");
                 stop.BeginLoop();
 
                 this.m_current_stop = stop;
@@ -746,7 +793,7 @@ namespace DigitalPlatform.CirculationClient
                 //      0   dp2Library的版本号过低。警告信息在strError中
                 //      1   dp2Library版本号符合要求
                 nRet = LibraryChannel.GetServerVersion(
-                    this.channel,
+                    channel,
                     stop,
                     out version,
                     out strError);
@@ -769,14 +816,14 @@ namespace DigitalPlatform.CirculationClient
                 }
 
                 string strValue = "";
-                long lRet = this.channel.GetSystemParameter(stop,
+                long lRet = channel.GetSystemParameter(stop,
                     "system",
                     "biblioDbGroup",
                     out strValue,
                     out strError);
                 if (lRet == -1)
                 {
-                    strError = "针对服务器 " + this.channel.Url + " 获得编目库配置信息的过程发生错误：" + strError;
+                    strError = "针对服务器 " + channel.Url + " 获得编目库配置信息的过程发生错误：" + strError;
                     return -1;
                 }
 
@@ -827,7 +874,7 @@ namespace DigitalPlatform.CirculationClient
                     //      -1  出错，不希望继续以后的操作
                     //      0   成功
                     nRet = GetBrowseColumns(
-                        this.channel,
+                        channel,
                         stop,
                         ref properties,
                         out strError);
@@ -847,6 +894,8 @@ namespace DigitalPlatform.CirculationClient
 
                     stop.Unregister();	// 和容器脱离关联
                 }
+
+                this.ChannelManager.ReturnChannel(channel);
             }
 
             // this.channel = null;
@@ -916,7 +965,7 @@ namespace DigitalPlatform.CirculationClient
                     string strColumnType = DomUtil.GetAttr(node, "type");
                     // 2013/10/23
                     string strColumnTitle = GetColumnTitle(node,
-                        this.Lang); 
+                        this.Lang);
                     // normal.ColumnNames.Add(strColumnTitle);
                     normal.ColumnNames.Add(strColumnTitle, strColumnType);
                 }
@@ -977,20 +1026,20 @@ namespace DigitalPlatform.CirculationClient
             TreeNode server_node = FindServer(strServerName);
             if (server_node == null)
             {
-                throw new Exception("没有找到名为 '"+strServerName+"' 的服务器节点");
+                throw new Exception("没有找到名为 '" + strServerName + "' 的服务器节点");
             }
 
             // 需要展开
             if (IsLoading(server_node) == true)
             {
                 string strError = "";
-                int nRet = Fill(server_node,out strError);
+                int nRet = Fill(server_node, out strError);
                 if (nRet == -1)
                 {
                     throw new Exception(strError);
                 }
-            } 
-            
+            }
+
             List<string> results = new List<string>();
 
             Debug.Assert(server_node != null, "");
@@ -1174,25 +1223,25 @@ namespace DigitalPlatform.CirculationClient
                 long lRet = 0;
 
                 if (this.cfgCache != null)
-                lRet = Channel.GetRes(stop,
-                    this.cfgCache,
-                    strPath,
-                    strStyle,
-                    null,
-                    out strContent,
-                    out strMetaData,
-                    out baOutputTimestamp,
-                    out strOutputPath,
-                    out strError);
+                    lRet = Channel.GetRes(stop,
+                        this.cfgCache,
+                        strPath,
+                        strStyle,
+                        null,
+                        out strContent,
+                        out strMetaData,
+                        out baOutputTimestamp,
+                        out strOutputPath,
+                        out strError);
                 else
-                lRet = Channel.GetRes(stop,
-    strPath,
-    strStyle,
-    out strContent,
-    out strMetaData,
-    out baOutputTimestamp,
-    out strOutputPath,
-    out strError);
+                    lRet = Channel.GetRes(stop,
+        strPath,
+        strStyle,
+        out strContent,
+        out strMetaData,
+        out baOutputTimestamp,
+        out strOutputPath,
+        out strError);
                 if (lRet == -1)
                     goto ERROR1;
 
@@ -1230,8 +1279,8 @@ namespace DigitalPlatform.CirculationClient
 
             // Debug.Assert(false, "");
 
-            this.channel = this.Channels.GetChannel(strServerUrl);
-            Debug.Assert(this.channel != null, "");
+            LibraryChannel channel = this.ChannelManager.GetChannel(strServerUrl);
+            Debug.Assert(channel != null, "");
 
             DigitalPlatform.Stop stop = null;
             if (this.stopManager != null)
@@ -1240,7 +1289,7 @@ namespace DigitalPlatform.CirculationClient
                 stop.Register(this.stopManager, true);	// 和容器关联
 
                 stop.OnStop += new StopEventHandler(this.DoStop);
-                stop.Initial("正在获得库 "+strDbName+" 的检索途径列表 ...");
+                stop.Initial("正在获得库 " + strDbName + " 的检索途径列表 ...");
                 stop.BeginLoop();
                 this.m_current_stop = stop;
             }
@@ -1249,14 +1298,14 @@ namespace DigitalPlatform.CirculationClient
             {
                 BiblioDbFromInfo[] infos = null;
 
-                long lRet = this.channel.ListDbFroms(stop,
+                long lRet = channel.ListDbFroms(stop,
                     "biblio",
                     this.Lang,
                     out infos,
                     out strError);
                 if (lRet == -1)
                 {
-                    strError = "针对服务器 " + this.channel.Url + " 列出书目库检索途径过程发生错误：" + strError;
+                    strError = "针对服务器 " + channel.Url + " 列出书目库检索途径过程发生错误：" + strError;
                     return -1;
                 }
 
@@ -1277,9 +1326,9 @@ namespace DigitalPlatform.CirculationClient
 
                     stop.Unregister();	// 和容器脱离关联
                 }
-            }
 
-            // this.channel = null;
+                this.ChannelManager.ReturnChannel(channel);
+            }
 
             return 0;
         }
@@ -1413,57 +1462,64 @@ namespace DigitalPlatform.CirculationClient
             if (e.Button != MouseButtons.Right)
                 return;
 
-            ContextMenu contextMenu = new ContextMenu();
-            MenuItem menuItem = null;
+            // ContextMenu contextMenu = new ContextMenu();
+            // MenuItem menuItem = null;
+            ContextMenuStrip contextMenu = new ContextMenuStrip();
+            ToolStripMenuItem menuItem = null;
 
             TreeNode node = this.SelectedNode;
 
             //
-            menuItem = new MenuItem("上移(&U)");
+            menuItem = new ToolStripMenuItem("上移(&U)");
             menuItem.Click += new System.EventHandler(this.button_moveUp_Click);
             if (node == null || IsFirstChild(node) == true)
                 menuItem.Enabled = false;
-            contextMenu.MenuItems.Add(menuItem);
+            contextMenu.Items.Add(menuItem);
 
             //
-            menuItem = new MenuItem("下移(&D)");
+            menuItem = new ToolStripMenuItem("下移(&D)");
             menuItem.Click += new System.EventHandler(this.button_moveDown_Click);
             if (node == null || IsLastChild(node) == true)
                 menuItem.Enabled = false;
-            contextMenu.MenuItems.Add(menuItem);
+            contextMenu.Items.Add(menuItem);
 
             // ---
-            menuItem = new MenuItem("-");
-            contextMenu.MenuItems.Add(menuItem);
-
+            contextMenu.Items.Add(new ToolStripSeparator());
 
             // 
-            menuItem = new MenuItem("允许复选(&M)");
+            menuItem = new ToolStripMenuItem("允许复选(&M)");
             menuItem.Click += new System.EventHandler(this.menu_toggleCheckBoxes);
             if (this.CheckBoxes == true)
                 menuItem.Checked = true;
             else
                 menuItem.Checked = false;
-            contextMenu.MenuItems.Add(menuItem);
+            contextMenu.Items.Add(menuItem);
 
-            menuItem = new MenuItem("清除全部复选(&C)");
+            menuItem = new ToolStripMenuItem("清除全部复选(&C)");
             menuItem.Click += new System.EventHandler(this.menu_clearCheckBoxes);
             if (this.CheckBoxes == true)
                 menuItem.Enabled = true;
             else
                 menuItem.Enabled = false;
-            contextMenu.MenuItems.Add(menuItem);
+            contextMenu.Items.Add(menuItem);
 
             // ---
-            menuItem = new MenuItem("-");
-            contextMenu.MenuItems.Add(menuItem);
+            contextMenu.Items.Add(new ToolStripSeparator());
 
-            menuItem = new MenuItem("刷新(&R)");
+            menuItem = new ToolStripMenuItem("刷新(&R)");
             menuItem.Click += new System.EventHandler(this.menu_refresh);
-            contextMenu.MenuItems.Add(menuItem);
+            contextMenu.Items.Add(menuItem);
 
+            if (OnSetMenu != null)
+            {
+                GuiAppendMenuEventArgs newargs = new GuiAppendMenuEventArgs();
+                newargs.ContextMenuStrip = contextMenu;
+                OnSetMenu(this, newargs);
+                if (newargs.ContextMenuStrip != contextMenu)
+                    contextMenu = newargs.ContextMenuStrip;
+            }
 
-            contextMenu.Show(this, new Point(e.X, e.Y));	
+            contextMenu.Show(this, new Point(e.X, e.Y));
         }
 
         // 刷新
@@ -1760,7 +1816,7 @@ false);
 
                 if (nDbCount == 0)
                 {
-                    strError = "需在服务器 '" + nodeServer .Text+ "' 节点下级勾选一个或者多个数据库节点，检索方可进行。如果不希望检索此服务器节点，则需清除其勾选状态。";
+                    strError = "需在服务器 '" + nodeServer.Text + "' 节点下级勾选一个或者多个数据库节点，检索方可进行。如果不希望检索此服务器节点，则需清除其勾选状态。";
                     return -1;
                 }
 
@@ -1839,7 +1895,7 @@ false);
         public static List<string> ParseDbNamesInTargetString(string strTargetString)
         {
             List<string> results = new List<string>();
-            string[] parts = strTargetString.Split(new char[] {';'});
+            string[] parts = strTargetString.Split(new char[] { ';' });
             foreach (string strPart in parts)
             {
                 string strText = strPart.Trim();
@@ -2216,7 +2272,7 @@ false);
         public string DbName = "";
         // public List<string> ColumnNames = new List<string>();
         public ColumnPropertyCollection ColumnNames = new ColumnPropertyCollection();
-        
+
         public string Syntax = "";  // 格式语法
         public string ItemDbName = "";  // 对应的实体库名
 

@@ -12,7 +12,6 @@ using System.Xml;
 using System.Drawing.Imaging;
 using System.IO;
 
-using System.Runtime.InteropServices;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
@@ -23,6 +22,7 @@ using DigitalPlatform.CommonControl;
 using DigitalPlatform.Script;
 using DigitalPlatform.CirculationClient;
 using DigitalPlatform.CommonDialog;
+using DigitalPlatform.Drawing;
 
 namespace dp2Circulation
 {
@@ -44,6 +44,12 @@ namespace dp2Circulation
             {
                 _objects = ObjectInfoCollection.FromXml(value);
             }
+        }
+
+        public string GetObjectXml(string strHostRecPath)
+        {
+            _objects.HostRecPath = strHostRecPath;
+            return _objects.ToXml();
         }
 
         public bool ObjectChanged
@@ -311,7 +317,7 @@ namespace dp2Circulation
                     strZongAndVolume += "总." + this.Zong;
                 }
 
-                string strYear = IssueUtil.GetYearPart(this.PublishTime);
+                string strYear = dp2StringUtil.GetYearPart(this.PublishTime);
                 return strYear + "年第" + this.Issue + "期"
                     + (String.IsNullOrEmpty(strZongAndVolume) == false ?
                         "(" + strZongAndVolume + ")" : "");
@@ -756,10 +762,10 @@ namespace dp2Circulation
         {
             string strTempNewValue = "";
             string strOldValue = "";
-            OrderDesignControl.ParseOldNewValue(strExistString,
+            dp2StringUtil.ParseOldNewValue(strExistString,
                 out strOldValue,
                 out strTempNewValue);
-            return OrderDesignControl.LinkOldNewValue(strOldValue,
+            return dp2StringUtil.LinkOldNewValue(strOldValue,
                 strNewValue);
         }
 
@@ -768,7 +774,7 @@ namespace dp2Circulation
         {
             string strNewValue = "";
             string strOldValue = "";
-            OrderDesignControl.ParseOldNewValue(strValue,
+            dp2StringUtil.ParseOldNewValue(strValue,
                 out strOldValue,
                 out strNewValue);
             return strNewValue;
@@ -780,7 +786,7 @@ namespace dp2Circulation
         {
             string strNewValue = "";
             string strOldValue = "";
-            OrderDesignControl.ParseOldNewValue(strValue,
+            dp2StringUtil.ParseOldNewValue(strValue,
                 out strOldValue,
                 out strNewValue);
             if (String.IsNullOrEmpty(strNewValue) == false)
@@ -793,7 +799,7 @@ namespace dp2Circulation
         {
             string strNewValue = "";
             string strOldValue = "";
-            OrderDesignControl.ParseOldNewValue(strValue,
+            dp2StringUtil.ParseOldNewValue(strValue,
                 out strOldValue,
                 out strNewValue);
             if (String.IsNullOrEmpty(strOldValue) == false)
@@ -806,7 +812,7 @@ namespace dp2Circulation
         {
             string strNewValue = "";
             string strOldValue = "";
-            OrderDesignControl.ParseOldNewValue(strValue,
+            dp2StringUtil.ParseOldNewValue(strValue,
                 out strOldValue,
                 out strNewValue);
             return strOldValue;
@@ -1030,6 +1036,15 @@ namespace dp2Circulation
                             strError = "订购记录第 " + i.ToString() + " 个XML装入DOM时出错: " + ex.Message;
                             return -1;
                         }
+
+                        // 2017/2/28
+                        string strRefID = DomUtil.GetElementText(whole_dom.DocumentElement, "refID");
+                        if (string.IsNullOrEmpty(strRefID))
+                        {
+                            strError = "订购记录第 " + i.ToString() + " 个中缺乏 参考 ID 字段内容(XML refID 元素)";
+                            return -1;
+                        }
+
                         XmlNode node = this.dom.CreateElement("root");
                         root.AppendChild(node);
                         node.InnerXml = whole_dom.DocumentElement.InnerXml;
@@ -1157,6 +1172,15 @@ namespace dp2Circulation
                             strError = "订购记录第 " + i.ToString() + " 个XML装入DOM时出错: " + ex.Message;
                             return -1;
                         }
+
+                        // 2017/2/28
+                        string strRefID = DomUtil.GetElementText(whole_dom.DocumentElement, "refID");
+                        if (string.IsNullOrEmpty(strRefID))
+                        {
+                            strError = "订购记录第 " + i.ToString() + " 个中缺乏 参考 ID 字段内容(XML refID 元素)";
+                            return -1;
+                        }
+
                         XmlNode node = this.dom.CreateElement("root");
                         root.AppendChild(node);
                         node.InnerXml = whole_dom.DocumentElement.InnerXml;
@@ -1167,7 +1191,7 @@ namespace dp2Circulation
 
             string strVolumeString =
     VolumeInfo.BuildItemVolumeString(
-    IssueUtil.GetYearPart(this.PublishTime),
+    dp2StringUtil.GetYearPart(this.PublishTime),
     this.Issue,
             this.Zong,
             this.Volume);
@@ -1930,11 +1954,19 @@ namespace dp2Circulation
                             return -1;
                         }
 
+                        // 2017/2/28
+                        string strRefID = DomUtil.GetElementText(whole_dom.DocumentElement, "refID");
+                        if (string.IsNullOrEmpty(strRefID))
+                        {
+                            strError = "订购记录第 " + i.ToString() + " 个中缺乏 参考 ID 字段内容(XML refID 元素)";
+                            return -1;
+                        }
+
                         XmlNode node = null;
                         node = this.dom.CreateElement("root");
                         root.AppendChild(node);
 
-                        string strRefID = DomUtil.GetElementText(whole_dom.DocumentElement, "refID");
+                        // string strRefID = DomUtil.GetElementText(whole_dom.DocumentElement, "refID");
                         int index = exist_refids.IndexOf(strRefID);
 
                         // 以前就有
@@ -1944,11 +1976,9 @@ namespace dp2Circulation
                             // 仅仅修改<copy>里面的oldvalue部分；增补<distribute>
                             // 
                             string strCopy = DomUtil.GetElementText(node, "copy");
-                            string strNewValue = "";
-                            string strOldValue = "";
-                            OrderDesignControl.ParseOldNewValue(strCopy,
-                                out strOldValue,
-                                out strNewValue);
+                            dp2StringUtil.ParseOldNewValue(strCopy,
+                                out string strOldValue,
+                                out string strNewValue);
 
                             string strDistribute = DomUtil.GetElementText(node, "distribute");
 
@@ -1967,13 +1997,11 @@ namespace dp2Circulation
 
                             DomUtil.SetElementText(node, "distribute", strMerged);
                             strCopy = DomUtil.GetElementText(node, "copy");
-                            string strNewValue1 = "";
-                            string strOldValue1 = "";
-                            OrderDesignControl.ParseOldNewValue(strCopy,
-                                out strOldValue1,
-                                out strNewValue1);
+                            dp2StringUtil.ParseOldNewValue(strCopy,
+                                out string strOldValue1,
+                                out string strNewValue1);
                             DomUtil.SetElementText(node, "copy",
-                                OrderDesignControl.LinkOldNewValue(strOldValue1,
+                                dp2StringUtil.LinkOldNewValue(strOldValue1,
                                 strNewValue));
 
                             /*
@@ -4009,7 +4037,7 @@ namespace dp2Circulation
                     {
                         string strVolumeString =
 VolumeInfo.BuildItemVolumeString(
-IssueUtil.GetYearPart(this.PublishTime),
+dp2StringUtil.GetYearPart(this.PublishTime),
 this.Issue,
 this.Zong,
 this.Volume);
@@ -4796,58 +4824,50 @@ this.Volume);
         }
 
         // 设置封面图像
-        public int SetCoverImage(Image image,
+        public int SetCoverImage(ImageInfo info,
             out string strError)
         {
             strError = "";
-
-            CreateCoverImageDialog dlg = null;
-            try
+            using (CreateCoverImageDialog dlg = new CreateCoverImageDialog())
             {
-                dlg = new CreateCoverImageDialog();
-
                 MainForm.SetControlFont(dlg, this.Container.Font, false);
-                dlg.OriginImage = image;
+                dlg.ImageInfo = info;
                 Program.MainForm.AppInfo.LinkFormState(dlg, "issue_CreateCoverImageDialog_state");
                 dlg.ShowDialog(this.Container);
                 Program.MainForm.AppInfo.UnlinkFormState(dlg);
                 if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                     return 0;
-            }
-            finally
-            {
-                if (image != null)
+
+                // 先删除全部和封面有关的图像
+                this._objects.MaskDeleteCoverImageObject();
+
+                foreach (ImageType type in dlg.ResultImages)
                 {
-                    image.Dispose();
-                    image = null;
+                    if (type.Image == null)
+                    {
+                        continue;
+                    }
+
+                    string strType = "FrontCover." + type.TypeName;
+                    string strSize = type.Image.Width.ToString() + "X" + type.Image.Height.ToString() + "px";
+
+                    string strTempFilePath = FileUtil.NewTempFileName(
+                        Program.MainForm.UserTempDir,
+        "~temp_make_pic_",
+        ".png");
+
+                    type.Image.Save(strTempFilePath, System.Drawing.Imaging.ImageFormat.Png);
+
+                    // TODO: clip 指令存储在何处?
+                    int nRet = this._objects.SetObjectByUsage(
+                        strTempFilePath,
+                        strType,    // "coverimage",
+                        type.ProcessCommand,
+                        out string strID,
+                        out strError);
+                    if (nRet == -1)
+                        return -1;
                 }
-            }
-
-            foreach (ImageType type in dlg.ResultImages)
-            {
-                if (type.Image == null)
-                {
-                    continue;
-                }
-
-                string strType = "FrontCover." + type.TypeName;
-                string strSize = type.Image.Width.ToString() + "X" + type.Image.Height.ToString() + "px";
-
-                string strTempFilePath = FileUtil.NewTempFileName(
-                    Program.MainForm.UserTempDir,
-    "~temp_make_pic_",
-    ".png");
-
-                type.Image.Save(strTempFilePath, System.Drawing.Imaging.ImageFormat.Png);
-
-                string strID = "";
-                int nRet = this._objects.SetObjectByUsage(
-                    strTempFilePath,
-                    strType,    // "coverimage",
-                    out strID,
-                    out strError);
-                if (nRet == -1)
-                    return -1;
             }
 
             // 刷新封面区域的显示
@@ -4939,6 +4959,17 @@ this.Volume);
             if (dest_type == typeof(IssueBindingItem))
             {
                 result.AreaPortion = AreaPortion.Content;
+                result.X = p_x;
+                result.Y = p_y;
+                result.Object = this;
+                return;
+            }
+
+            // 封面图片位置右边的(竖向)分割条
+            if (p_x >= this.Container.m_nCoverImageWidth - BindingControl.SPLITTER_WIDTH
+                && p_x <= this.Container.m_nCoverImageWidth)
+            {
+                result.AreaPortion = AreaPortion.CoverImageEdge;
                 result.X = p_x;
                 result.Y = p_y;
                 result.Object = this;
@@ -5264,9 +5295,9 @@ this.Volume);
                         int nMaxSourceWidth = (int)(ratio * (double)nWidth);
                         int nSourceWidth = Math.Min(nMaxSourceWidth, image.Width);
 
-                        Rectangle source = new Rectangle(0, 0, 
-                            nSourceWidth, 
-                            image.Height); 
+                        Rectangle source = new Rectangle(0, 0,
+                            nSourceWidth,
+                            image.Height);
                         Rectangle target = new Rectangle(start_x + 1, start_y + 1,
                             (int)((double)nSourceWidth / ratio) - 2,
                             this.Height - 2);
@@ -5374,7 +5405,7 @@ rectFrame);
             bool bFree = false; // 是否为自由期
 
             {
-                Brush brushText = null;
+                Brush brushText = null; // 2017/11/10 巩固了 Dispose()
 
                 try
                 {
@@ -5401,7 +5432,7 @@ rectFrame);
                     }
                     else
                     {
-                        strYear = IssueUtil.GetYearPart(strPublishTime);
+                        strYear = dp2StringUtil.GetYearPart(strPublishTime);
                         strNo = this.Issue;
                     }
 
@@ -5484,6 +5515,11 @@ rectFrame);
                     // 如果不是某年的第一期，则年份显示为淡色
                     {
                         // 1) 期号
+                        if (brushText != null)
+                        {
+                            brushText.Dispose();
+                            brushText = null;
+                        }
                         brushText = new SolidBrush(colorDark);
                         // size里面已经有strNo的尺寸
                         RectangleF rect = new RectangleF(
@@ -5512,6 +5548,12 @@ rectFrame);
                         // 2) 年份
                         if (String.IsNullOrEmpty(strYear) == false)
                         {
+                            if (brushText != null)
+                            {
+                                brushText.Dispose();
+                                brushText = null;
+                            }
+
                             if (bFirstIssue == true)
                                 brushText = new SolidBrush(colorDark);
                             else
@@ -5554,6 +5596,11 @@ rectFrame);
                         y0 += (int)size.Height;
                         string strText = BindingControl.GetDisplayPublishTime(this.PublishTime);
 
+                        if (brushText != null)
+                        {
+                            brushText.Dispose();
+                            brushText = null;
+                        }
                         brushText = new SolidBrush(colorGray);
                         size = e.Graphics.MeasureString(strText,
                             this.Container.m_fontTitleSmall);
@@ -5610,6 +5657,11 @@ rectFrame);
                         if (String.IsNullOrEmpty(strText) == false)
                         {
                             y0 += (int)size.Height;
+                            if (brushText != null)
+                            {
+                                brushText.Dispose();
+                                brushText = null;
+                            }
                             brushText = new SolidBrush(colorGray);
                             size = e.Graphics.MeasureString(strText,
                                 this.Container.m_fontTitleSmall);
@@ -5660,7 +5712,12 @@ rectFrame);
                         if (String.IsNullOrEmpty(strText) == false)
                         {
                             y0 += (int)size.Height;
-                            // brushText = new SolidBrush(colorGray);
+
+                            if (brushText != null)
+                            {
+                                brushText.Dispose();
+                                brushText = null;
+                            }
                             if (nState == -2)
                                 brushText = new SolidBrush(colorGray);
                             else if (nState == -1)
@@ -5728,7 +5785,10 @@ rectFrame);
                 finally
                 {
                     if (brushText != null)
+                    {
                         brushText.Dispose();
+                        brushText = null;
+                    }
                 }
             }
 
@@ -5815,6 +5875,12 @@ rectFrame);
             this.Items.Clear();
 
             Debug.Assert(this.Container != null, "");
+
+            if (string.IsNullOrEmpty(strPublishTime))
+            {
+                strError = "InitialLoadItems() 调用参数。strPublishTime 不应为空";
+                return -1;
+            }
 
             Debug.Assert(String.IsNullOrEmpty(strPublishTime) == false, "");
 
@@ -5914,12 +5980,18 @@ rectFrame);
                 return "";
                 // return m_strXml;
             }
-            /*
             set
             {
-                m_strXml = value;
+                // m_strXml = value;
+
+                // 2017/12/15
+                {
+                    if (dom == null)
+                        dom = new XmlDocument();
+
+                    dom.LoadXml(string.IsNullOrEmpty(value) ? "<root />" : value);
+                }
             }
-             * */
         }
 
         internal XmlDocument dom = null;
@@ -6460,6 +6532,17 @@ rectFrame);
                 return -1;
             }
 #endif
+            // 合并。strDefaultXml 合并到 this.Xml 中。不覆盖原有的非空内容
+            // 设置册记录默认值
+            string strDefaultXml = this.Xml;
+            nRet = this.Container.Container.SetItemDefaultValues("quickRegister_default",
+                true,
+                ref strDefaultXml,
+                out strError);
+            if (nRet == -1)
+                return -1;
+
+            this.Xml = strDefaultXml;
 
             // 找到相关的OrderBindingItem对象，刷新<distribute>元素内容
             IssueBindingItem issue = this.Container;
@@ -6532,7 +6615,7 @@ rectFrame);
 
             // volume 其实是当年期号、总期号、卷号在一起的一个字符串
             string strVolume = VolumeInfo.BuildItemVolumeString(
-                IssueUtil.GetYearPart(issue.PublishTime),
+                dp2StringUtil.GetYearPart(issue.PublishTime),
                 issue.Issue,
                 issue.Zong,
                 issue.Volume);
@@ -6766,7 +6849,7 @@ rectFrame);
                     && String.IsNullOrEmpty(issue.PublishTime) == false)
                 {
                     string strTempVolumeString = VolumeInfo.BuildItemVolumeString(
-                        IssueUtil.GetYearPart(issue.PublishTime),
+                        dp2StringUtil.GetYearPart(issue.PublishTime),
                         issue.Issue,
                         issue.Zong,
                         issue.Volume);
@@ -6833,7 +6916,7 @@ rectFrame);
                 }
 
                 Debug.Assert(String.IsNullOrEmpty(issue.PublishTime) == false, "");
-                string strYear = IssueUtil.GetYearPart(issue.PublishTime);
+                string strYear = dp2StringUtil.GetYearPart(issue.PublishTime);
 
                 List<string> no_list = (List<string>)no_list_table[strYear];
                 if (no_list == null)
@@ -7032,7 +7115,7 @@ rectFrame);
                     DomUtil.SetAttr(node, "publishTime", cell.Container.PublishTime);
 
                     string strVolume = VolumeInfo.BuildItemVolumeString(
-                        IssueUtil.GetYearPart(cell.Container.PublishTime),
+                        dp2StringUtil.GetYearPart(cell.Container.PublishTime),
                         cell.Container.Issue,
                         cell.Container.Zong,
                         cell.Container.Volume);
@@ -7712,11 +7795,9 @@ rectFrame);
         {
             strError = "";
 
-            string strNewValue = "";
-            string strOldValue = "";
-            OrderDesignControl.ParseOldNewValue(this.Copy,
-                out strOldValue,
-                out strNewValue);
+            dp2StringUtil.ParseOldNewValue(this.Copy,
+                out string strOldValue,
+                out string strNewValue);
             int nOldCopy = IssueBindingItem.GetNumberValue(strOldValue);
             int nNewCopy = IssueBindingItem.GetNumberValue(strNewValue);
 
@@ -7749,7 +7830,7 @@ rectFrame);
 
             if (bChanged == true)
             {
-                this.Copy = OrderDesignControl.LinkOldNewValue(nOldCopy.ToString(),
+                this.Copy = dp2StringUtil.LinkOldNewValue(nOldCopy.ToString(),
          nNewCopy.ToString());
                 return 1;
             }
@@ -7793,11 +7874,9 @@ rectFrame);
             // 刷新<copy>元素中的订购和已到册数值
             if (nOrderCountDelta != 0 || nArrivedCountDelta != 0)
             {
-                string strNewValue = "";
-                string strOldValue = "";
-                OrderDesignControl.ParseOldNewValue(this.Copy,
-                    out strOldValue,
-                    out strNewValue);
+                dp2StringUtil.ParseOldNewValue(this.Copy,
+                    out string strOldValue,
+                    out string strNewValue);
                 int nOldCopy = IssueBindingItem.GetNumberValue(strOldValue);
                 int nNewCopy = IssueBindingItem.GetNumberValue(strNewValue);
                 nOldCopy += nOrderCountDelta;
@@ -7817,7 +7896,7 @@ rectFrame);
                 }
 
                 Debug.Assert(nNewCopy >= 0, "");
-                this.Copy = OrderDesignControl.LinkOldNewValue(nOldCopy.ToString(),
+                this.Copy = dp2StringUtil.LinkOldNewValue(nOldCopy.ToString(),
                      nNewCopy.ToString());
             }
 

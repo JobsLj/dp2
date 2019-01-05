@@ -1,4 +1,4 @@
-namespace dp2Circulation
+Ôªønamespace dp2Circulation
 {
     partial class EntityForm
     {
@@ -91,7 +91,10 @@ namespace dp2Circulation
             this.ToolStripMenuItem_viewMarcJidaoData = new System.Windows.Forms.ToolStripMenuItem();
             this.ToolStripMenuItem_enableSaveAllButton = new System.Windows.Forms.ToolStripMenuItem();
             this.MenuItem_marcEditor_getKeys = new System.Windows.Forms.ToolStripMenuItem();
+            this.MenuItem_marcEditor_getSummary = new System.Windows.Forms.ToolStripMenuItem();
             this.MenuItem_marcEditor_editMacroTable = new System.Windows.Forms.ToolStripMenuItem();
+            this.MenuItem_marcEditor_fixed = new System.Windows.Forms.ToolStripMenuItem();
+            this.MenuItem_marcEditor_loadRecord = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.toolStripButton_marcEditor_saveTo = new System.Windows.Forms.ToolStripButton();
             this.toolStripButton_setTargetRecord = new System.Windows.Forms.ToolStripButton();
@@ -99,6 +102,7 @@ namespace dp2Circulation
             this.toolStripSplitButton_searchDup = new System.Windows.Forms.ToolStripSplitButton();
             this.ToolStripMenuItem_searchDupInExistWindow = new System.Windows.Forms.ToolStripMenuItem();
             this.ToolStripMenuItem_searchDupInNewWindow = new System.Windows.Forms.ToolStripMenuItem();
+            this.ToolStripMenuItem_checkUnique = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripButton_verifyData = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
             this.toolStripButton_next = new System.Windows.Forms.ToolStripButton();
@@ -107,7 +111,10 @@ namespace dp2Circulation
             this.toolStripSeparator8 = new System.Windows.Forms.ToolStripSeparator();
             this.toolStripSplitButton_insertCoverImage = new System.Windows.Forms.ToolStripSplitButton();
             this.ToolStripMenuItem_insertCoverImageFromClipboard = new System.Windows.Forms.ToolStripMenuItem();
+            this.ToolStripMenuItem_insertCoverImageFromCamera = new System.Windows.Forms.ToolStripMenuItem();
             this.tabControl_itemAndIssue = new System.Windows.Forms.TabControl();
+            this.contextMenuStrip_itemArea = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.toolStripMenuItem_itemArea_ensureDisplay = new System.Windows.Forms.ToolStripMenuItem();
             this.tabPage_item = new System.Windows.Forms.TabPage();
             this.entityControl1 = new dp2Circulation.EntityControl();
             this.tabPage_issue = new System.Windows.Forms.TabPage();
@@ -123,7 +130,7 @@ namespace dp2Circulation
             this.label3 = new System.Windows.Forms.Label();
             this.textBox_itemBarcode = new System.Windows.Forms.TextBox();
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
-            this.toolStripButton_hideItemQuickImput = new System.Windows.Forms.ToolStripButton();
+            this.toolStripButton_hideItemQuickInput = new System.Windows.Forms.ToolStripButton();
             this.imageList_itemType = new System.Windows.Forms.ImageList(this.components);
             this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.ToolStripMenuItem_removeCoverImage = new System.Windows.Forms.ToolStripMenuItem();
@@ -166,21 +173,21 @@ namespace dp2Circulation
             // 
             this.toolStripMenuItem_SearchOnly.Name = "toolStripMenuItem_SearchOnly";
             this.toolStripMenuItem_SearchOnly.Size = new System.Drawing.Size(124, 22);
-            this.toolStripMenuItem_SearchOnly.Text = "÷ªºÏÀ˜";
+            this.toolStripMenuItem_SearchOnly.Text = "Âè™Ê£ÄÁ¥¢";
             this.toolStripMenuItem_SearchOnly.Click += new System.EventHandler(this.toolStripMenuItem_SearchOnly_Click);
             // 
             // toolStripMenuItem_quickRegister
             // 
             this.toolStripMenuItem_quickRegister.Name = "toolStripMenuItem_quickRegister";
             this.toolStripMenuItem_quickRegister.Size = new System.Drawing.Size(124, 22);
-            this.toolStripMenuItem_quickRegister.Text = "øÏÀŸµ«º«";
+            this.toolStripMenuItem_quickRegister.Text = "Âø´ÈÄüÁôªËÆ∞";
             this.toolStripMenuItem_quickRegister.Click += new System.EventHandler(this.toolStripMenuItem_quickRegister_Click);
             // 
             // toolStripMenuItem_register
             // 
             this.toolStripMenuItem_register.Name = "toolStripMenuItem_register";
             this.toolStripMenuItem_register.Size = new System.Drawing.Size(124, 22);
-            this.toolStripMenuItem_register.Text = "µ«º«";
+            this.toolStripMenuItem_register.Text = "ÁôªËÆ∞";
             this.toolStripMenuItem_register.Click += new System.EventHandler(this.toolStripMenuItem_register_Click);
             // 
             // contextMenuStrip_option
@@ -194,7 +201,7 @@ namespace dp2Circulation
             // 
             this.ToolStripMenuItem_enableSaveAllButtonAfterRecordDeleted.Name = "ToolStripMenuItem_enableSaveAllButtonAfterRecordDeleted";
             this.ToolStripMenuItem_enableSaveAllButtonAfterRecordDeleted.Size = new System.Drawing.Size(268, 22);
-            this.ToolStripMenuItem_enableSaveAllButtonAfterRecordDeleted.Text = " πƒ‹º«¬º…æ≥˝∫Ûµƒ°∞»´≤ø±£¥Ê°±∞¥≈•";
+            this.ToolStripMenuItem_enableSaveAllButtonAfterRecordDeleted.Text = "‰ΩøËÉΩËÆ∞ÂΩïÂà†Èô§ÂêéÁöÑ‚ÄúÂÖ®ÈÉ®‰øùÂ≠ò‚ÄùÊåâÈíÆ";
             this.ToolStripMenuItem_enableSaveAllButtonAfterRecordDeleted.Click += new System.EventHandler(this.ToolStripMenuItem_enableSaveAllButtonAfterRecordDeleted_Click);
             // 
             // button_save
@@ -206,7 +213,7 @@ namespace dp2Circulation
             this.button_save.Name = "button_save";
             this.button_save.Size = new System.Drawing.Size(123, 28);
             this.button_save.TabIndex = 4;
-            this.button_save.Text = "»´≤ø±£¥Ê(&S)";
+            this.button_save.Text = "ÂÖ®ÈÉ®‰øùÂ≠ò(&S)";
             this.button_save.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageBeforeText;
             this.button_save.UseVisualStyleBackColor = true;
             this.button_save.Click += new System.EventHandler(this.button_save_Click);
@@ -275,7 +282,7 @@ namespace dp2Circulation
             this.toolStripButton_hideSearchPanel.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripButton_hideSearchPanel.Name = "toolStripButton_hideSearchPanel";
             this.toolStripButton_hideSearchPanel.Size = new System.Drawing.Size(28, 28);
-            this.toolStripButton_hideSearchPanel.Text = "“˛≤ÿºÏÀ˜√Ê∞Â";
+            this.toolStripButton_hideSearchPanel.Text = "ÈöêËóèÊ£ÄÁ¥¢Èù¢Êùø";
             this.toolStripButton_hideSearchPanel.Click += new System.EventHandler(this.toolStripButton_hideSearchPanel_Click);
             // 
             // checkedComboBox_biblioDbNames
@@ -308,11 +315,11 @@ namespace dp2Circulation
             this.comboBox_matchStyle.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_matchStyle.FormattingEnabled = true;
             this.comboBox_matchStyle.Items.AddRange(new object[] {
-            "«∞∑Ω“ª÷¬",
-            "÷–º‰“ª÷¬",
-            "∫Û∑Ω“ª÷¬",
-            "æ´»∑“ª÷¬",
-            "ø’÷µ"});
+            "ÂâçÊñπ‰∏ÄËá¥",
+            "‰∏≠Èó¥‰∏ÄËá¥",
+            "ÂêéÊñπ‰∏ÄËá¥",
+            "Á≤æÁ°Æ‰∏ÄËá¥",
+            "Á©∫ÂÄº"});
             this.comboBox_matchStyle.Location = new System.Drawing.Point(294, 5);
             this.comboBox_matchStyle.Name = "comboBox_matchStyle";
             this.comboBox_matchStyle.Size = new System.Drawing.Size(121, 20);
@@ -349,7 +356,7 @@ namespace dp2Circulation
             this.button_search.Name = "button_search";
             this.button_search.Size = new System.Drawing.Size(75, 23);
             this.button_search.TabIndex = 4;
-            this.button_search.Text = "ºÏÀ˜(&S)";
+            this.button_search.Text = "Ê£ÄÁ¥¢(&S)";
             this.button_search.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageBeforeText;
             this.button_search.UseVisualStyleBackColor = true;
             this.button_search.Click += new System.EventHandler(this.button_search_Click);
@@ -365,7 +372,7 @@ namespace dp2Circulation
             this.checkBox_autoDetectQueryBarcode.Padding = new System.Windows.Forms.Padding(10, 3, 0, 3);
             this.checkBox_autoDetectQueryBarcode.Size = new System.Drawing.Size(124, 22);
             this.checkBox_autoDetectQueryBarcode.TabIndex = 5;
-            this.checkBox_autoDetectQueryBarcode.Text = "  ”¶ISBNÃı¬Î(&A)";
+            this.checkBox_autoDetectQueryBarcode.Text = "ÈÄÇÂ∫îISBNÊù°Á†Å(&A)";
             this.checkBox_autoDetectQueryBarcode.UseVisualStyleBackColor = true;
             this.checkBox_autoDetectQueryBarcode.Visible = false;
             // 
@@ -378,7 +385,7 @@ namespace dp2Circulation
             this.checkBox_autoSavePrev.Name = "checkBox_autoSavePrev";
             this.checkBox_autoSavePrev.Size = new System.Drawing.Size(150, 16);
             this.checkBox_autoSavePrev.TabIndex = 6;
-            this.checkBox_autoSavePrev.Text = "◊‘∂Ø±£¥Êœ»«∞µƒ–ﬁ∏ƒ(&S)";
+            this.checkBox_autoSavePrev.Text = "Ëá™Âä®‰øùÂ≠òÂÖàÂâçÁöÑ‰øÆÊîπ(&S)";
             this.checkBox_autoSavePrev.UseVisualStyleBackColor = true;
             // 
             // splitContainer_recordAndItems
@@ -482,7 +489,7 @@ namespace dp2Circulation
             // m_marcEditor
             // 
             this.m_marcEditor.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.m_marcEditor.CaptionFont = new System.Drawing.Font("ÀŒÃÂ", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.m_marcEditor.CaptionFont = new System.Drawing.Font("ÂÆã‰Ωì", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.m_marcEditor.Changed = true;
             this.m_marcEditor.ContentBackColor = System.Drawing.SystemColors.Window;
             this.m_marcEditor.ContentTextColor = System.Drawing.SystemColors.WindowText;
@@ -532,7 +539,7 @@ namespace dp2Circulation
             this.tabPage_template.Name = "tabPage_template";
             this.tabPage_template.Size = new System.Drawing.Size(682, 97);
             this.tabPage_template.TabIndex = 2;
-            this.tabPage_template.Text = "ƒ£∞Â";
+            this.tabPage_template.Text = "Ê®°Êùø";
             this.tabPage_template.UseVisualStyleBackColor = true;
             // 
             // easyMarcControl1
@@ -587,14 +594,15 @@ namespace dp2Circulation
             // 
             this.toolStripLabel1.Name = "toolStripLabel1";
             this.toolStripLabel1.Size = new System.Drawing.Size(71, 26);
-            this.toolStripLabel1.Text = "÷÷º«¬º¬∑æ∂:";
+            this.toolStripLabel1.Text = "‰π¶ÁõÆ:";
+            this.toolStripLabel1.MouseDown += toolStripLabel1_MouseDown;
             // 
             // textBox_biblioRecPath
             // 
             this.textBox_biblioRecPath.Name = "textBox_biblioRecPath";
             this.textBox_biblioRecPath.ReadOnly = true;
             this.textBox_biblioRecPath.Size = new System.Drawing.Size(151, 29);
-            this.textBox_biblioRecPath.ToolTipText = "÷÷( Èƒø)º«¬º¬∑æ∂";
+            this.textBox_biblioRecPath.ToolTipText = "Áßç(‰π¶ÁõÆ)ËÆ∞ÂΩïË∑ØÂæÑ";
             // 
             // toolStripSeparator1
             // 
@@ -609,7 +617,7 @@ namespace dp2Circulation
             this.toolStripButton_saveAll.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_saveAll.Name = "toolStripButton_saveAll";
             this.toolStripButton_saveAll.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_saveAll.Text = "»´≤ø±£¥Ê";
+            this.toolStripButton_saveAll.Text = "ÂÖ®ÈÉ®‰øùÂ≠ò";
             this.toolStripButton_saveAll.Click += new System.EventHandler(this.toolStripButton_saveAll_Click);
             // 
             // toolStripButton_marcEditor_save
@@ -620,7 +628,7 @@ namespace dp2Circulation
             this.toolStripButton_marcEditor_save.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_marcEditor_save.Name = "toolStripButton_marcEditor_save";
             this.toolStripButton_marcEditor_save.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_marcEditor_save.Text = "±£¥Ê Èƒøº«¬º(≤ª±£¥Ê≤·–≈œ¢)";
+            this.toolStripButton_marcEditor_save.Text = "‰øùÂ≠ò‰π¶ÁõÆËÆ∞ÂΩï(‰∏ç‰øùÂ≠òÂÜå‰ø°ÊÅØ)";
             this.toolStripButton_marcEditor_save.Click += new System.EventHandler(this.toolStripButton_marcEditor_save_Click);
             // 
             // toolStripButton_marcEditor_loadTemplate
@@ -631,8 +639,8 @@ namespace dp2Circulation
             this.toolStripButton_marcEditor_loadTemplate.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_marcEditor_loadTemplate.Name = "toolStripButton_marcEditor_loadTemplate";
             this.toolStripButton_marcEditor_loadTemplate.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_marcEditor_loadTemplate.Text = "◊∞‘ÿ Èƒøƒ£∞Â";
-            this.toolStripButton_marcEditor_loadTemplate.ToolTipText = "◊∞‘ÿ Èƒøƒ£∞Â(Ctrl+T)";
+            this.toolStripButton_marcEditor_loadTemplate.Text = "Ë£ÖËΩΩ‰π¶ÁõÆÊ®°Êùø";
+            this.toolStripButton_marcEditor_loadTemplate.ToolTipText = "Ë£ÖËΩΩ‰π¶ÁõÆÊ®°Êùø(Ctrl+T)";
             this.toolStripButton_marcEditor_loadTemplate.Click += new System.EventHandler(this.toolStripButton_marcEditor_loadTemplate_Click);
             // 
             // toolStripSeparator9
@@ -648,8 +656,8 @@ namespace dp2Circulation
             this.toolStripButton_marcEditor_delete.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_marcEditor_delete.Name = "toolStripButton_marcEditor_delete";
             this.toolStripButton_marcEditor_delete.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_marcEditor_delete.Text = "…æ≥˝ Èƒøº«¬ºº∞œ¬ Ùµƒ≤·º«¬º";
-            this.toolStripButton_marcEditor_delete.ToolTipText = "…æ≥˝ Èƒøº«¬ºº∞œ¬ Ùµƒ≤·°¢∆⁄°¢∂©π∫º«¬º";
+            this.toolStripButton_marcEditor_delete.Text = "Âà†Èô§‰π¶ÁõÆËÆ∞ÂΩïÂèä‰∏ãÂ±ûÁöÑÂÜåËÆ∞ÂΩï";
+            this.toolStripButton_marcEditor_delete.ToolTipText = "Âà†Èô§‰π¶ÁõÆËÆ∞ÂΩïÂèä‰∏ãÂ±ûÁöÑÂÜå„ÄÅÊúü„ÄÅËÆ¢Ë¥≠ËÆ∞ÂΩï";
             this.toolStripButton_marcEditor_delete.Click += new System.EventHandler(this.toolStripButton_marcEditor_delete_Click);
             // 
             // toolStripButton_clear
@@ -660,7 +668,7 @@ namespace dp2Circulation
             this.toolStripButton_clear.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_clear.Name = "toolStripButton_clear";
             this.toolStripButton_clear.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_clear.Text = "«Â≥˝";
+            this.toolStripButton_clear.Text = "Ê∏ÖÈô§";
             this.toolStripButton_clear.Click += new System.EventHandler(this.toolStripButton_clear_Click);
             // 
             // toolStripDropDownButton_marcEditor_someFunc
@@ -681,13 +689,16 @@ namespace dp2Circulation
             this.ToolStripMenuItem_viewMarcJidaoData,
             this.ToolStripMenuItem_enableSaveAllButton,
             this.MenuItem_marcEditor_getKeys,
-            this.MenuItem_marcEditor_editMacroTable});
+            this.MenuItem_marcEditor_getSummary,
+            this.MenuItem_marcEditor_editMacroTable,
+            this.MenuItem_marcEditor_fixed,
+            this.MenuItem_marcEditor_loadRecord});
             this.toolStripDropDownButton_marcEditor_someFunc.Image = ((System.Drawing.Image)(resources.GetObject("toolStripDropDownButton_marcEditor_someFunc.Image")));
             this.toolStripDropDownButton_marcEditor_someFunc.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripDropDownButton_marcEditor_someFunc.Name = "toolStripDropDownButton_marcEditor_someFunc";
             this.toolStripDropDownButton_marcEditor_someFunc.Size = new System.Drawing.Size(30, 26);
             this.toolStripDropDownButton_marcEditor_someFunc.Text = "...";
-            this.toolStripDropDownButton_marcEditor_someFunc.ToolTipText = "∏¸∂‡√¸¡Ó...";
+            this.toolStripDropDownButton_marcEditor_someFunc.ToolTipText = "Êõ¥Â§öÂëΩ‰ª§...";
             this.toolStripDropDownButton_marcEditor_someFunc.DropDownOpening += new System.EventHandler(this.toolStripDropDownButton_marcEditor_someFunc_DropDownOpening);
             // 
             // toolStripButton_marcEditor_saveTemplate
@@ -697,7 +708,7 @@ namespace dp2Circulation
             this.toolStripButton_marcEditor_saveTemplate.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_marcEditor_saveTemplate.Name = "toolStripButton_marcEditor_saveTemplate";
             this.toolStripButton_marcEditor_saveTemplate.Size = new System.Drawing.Size(142, 26);
-            this.toolStripButton_marcEditor_saveTemplate.Text = "±£¥Ê Èƒøº«¬ºµΩƒ£∞Â";
+            this.toolStripButton_marcEditor_saveTemplate.Text = "‰øùÂ≠ò‰π¶ÁõÆËÆ∞ÂΩïÂà∞Ê®°Êùø";
             this.toolStripButton_marcEditor_saveTemplate.Click += new System.EventHandler(this.toolStripButton_marcEditor_saveTemplate_Click);
             // 
             // toolStripSeparator4
@@ -709,20 +720,20 @@ namespace dp2Circulation
             // 
             this.toolStripMenuItem_marcEditor_setActiveCatalogingRule.Name = "toolStripMenuItem_marcEditor_setActiveCatalogingRule";
             this.toolStripMenuItem_marcEditor_setActiveCatalogingRule.Size = new System.Drawing.Size(257, 22);
-            this.toolStripMenuItem_marcEditor_setActiveCatalogingRule.Text = "±‡ƒøπÊ‘Ú[≤Èø¥ ±”√]";
+            this.toolStripMenuItem_marcEditor_setActiveCatalogingRule.Text = "ÁºñÁõÆËßÑÂàô[Êü•ÁúãÊó∂Áî®]";
             // 
             // MenuItem_marcEditor_viewXml
             // 
             this.MenuItem_marcEditor_viewXml.Name = "MenuItem_marcEditor_viewXml";
             this.MenuItem_marcEditor_viewXml.Size = new System.Drawing.Size(257, 22);
-            this.MenuItem_marcEditor_viewXml.Text = "≤Èø¥µ±«∞ ÈƒøXML ˝æ›(&X)";
+            this.MenuItem_marcEditor_viewXml.Text = "Êü•ÁúãÂΩìÂâç‰π¶ÁõÆXMLÊï∞ÊçÆ(&X)";
             this.MenuItem_marcEditor_viewXml.Click += new System.EventHandler(this.MenuItem_marcEditor_viewXml_Click);
             // 
             // MenuItem_marcEditor_viewOriginXml
             // 
             this.MenuItem_marcEditor_viewOriginXml.Name = "MenuItem_marcEditor_viewOriginXml";
             this.MenuItem_marcEditor_viewOriginXml.Size = new System.Drawing.Size(257, 22);
-            this.MenuItem_marcEditor_viewOriginXml.Text = "≤Èø¥◊Ó≥ıµ˜»Îµƒ ÈƒøXML ˝æ›(&F)...";
+            this.MenuItem_marcEditor_viewOriginXml.Text = "Êü•ÁúãÊúÄÂàùË∞ÉÂÖ•ÁöÑ‰π¶ÁõÆXMLÊï∞ÊçÆ(&F)...";
             this.MenuItem_marcEditor_viewOriginXml.Click += new System.EventHandler(this.MenuItem_marcEditor_viewOriginXml_Click);
             // 
             // toolStripSeparator6
@@ -734,14 +745,14 @@ namespace dp2Circulation
             // 
             this.ToolStripMenuItem_exportAllInfoToXmlFile.Name = "ToolStripMenuItem_exportAllInfoToXmlFile";
             this.ToolStripMenuItem_exportAllInfoToXmlFile.Size = new System.Drawing.Size(257, 22);
-            this.ToolStripMenuItem_exportAllInfoToXmlFile.Text = "µº≥ˆ»´≤ø–≈œ¢µΩXMLŒƒº˛(&E)...";
+            this.ToolStripMenuItem_exportAllInfoToXmlFile.Text = "ÂØºÂá∫ÂÖ®ÈÉ®‰ø°ÊÅØÂà∞XMLÊñá‰ª∂(&E)...";
             this.ToolStripMenuItem_exportAllInfoToXmlFile.Click += new System.EventHandler(this.ToolStripMenuItem_exportAllInfoToXmlFile_Click);
             // 
             // StripMenuItem_importFromXmlFile
             // 
             this.StripMenuItem_importFromXmlFile.Name = "StripMenuItem_importFromXmlFile";
             this.StripMenuItem_importFromXmlFile.Size = new System.Drawing.Size(257, 22);
-            this.StripMenuItem_importFromXmlFile.Text = "¥”XMLŒƒº˛÷–µº»Î(&I)...";
+            this.StripMenuItem_importFromXmlFile.Text = "‰ªéXMLÊñá‰ª∂‰∏≠ÂØºÂÖ•(&I)...";
             this.StripMenuItem_importFromXmlFile.Click += new System.EventHandler(this.StripMenuItem_importFromXmlFile_Click);
             // 
             // toolStripSeparator5
@@ -753,7 +764,7 @@ namespace dp2Circulation
             // 
             this.ToolStripMenuItem_loadTargetBiblioRecord.Name = "ToolStripMenuItem_loadTargetBiblioRecord";
             this.ToolStripMenuItem_loadTargetBiblioRecord.Size = new System.Drawing.Size(257, 22);
-            this.ToolStripMenuItem_loadTargetBiblioRecord.Text = "Ã¯◊™µΩƒø±Íº«¬º(&T)";
+            this.ToolStripMenuItem_loadTargetBiblioRecord.Text = "Ë∑≥ËΩ¨Âà∞ÁõÆÊ†áËÆ∞ÂΩï(&T)";
             this.ToolStripMenuItem_loadTargetBiblioRecord.Click += new System.EventHandler(this.ToolStripMenuItem_loadTargetBiblioRecord_Click);
             // 
             // toolStripSeparator7
@@ -765,29 +776,50 @@ namespace dp2Circulation
             // 
             this.ToolStripMenuItem_viewMarcJidaoData.Name = "ToolStripMenuItem_viewMarcJidaoData";
             this.ToolStripMenuItem_viewMarcJidaoData.Size = new System.Drawing.Size(257, 22);
-            this.ToolStripMenuItem_viewMarcJidaoData.Text = "π€≤ÏMARCº«µΩ ˝æ›(&J)...";
+            this.ToolStripMenuItem_viewMarcJidaoData.Text = "ËßÇÂØüMARCËÆ∞Âà∞Êï∞ÊçÆ(&J)...";
             this.ToolStripMenuItem_viewMarcJidaoData.Click += new System.EventHandler(this.ToolStripMenuItem_viewMarcJidaoData_Click);
             // 
             // ToolStripMenuItem_enableSaveAllButton
             // 
             this.ToolStripMenuItem_enableSaveAllButton.Name = "ToolStripMenuItem_enableSaveAllButton";
             this.ToolStripMenuItem_enableSaveAllButton.Size = new System.Drawing.Size(257, 22);
-            this.ToolStripMenuItem_enableSaveAllButton.Text = "[º«¬º…æ≥˝∫Û] πƒ‹±‡º≠±£¥Ê(&E)";
+            this.ToolStripMenuItem_enableSaveAllButton.Text = "[ËÆ∞ÂΩïÂà†Èô§Âêé]‰ΩøËÉΩÁºñËæë‰øùÂ≠ò(&E)";
             this.ToolStripMenuItem_enableSaveAllButton.Click += new System.EventHandler(this.ToolStripMenuItem_enableSaveAllButton_Click);
             // 
             // MenuItem_marcEditor_getKeys
             // 
             this.MenuItem_marcEditor_getKeys.Name = "MenuItem_marcEditor_getKeys";
             this.MenuItem_marcEditor_getKeys.Size = new System.Drawing.Size(257, 22);
-            this.MenuItem_marcEditor_getKeys.Text = "≤Èø¥ Èƒøº«¬ºµƒºÏÀ˜µ„(&K)";
+            this.MenuItem_marcEditor_getKeys.Text = "Êü•Áúã‰π¶ÁõÆËÆ∞ÂΩïÁöÑÊ£ÄÁ¥¢ÁÇπ(&K)";
             this.MenuItem_marcEditor_getKeys.Click += new System.EventHandler(this.MenuItem_marcEditor_getKeys_Click);
+            // 
+            // MenuItem_marcEditor_getSummary
+            // 
+            this.MenuItem_marcEditor_getSummary.Name = "MenuItem_marcEditor_getSummary";
+            this.MenuItem_marcEditor_getSummary.Size = new System.Drawing.Size(257, 22);
+            this.MenuItem_marcEditor_getSummary.Text = "Êü•Áúã‰π¶ÁõÆËÆ∞ÂΩïÊëòË¶Å(&S)";
+            this.MenuItem_marcEditor_getSummary.Click += new System.EventHandler(this.MenuItem_marcEditor_getSummary_Click);
             // 
             // MenuItem_marcEditor_editMacroTable
             // 
             this.MenuItem_marcEditor_editMacroTable.Name = "MenuItem_marcEditor_editMacroTable";
             this.MenuItem_marcEditor_editMacroTable.Size = new System.Drawing.Size(257, 22);
-            this.MenuItem_marcEditor_editMacroTable.Text = "∫Í∂®“Â(&M)...";
+            this.MenuItem_marcEditor_editMacroTable.Text = "ÂÆèÂÆö‰πâ(&M)...";
             this.MenuItem_marcEditor_editMacroTable.Click += new System.EventHandler(this.MenuItem_marcEditor_editMacroTable_Click);
+            // 
+            // MenuItem_marcEditor_fixed
+            // 
+            this.MenuItem_marcEditor_fixed.Name = "MenuItem_marcEditor_fixed";
+            this.MenuItem_marcEditor_fixed.Size = new System.Drawing.Size(257, 22);
+            this.MenuItem_marcEditor_fixed.Text = "Âõ∫ÂÆöÂà∞Â∑¶‰æß(&L)";
+            this.MenuItem_marcEditor_fixed.Click += new System.EventHandler(this.MenuItem_marcEditor_toggleFixed_Click);
+            // 
+            // MenuItem_marcEditor_loadRecord
+            // 
+            this.MenuItem_marcEditor_loadRecord.Name = "MenuItem_marcEditor_loadRecord";
+            this.MenuItem_marcEditor_loadRecord.Size = new System.Drawing.Size(257, 22);
+            this.MenuItem_marcEditor_loadRecord.Text = "Ë£ÖËΩΩËÆ∞ÂΩï(&L)";
+            this.MenuItem_marcEditor_loadRecord.Click += new System.EventHandler(this.MenuItem_marcEditor_loadRecord_Click);
             // 
             // toolStripSeparator2
             // 
@@ -802,8 +834,8 @@ namespace dp2Circulation
             this.toolStripButton_marcEditor_saveTo.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_marcEditor_saveTo.Name = "toolStripButton_marcEditor_saveTo";
             this.toolStripButton_marcEditor_saveTo.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_marcEditor_saveTo.Text = "∏¥÷∆ Èƒøº«¬º(∞¸¿®≤·°¢∆⁄°¢∂©π∫°¢ µÃÂ–≈œ¢)µΩ∆‰À˚ø‚ F3";
-            this.toolStripButton_marcEditor_saveTo.ToolTipText = "∏¥÷∆ Èƒøº«¬º(∞¸¿®≤·°¢∆⁄°¢∂©π∫°¢ µÃÂ–≈œ¢)µΩ∆‰À˚ø‚ F3";
+            this.toolStripButton_marcEditor_saveTo.Text = "Â§çÂà∂‰π¶ÁõÆËÆ∞ÂΩï(ÂåÖÊã¨ÂÜå„ÄÅÊúü„ÄÅËÆ¢Ë¥≠„ÄÅÂÆû‰Ωì‰ø°ÊÅØ)Âà∞ÂÖ∂‰ªñÂ∫ì F3";
+            this.toolStripButton_marcEditor_saveTo.ToolTipText = "Â§çÂà∂‰π¶ÁõÆËÆ∞ÂΩï(ÂåÖÊã¨ÂÜå„ÄÅÊúü„ÄÅËÆ¢Ë¥≠„ÄÅÂÆû‰Ωì‰ø°ÊÅØ)Âà∞ÂÖ∂‰ªñÂ∫ì F3";
             this.toolStripButton_marcEditor_saveTo.Click += new System.EventHandler(this.toolStripButton1_marcEditor_saveTo_Click);
             // 
             // toolStripButton_setTargetRecord
@@ -814,7 +846,7 @@ namespace dp2Circulation
             this.toolStripButton_setTargetRecord.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_setTargetRecord.Name = "toolStripButton_setTargetRecord";
             this.toolStripButton_setTargetRecord.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_setTargetRecord.Text = "…Ë÷√ƒø±Íº«¬º";
+            this.toolStripButton_setTargetRecord.Text = "ËÆæÁΩÆÁõÆÊ†áËÆ∞ÂΩï";
             this.toolStripButton_setTargetRecord.Click += new System.EventHandler(this.toolStripButton_setTargetRecord_Click);
             // 
             // toolStripButton_marcEditor_moveTo
@@ -825,7 +857,7 @@ namespace dp2Circulation
             this.toolStripButton_marcEditor_moveTo.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_marcEditor_moveTo.Name = "toolStripButton_marcEditor_moveTo";
             this.toolStripButton_marcEditor_moveTo.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_marcEditor_moveTo.Text = "“∆∂Ø Èƒøº«¬º";
+            this.toolStripButton_marcEditor_moveTo.Text = "ÁßªÂä®‰π¶ÁõÆËÆ∞ÂΩï";
             this.toolStripButton_marcEditor_moveTo.Click += new System.EventHandler(this.toolStripButton_marcEditor_moveTo_Click);
             // 
             // toolStripSplitButton_searchDup
@@ -833,28 +865,36 @@ namespace dp2Circulation
             this.toolStripSplitButton_searchDup.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
             this.toolStripSplitButton_searchDup.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ToolStripMenuItem_searchDupInExistWindow,
-            this.ToolStripMenuItem_searchDupInNewWindow});
+            this.ToolStripMenuItem_searchDupInNewWindow,
+            this.ToolStripMenuItem_checkUnique});
             this.toolStripSplitButton_searchDup.Image = ((System.Drawing.Image)(resources.GetObject("toolStripSplitButton_searchDup.Image")));
             this.toolStripSplitButton_searchDup.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
             this.toolStripSplitButton_searchDup.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripSplitButton_searchDup.Name = "toolStripSplitButton_searchDup";
             this.toolStripSplitButton_searchDup.Size = new System.Drawing.Size(38, 26);
-            this.toolStripSplitButton_searchDup.Text = "≤È÷ÿ (Ctrl+D)";
+            this.toolStripSplitButton_searchDup.Text = "Êü•Èáç (Ctrl+D)";
             this.toolStripSplitButton_searchDup.ButtonClick += new System.EventHandler(this.toolStripSplitButton_searchDup_ButtonClick);
             // 
             // ToolStripMenuItem_searchDupInExistWindow
             // 
             this.ToolStripMenuItem_searchDupInExistWindow.Name = "ToolStripMenuItem_searchDupInExistWindow";
             this.ToolStripMenuItem_searchDupInExistWindow.Size = new System.Drawing.Size(235, 22);
-            this.ToolStripMenuItem_searchDupInExistWindow.Text = "‘⁄“—æ≠¥Úø™µƒ≤È÷ÿ¥∞÷–≤È÷ÿ(&E)";
+            this.ToolStripMenuItem_searchDupInExistWindow.Text = "Âú®Â∑≤ÁªèÊâìÂºÄÁöÑÊü•ÈáçÁ™ó‰∏≠Êü•Èáç(&E)";
             this.ToolStripMenuItem_searchDupInExistWindow.Click += new System.EventHandler(this.ToolStripMenuItem_searchDupInExistWindow_Click);
             // 
             // ToolStripMenuItem_searchDupInNewWindow
             // 
             this.ToolStripMenuItem_searchDupInNewWindow.Name = "ToolStripMenuItem_searchDupInNewWindow";
             this.ToolStripMenuItem_searchDupInNewWindow.Size = new System.Drawing.Size(235, 22);
-            this.ToolStripMenuItem_searchDupInNewWindow.Text = "‘⁄–¬ø™µƒ≤È÷ÿ¥∞÷–≤È÷ÿ(&N)";
+            this.ToolStripMenuItem_searchDupInNewWindow.Text = "Âú®Êñ∞ÂºÄÁöÑÊü•ÈáçÁ™ó‰∏≠Êü•Èáç(&N)";
             this.ToolStripMenuItem_searchDupInNewWindow.Click += new System.EventHandler(this.ToolStripMenuItem_searchDupInNewWindow_Click);
+            // 
+            // ToolStripMenuItem_chechUnique
+            // 
+            this.ToolStripMenuItem_checkUnique.Name = "ToolStripMenuItem_chechUnique";
+            this.ToolStripMenuItem_checkUnique.Size = new System.Drawing.Size(235, 22);
+            this.ToolStripMenuItem_checkUnique.Text = "Ê£ÄÊü•ÂîØ‰∏ÄÊÄß(&U)";
+            this.ToolStripMenuItem_checkUnique.Click += new System.EventHandler(this.ToolStripMenuItem_checkUnique_Click);
             // 
             // toolStripButton_verifyData
             // 
@@ -864,7 +904,7 @@ namespace dp2Circulation
             this.toolStripButton_verifyData.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_verifyData.Name = "toolStripButton_verifyData";
             this.toolStripButton_verifyData.Size = new System.Drawing.Size(26, 26);
-            this.toolStripButton_verifyData.Text = "–£—È ˝æ› (Ctrl+Y)";
+            this.toolStripButton_verifyData.Text = "Ê†°È™åÊï∞ÊçÆ (Ctrl+Y)";
             this.toolStripButton_verifyData.Click += new System.EventHandler(this.toolStripButton_verifyData_Click);
             // 
             // toolStripSeparator3
@@ -880,7 +920,7 @@ namespace dp2Circulation
             this.toolStripButton_next.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_next.Name = "toolStripButton_next";
             this.toolStripButton_next.Size = new System.Drawing.Size(23, 26);
-            this.toolStripButton_next.Text = "œ¬“ªº«¬º";
+            this.toolStripButton_next.Text = "‰∏ã‰∏ÄËÆ∞ÂΩï";
             this.toolStripButton_next.Click += new System.EventHandler(this.toolStripButton_next_Click);
             // 
             // toolStripButton_prev
@@ -891,7 +931,7 @@ namespace dp2Circulation
             this.toolStripButton_prev.ImageTransparentColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(193)))));
             this.toolStripButton_prev.Name = "toolStripButton_prev";
             this.toolStripButton_prev.Size = new System.Drawing.Size(23, 26);
-            this.toolStripButton_prev.Text = "…œ“ªº«¬º";
+            this.toolStripButton_prev.Text = "‰∏ä‰∏ÄËÆ∞ÂΩï";
             this.toolStripButton_prev.Click += new System.EventHandler(this.toolStripButton_prev_Click);
             // 
             // toolStripButton_option
@@ -901,7 +941,7 @@ namespace dp2Circulation
             this.toolStripButton_option.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripButton_option.Name = "toolStripButton_option";
             this.toolStripButton_option.Size = new System.Drawing.Size(23, 26);
-            this.toolStripButton_option.Text = "—°œÓ";
+            this.toolStripButton_option.Text = "ÈÄâÈ°π";
             this.toolStripButton_option.Click += new System.EventHandler(this.toolStripButton_option_Click);
             // 
             // toolStripSeparator8
@@ -914,20 +954,28 @@ namespace dp2Circulation
             this.toolStripSplitButton_insertCoverImage.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
             this.toolStripSplitButton_insertCoverImage.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ToolStripMenuItem_insertCoverImageFromClipboard,
-            this.ToolStripMenuItem_removeCoverImage});
+            this.ToolStripMenuItem_removeCoverImage,
+            this.ToolStripMenuItem_insertCoverImageFromCamera});
             this.toolStripSplitButton_insertCoverImage.Image = ((System.Drawing.Image)(resources.GetObject("toolStripSplitButton_insertCoverImage.Image")));
             this.toolStripSplitButton_insertCoverImage.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripSplitButton_insertCoverImage.Name = "toolStripSplitButton_insertCoverImage";
             this.toolStripSplitButton_insertCoverImage.Size = new System.Drawing.Size(32, 26);
-            this.toolStripSplitButton_insertCoverImage.Text = "≤Â»Î∑‚√ÊÕºœÒ";
+            this.toolStripSplitButton_insertCoverImage.Text = "ÊèíÂÖ•Â∞ÅÈù¢ÂõæÂÉè";
             this.toolStripSplitButton_insertCoverImage.ButtonClick += new System.EventHandler(this.toolStripSplitButton_insertCoverImage_ButtonClick);
             // 
             // ToolStripMenuItem_insertCoverImageFromClipboard
             // 
             this.ToolStripMenuItem_insertCoverImageFromClipboard.Name = "ToolStripMenuItem_insertCoverImageFromClipboard";
             this.ToolStripMenuItem_insertCoverImageFromClipboard.Size = new System.Drawing.Size(212, 22);
-            this.ToolStripMenuItem_insertCoverImageFromClipboard.Text = "¥”ºÙÃ˘∞Â≤Â»Î∑‚√ÊÕºœÒ(&C)";
+            this.ToolStripMenuItem_insertCoverImageFromClipboard.Text = "‰ªéÂâ™Ë¥¥ÊùøÊèíÂÖ•Â∞ÅÈù¢ÂõæÂÉè(&C)";
             this.ToolStripMenuItem_insertCoverImageFromClipboard.Click += new System.EventHandler(this.ToolStripMenuItem_insertCoverImageFromClipboard_Click);
+            // 
+            // ToolStripMenuItem_insertCoverImageFromCamera
+            // 
+            this.ToolStripMenuItem_insertCoverImageFromCamera.Name = "ToolStripMenuItem_insertCoverImageFromCamera";
+            this.ToolStripMenuItem_insertCoverImageFromCamera.Size = new System.Drawing.Size(212, 22);
+            this.ToolStripMenuItem_insertCoverImageFromCamera.Text = "‰ªéÊëÑÂÉèÂ§¥ÊèíÂÖ•Â∞ÅÈù¢ÂõæÂÉè(&A)";
+            this.ToolStripMenuItem_insertCoverImageFromCamera.Click += new System.EventHandler(this.ToolStripMenuItem_insertCoverImageFromCamera_Click);
             // 
             // tabControl_itemAndIssue
             // 
@@ -943,6 +991,23 @@ namespace dp2Circulation
             this.tabControl_itemAndIssue.SelectedIndex = 0;
             this.tabControl_itemAndIssue.Size = new System.Drawing.Size(732, 133);
             this.tabControl_itemAndIssue.TabIndex = 1;
+            this.tabControl_itemAndIssue.MouseUp += TabControl_itemAndIssue_MouseUp;
+            // 
+            // contextMenuStrip_itemArea
+            // 
+            this.contextMenuStrip_itemArea.ImageScalingSize = new System.Drawing.Size(32, 32);
+            this.contextMenuStrip_itemArea.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.toolStripMenuItem_itemArea_ensureDisplay});
+            this.contextMenuStrip_itemArea.Name = "contextMenuStrip_itemArea";
+            this.contextMenuStrip_itemArea.Size = new System.Drawing.Size(101, 26);
+            this.contextMenuStrip_itemArea.Opening += new System.ComponentModel.CancelEventHandler(this.contextMenuStrip_itemArea_Opening);
+            // 
+            // toolStripMenuItem_itemArea_ensureDisplay
+            // 
+            this.toolStripMenuItem_itemArea_ensureDisplay.Name = "toolStripMenuItem_itemArea_ensureDisplay";
+            this.toolStripMenuItem_itemArea_ensureDisplay.Size = new System.Drawing.Size(100, 22);
+            this.toolStripMenuItem_itemArea_ensureDisplay.Text = "Á°Æ‰øùÊòæÁ§∫";
+            this.toolStripMenuItem_itemArea_ensureDisplay.Click += new System.EventHandler(this.toolStripMenuItem_itemArea_ensureDisplay_Click);
             // 
             // tabPage_item
             // 
@@ -953,7 +1018,7 @@ namespace dp2Circulation
             this.tabPage_item.Padding = new System.Windows.Forms.Padding(2);
             this.tabPage_item.Size = new System.Drawing.Size(724, 107);
             this.tabPage_item.TabIndex = 0;
-            this.tabPage_item.Text = "≤·";
+            this.tabPage_item.Text = "ÂÜå";
             this.tabPage_item.UseVisualStyleBackColor = true;
             // 
             // entityControl1
@@ -980,7 +1045,7 @@ namespace dp2Circulation
             this.tabPage_issue.Padding = new System.Windows.Forms.Padding(2);
             this.tabPage_issue.Size = new System.Drawing.Size(724, 107);
             this.tabPage_issue.TabIndex = 1;
-            this.tabPage_issue.Text = "∆⁄";
+            this.tabPage_issue.Text = "Êúü";
             this.tabPage_issue.UseVisualStyleBackColor = true;
             // 
             // issueControl1
@@ -1004,7 +1069,7 @@ namespace dp2Circulation
             this.tabPage_order.Name = "tabPage_order";
             this.tabPage_order.Size = new System.Drawing.Size(724, 107);
             this.tabPage_order.TabIndex = 3;
-            this.tabPage_order.Text = "≤…π∫";
+            this.tabPage_order.Text = "ÈááË¥≠";
             this.tabPage_order.UseVisualStyleBackColor = true;
             // 
             // orderControl1
@@ -1028,7 +1093,7 @@ namespace dp2Circulation
             this.tabPage_object.Name = "tabPage_object";
             this.tabPage_object.Size = new System.Drawing.Size(724, 107);
             this.tabPage_object.TabIndex = 2;
-            this.tabPage_object.Text = "∂‘œÛ";
+            this.tabPage_object.Text = "ÂØπË±°";
             this.tabPage_object.UseVisualStyleBackColor = true;
             // 
             // binaryResControl1
@@ -1053,7 +1118,7 @@ namespace dp2Circulation
             this.tabPage_comment.Name = "tabPage_comment";
             this.tabPage_comment.Size = new System.Drawing.Size(724, 107);
             this.tabPage_comment.TabIndex = 4;
-            this.tabPage_comment.Text = "∆¿◊¢";
+            this.tabPage_comment.Text = "ËØÑÊ≥®";
             this.tabPage_comment.UseVisualStyleBackColor = true;
             // 
             // commentControl1
@@ -1092,7 +1157,7 @@ namespace dp2Circulation
             this.button_register.Name = "button_register";
             this.button_register.Size = new System.Drawing.Size(92, 23);
             this.button_register.TabIndex = 2;
-            this.button_register.Text = "µ«º«";
+            this.button_register.Text = "ÁôªËÆ∞";
             this.button_register.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageBeforeText;
             this.button_register.UseVisualStyleBackColor = true;
             this.button_register.Click += new System.EventHandler(this.button_register_Click);
@@ -1105,7 +1170,7 @@ namespace dp2Circulation
             this.label3.Name = "label3";
             this.label3.Size = new System.Drawing.Size(77, 12);
             this.label3.TabIndex = 0;
-            this.label3.Text = "≤·Ãı¬Î∫≈(&B):";
+            this.label3.Text = "ÂÜåÊù°Á†ÅÂè∑(&B):";
             // 
             // textBox_itemBarcode
             // 
@@ -1124,7 +1189,7 @@ namespace dp2Circulation
             this.toolStrip1.Dock = System.Windows.Forms.DockStyle.None;
             this.toolStrip1.GripStyle = System.Windows.Forms.ToolStripGripStyle.Hidden;
             this.toolStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.toolStripButton_hideItemQuickImput});
+            this.toolStripButton_hideItemQuickInput});
             this.toolStrip1.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.Flow;
             this.toolStrip1.Location = new System.Drawing.Point(1, 0);
             this.toolStrip1.Name = "toolStrip1";
@@ -1133,16 +1198,16 @@ namespace dp2Circulation
             this.toolStrip1.TabIndex = 8;
             this.toolStrip1.Text = "toolStrip1";
             // 
-            // toolStripButton_hideItemQuickImput
+            // toolStripButton_hideItemQuickInput
             // 
-            this.toolStripButton_hideItemQuickImput.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
-            this.toolStripButton_hideItemQuickImput.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton_hideItemQuickImput.Image")));
-            this.toolStripButton_hideItemQuickImput.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
-            this.toolStripButton_hideItemQuickImput.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.toolStripButton_hideItemQuickImput.Name = "toolStripButton_hideItemQuickImput";
-            this.toolStripButton_hideItemQuickImput.Size = new System.Drawing.Size(28, 28);
-            this.toolStripButton_hideItemQuickImput.Text = "“˛≤ÿ≤·Ãı¬ÎøÏÀŸ ‰»Î√Ê∞Â";
-            this.toolStripButton_hideItemQuickImput.Click += new System.EventHandler(this.toolStripButton_hideItemQuickImput_Click);
+            this.toolStripButton_hideItemQuickInput.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.toolStripButton_hideItemQuickInput.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton_hideItemQuickInput.Image")));
+            this.toolStripButton_hideItemQuickInput.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
+            this.toolStripButton_hideItemQuickInput.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.toolStripButton_hideItemQuickInput.Name = "toolStripButton_hideItemQuickInput";
+            this.toolStripButton_hideItemQuickInput.Size = new System.Drawing.Size(28, 28);
+            this.toolStripButton_hideItemQuickInput.Text = "ÈöêËóèÂÜåÊù°Á†ÅÂø´ÈÄüËæìÂÖ•Èù¢Êùø";
+            this.toolStripButton_hideItemQuickInput.Click += new System.EventHandler(this.toolStripButton_hideItemQuickInput_Click);
             // 
             // imageList_itemType
             // 
@@ -1162,7 +1227,7 @@ namespace dp2Circulation
             // 
             this.ToolStripMenuItem_removeCoverImage.Name = "ToolStripMenuItem_removeCoverImage";
             this.ToolStripMenuItem_removeCoverImage.Size = new System.Drawing.Size(212, 22);
-            this.ToolStripMenuItem_removeCoverImage.Text = "«Â≥˝∑‚√ÊÕºœÒ(&R)";
+            this.ToolStripMenuItem_removeCoverImage.Text = "Ê∏ÖÈô§Â∞ÅÈù¢ÂõæÂÉè(&R)";
             this.ToolStripMenuItem_removeCoverImage.Click += new System.EventHandler(this.ToolStripMenuItem_removeCoverImage_Click);
             // 
             // EntityForm
@@ -1175,7 +1240,7 @@ namespace dp2Circulation
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(2);
             this.Name = "EntityForm";
-            this.Text = "÷÷≤·";
+            this.Text = "ÁßçÂÜå";
             this.Activated += new System.EventHandler(this.EntityForm_Activated);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.EntityForm_FormClosing);
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.EntityForm_FormClosed);
@@ -1297,7 +1362,7 @@ namespace dp2Circulation
         private System.Windows.Forms.ToolStripButton toolStripButton_saveAll;
         private System.Windows.Forms.ToolStripButton toolStripButton_verifyData;
         private System.Windows.Forms.ToolStrip toolStrip1;
-        private System.Windows.Forms.ToolStripButton toolStripButton_hideItemQuickImput;
+        private System.Windows.Forms.ToolStripButton toolStripButton_hideItemQuickInput;
         private System.Windows.Forms.ToolStrip toolStrip2;
         private System.Windows.Forms.ToolStripButton toolStripButton_hideSearchPanel;
         private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_enableSaveAllButton;
@@ -1305,17 +1370,25 @@ namespace dp2Circulation
         private System.Windows.Forms.ToolStripSplitButton toolStripSplitButton_searchDup;
         private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_searchDupInExistWindow;
         private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_searchDupInNewWindow;
+        private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_checkUnique;
         private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem_marcEditor_setActiveCatalogingRule;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator8;
         private System.Windows.Forms.ToolStripSplitButton toolStripSplitButton_insertCoverImage;
         private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_insertCoverImageFromClipboard;
+        private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_insertCoverImageFromCamera;
         private System.Windows.Forms.ComboBox comboBox_matchStyle;
         private DigitalPlatform.CommonControl.CheckedComboBox checkedComboBox_biblioDbNames;
         private System.Windows.Forms.ToolStripMenuItem MenuItem_marcEditor_getKeys;
+        private System.Windows.Forms.ToolStripMenuItem MenuItem_marcEditor_getSummary;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator9;
         private System.Windows.Forms.TabPage tabPage_template;
         private DigitalPlatform.EasyMarc.EasyMarcControl easyMarcControl1;
         private System.Windows.Forms.ToolStripMenuItem MenuItem_marcEditor_editMacroTable;
         private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItem_removeCoverImage;
+        private System.Windows.Forms.ToolStripMenuItem MenuItem_marcEditor_fixed;
+        private System.Windows.Forms.ToolStripMenuItem MenuItem_marcEditor_loadRecord;
+        private System.Windows.Forms.ContextMenuStrip contextMenuStrip_itemArea;
+        private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem_itemArea_ensureDisplay;
+
     }
 }

@@ -1,9 +1,9 @@
-﻿using System;
+﻿// #if REPORT_SN    // 定义 REPORT_SN 会启用报表窗的序列号
+
+using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Drawing;
-using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using System.Xml;
@@ -12,7 +12,6 @@ using System.Web;
 using System.Collections;
 using System.Diagnostics;
 using System.Threading;
-using System.Globalization;
 using System.Threading.Tasks;
 
 using Ionic.Zip;
@@ -28,7 +27,6 @@ using DigitalPlatform.GUI;
 using DigitalPlatform.Range;
 using DigitalPlatform.CommonControl;
 using DigitalPlatform.Script;
-using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.LibraryClient.localhost;
 
@@ -51,23 +49,23 @@ namespace dp2Circulation
 
         private void ReportForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 
-            this.UiState = this.MainForm.AppInfo.GetString(GetReportSection(), "ui_state", "");
+            this.UiState = Program.MainForm.AppInfo.GetString(GetReportSection(), "ui_state", "");
 
-#if NO
-            string strError = "";
-            int nRet = this.MainForm.VerifySerialCode("report", out strError);
-            if (nRet == -1)
-            {
-                MessageBox.Show(this.MainForm, "报表窗需要先设置序列号才能使用");
-                API.PostMessage(this.Handle, API.WM_CLOSE, 0, 0);
-                return;
-            }
-#endif
+            /*
+                        string strError = "";
+                        int nRet = Program.MainForm.VerifySerialCode("report", out strError);
+                        if (nRet == -1)
+                        {
+                            MessageBox.Show(Program.MainForm, "报表窗需要先设置序列号才能使用");
+                            API.PostMessage(this.Handle, API.WM_CLOSE, 0, 0);
+                            return;
+                        }
+            */
 
             DelayCheck();
         }
@@ -90,6 +88,25 @@ namespace dp2Circulation
                 {
                     MessageBox.Show(this, strError);
                 }));
+
+                Program.MainForm.ReportError("dp2circulation 打开 report_def.xml 文件时出现错误", "(安静报错)" + strError);
+
+                // 2017/5/18
+                // 自动修正错误，清空配置文件
+                {
+                    string strFileName = Path.Combine(GetBaseDirectory(), "report_def.xml");
+                    // 备份一下出错了的配置文件内容，便于将来追查原因
+                    string strSavingFileName = Path.Combine(GetBaseDirectory(), "report_def.xml.error");
+                    try
+                    {
+                        File.Copy(strFileName, strSavingFileName, true);
+                    }
+                    catch
+                    {
+
+                    }
+                    _cfg.InitializeCfgDom();
+                }
             }
 
             _cfg.FillList(this.listView_libraryConfig);
@@ -101,11 +118,11 @@ namespace dp2Circulation
 
             string dp2library_version = "2.60";
 
-            if (StringUtil.CompareVersion(this.MainForm.ServerVersion, dp2library_version) < 0)
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, dp2library_version) < 0)
             {
                 this.Invoke((Action)(() =>
                 {
-                    MessageBox.Show(this, "报表窗需要和 dp2library " + dp2library_version + " 以上版本配套使用。(当前 dp2library 版本为 " + this.MainForm.ServerVersion + ")\r\n\r\n请及时升级 dp2library 到最新版本");
+                    MessageBox.Show(this, "报表窗需要和 dp2library " + dp2library_version + " 以上版本配套使用。(当前 dp2library 版本为 " + Program.MainForm.ServerVersion + ")\r\n\r\n请及时升级 dp2library 到最新版本");
                 }));
             }
             else
@@ -159,8 +176,8 @@ namespace dp2Circulation
                 }
             }
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
-                this.MainForm.AppInfo.SetString(
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
+                Program.MainForm.AppInfo.SetString(
                     GetReportSection(),
                     "ui_state",
                     this.UiState);
@@ -232,7 +249,7 @@ namespace dp2Circulation
 
             // 删除不必要的索引
             {
-                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
                 // TODO: 对于 AccessLog 只删除它相关的一个索引
                 foreach (string type in OperLogTable.DbTypes)
@@ -257,7 +274,7 @@ namespace dp2Circulation
             // return:
             //      -1  错误
             //      0   成功
-            nRet = OperLogStatisForm.MakeLogFileNames(strStartDate,
+            nRet = OperLogLoader.MakeLogFileNames(strStartDate,
                 strEndDate,
                 true,  // true,
                 out filenames,
@@ -295,9 +312,9 @@ namespace dp2Circulation
                 loader.Channel = this.Channel;
                 loader.Stop = this.Progress;
                 // loader.owner = this;
-                loader.estimate = estimate;
-                loader.FileNames = filenames;
-                loader.Level = 2;  //  this.MainForm.OperLogLevel;
+                loader.Estimate = estimate;
+                loader.Dates = filenames;
+                loader.Level = 2;  //  Program.MainForm.OperLogLevel;
                 loader.AutoCache = false;
                 loader.CacheDir = "";
                 loader.Filter = "borrow,return,setReaderInfo,setBiblioInfo,setEntity,setOrder,setIssue,setComment,amerce,passgate,getRes";
@@ -311,7 +328,7 @@ namespace dp2Circulation
                 // List<OperLogLine> circu_lines = new List<OperLogLine>();
                 MultiBuffer buffer = new MultiBuffer();
                 buffer.Initial();
-                OperLogLineBase.MainForm = this.MainForm;
+                // OperLogLineBase.MainForm = Program.MainForm;
 
                 try
                 {
@@ -361,7 +378,7 @@ namespace dp2Circulation
                                     continue;
                                 }
 #endif
-                            if (StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.74") < 0
+                            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.74") < 0
                                 && strOperation == "amerce" && (strAction == "amerce" || strAction == "modifyprice"))
                             {
                                 // 重新获得当前日志记录，用最详细级别
@@ -472,6 +489,34 @@ namespace dp2Circulation
             }
         }
 
+        public static string GetResultSetName()
+        {
+            return "#" + Guid.NewGuid().ToString();
+        }
+
+        public void DeleteResultSet(string strResultSetName)
+        {
+            string strError = "";
+            // 删除全局结果集对象
+            // 管理结果集
+            // parameters:
+            //      strAction   share/remove 分别表示共享为全局结果集对象/删除全局结果集对象
+            long lRet = this.Channel.ManageSearchResult(
+                null,
+                "remove",
+                "",
+                strResultSetName,
+                out strError);
+            if (lRet == -1)
+            {
+                AutoCloseMessageBox.Show(
+                    this,
+                    "删除全局结果集 '" + strResultSetName + "' 时出错" + strError,
+                    10 * 1000,
+                    "");
+            }
+        }
+
         /* 2016/5/5 下午五点过
 System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总库实体/297710;cols(1)=记录'0000297710'在库中不存在
    在 dp2Circulation.ReportForm.BuildItemRecords(String strItemDbNameParam, Int64 lOldCount, Int64& lProgress, Int64& lIndex, String& strError) 位置 c:\dp2-master\dp2\dp2Circulation\Statis\ReportForm.cs:行号 514
@@ -506,99 +551,108 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
             {
                 connection.Open();
 
-                long lRet = this.Channel.SearchItem(stop,
-                    strItemDbNameParam,
-                    "", // (lIndex+1).ToString() + "-", // 
-                    -1,
-                    "__id",
-                    "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
-                    "zh",
-                    null,   // strResultSetName
-                    "",    // strSearchStyle
-                    "", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
-                    out strError);
-                if (lRet == -1)
-                    return -1;
-                if (lRet == 0)
-                    return 0;
-
-                long lHitCount = lRet;
-
-                AdjustProgressRange(lOldCount, lHitCount);
-
-                long lStart = lIndex;
-                long lCount = lHitCount - lIndex;
-                DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-                // bool bOutputBiblioRecPath = false;
-                // bool bOutputItemRecPath = false;
-                string strStyle = "";
-
+                // 采用全局结果集
+                string strResultSetName = GetResultSetName();
+                try
                 {
-                    // bOutputBiblioRecPath = true;
-                    strStyle = "id,cols,format:@coldef:*/barcode|*/location|*/accessNo|*/parent|*/state|*/operations/operation[@name='create']/@time|*/borrower|*/borrowDate|*/borrowPeriod|*/returningDate|*/price";
-                }
-
-                // 实体库名 --> 书目库名
-                Hashtable dbname_table = new Hashtable();
-
-                List<ItemLine> lines = new List<ItemLine>();
-
-                // 装入浏览格式
-                for (; ; )
-                {
-                    if (this.InvokeRequired == false)
-                        Application.DoEvents();	// 出让界面控制权
-
-                    if (stop != null && stop.State != 0)
-                    {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
-                        return -1;
-                    }
-
-                    lRet = this.Channel.GetSearchResult(
-                        stop,
-                        null,   // strResultSetName
-                        lStart,
-                        lCount,
-                        strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                    this.Channel.Timeout = TimeSpan.FromMinutes(5); // 2018/5/10
+                    long lRet = this.Channel.SearchItem(stop,
+                        strItemDbNameParam,
+                        "", // (lIndex+1).ToString() + "-", // 
+                        -1,
+                        "__id",
+                        "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
                         "zh",
-                        out searchresults,
+                        strResultSetName,
+                        "",    // strSearchStyle
+                        "", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
                         out strError);
                     if (lRet == -1)
-                    {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
                         return -1;
-                    }
-
                     if (lRet == 0)
-                    {
                         return 0;
+
+                    long lHitCount = lRet;
+
+                    AdjustProgressRange(lOldCount, lHitCount);
+
+                    long lStart = lIndex;
+                    long lCount = lHitCount - lIndex;
+                    DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                    // bool bOutputBiblioRecPath = false;
+                    // bool bOutputItemRecPath = false;
+                    string strStyle = "";
+
+                    {
+                        // bOutputBiblioRecPath = true;
+                        strStyle = "id,cols,format:@coldef:*/barcode|*/location|*/accessNo|*/parent|*/state|*/operations/operation[@name='create']/@time|*/borrower|*/borrowDate|*/borrowPeriod|*/returningDate|*/price|*/refID";
                     }
 
-                    // 处理浏览结果
-                    int i = 0;
-                    foreach (DigitalPlatform.LibraryClient.localhost.Record searchresult in searchresults)
-                    {
-                        // DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
+                    // 实体库名 --> 书目库名
+                    Hashtable dbname_table = new Hashtable();
 
-                        // 2016/4/12
-                        // 检查事项状态。主动抛出异常，避免后面出现 index 异常
-                        if (searchresult.Cols == null)
-                            throw new Exception("浏览事项 Cols 为空: (lStart=" + lStart + " index=" + i + ")  " + DumpResultItem(searchresult));
-                        if (searchresult.Cols.Length < 11)
+                    List<ItemLine> lines = new List<ItemLine>();
+
+                    // 装入浏览格式
+                    for (; ; )
+                    {
+                        if (this.InvokeRequired == false)
+                            Application.DoEvents(); // 出让界面控制权
+
+                        if (stop != null && stop.State != 0)
                         {
-                            // throw new Exception("浏览事项异常: (lStart=" + lStart + " index=" + i + ")  " + DumpResultItem(searchresult));
-                            goto CONTINUE;   // 中途遇到服务器有人删除册记录，很常见的现象
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
+                            return -1;
                         }
 
-                        ItemLine line = new ItemLine();
-                        line.ItemRecPath = searchresult.Path;
-                        line.ItemBarcode = searchresult.Cols[0];
-                        line.Location = searchresult.Cols[1];
-                        line.AccessNo = searchresult.Cols[2];
+                        lRet = this.Channel.GetSearchResult(
+                            stop,
+                            strResultSetName,
+                            lStart,
+                            lCount,
+                            strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                            "zh",
+                            out searchresults,
+                            out strError);
+                        if (lRet == -1)
+                        {
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
+                            return -1;
+                        }
 
-                        line.State = searchresult.Cols[4];
+                        if (lRet == 0)
+                        {
+                            return 0;
+                        }
+
+                        // 处理浏览结果
+                        int i = 0;
+                        foreach (DigitalPlatform.LibraryClient.localhost.Record searchresult in searchresults)
+                        {
+                            // DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
+
+                            // 2016/4/12
+                            // 检查事项状态。主动抛出异常，避免后面出现 index 异常
+                            if (searchresult.Cols == null)
+                                throw new Exception("浏览事项 Cols 为空: (lStart=" + lStart + " index=" + i + ")  " + DumpResultItem(searchresult));
+                            if (searchresult.Cols.Length < 12)
+                            {
+                                // throw new Exception("浏览事项异常: (lStart=" + lStart + " index=" + i + ")  " + DumpResultItem(searchresult));
+                                goto CONTINUE;   // 中途遇到服务器有人删除册记录，很常见的现象
+                            }
+
+                            ItemLine line = new ItemLine();
+                            line.ItemRecPath = searchresult.Path;
+                            line.ItemBarcode = searchresult.Cols[0];
+                            // 2016/9/26
+                            if (string.IsNullOrEmpty(line.ItemBarcode))
+                                line.ItemBarcode = "@refID:" + searchresult.Cols[11];
+
+                            line.Location = searchresult.Cols[1];
+                            line.AccessNo = searchresult.Cols[2];
+
+                            line.State = searchresult.Cols[4];
 #if NO
                         try
                         {
@@ -609,124 +663,109 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
                         {
                         }
 #endif
-                        line.CreateTime = SQLiteUtil.GetLocalTime(searchresult.Cols[5]);
+                            line.CreateTime = SQLiteUtil.GetLocalTime(searchresult.Cols[5]);
 
-                        line.Borrower = searchresult.Cols[6];
-                        line.BorrowTime = SQLiteUtil.GetLocalTime(searchresult.Cols[7]);
-                        line.BorrowPeriod = searchresult.Cols[8];
-                        // line.ReturningTime = ItemLine.GetLocalTime(searchresult.Cols[9]);
+                            line.Borrower = searchresult.Cols[6];
+                            line.BorrowTime = SQLiteUtil.GetLocalTime(searchresult.Cols[7]);
+                            line.BorrowPeriod = searchresult.Cols[8];
+                            // line.ReturningTime = ItemLine.GetLocalTime(searchresult.Cols[9]);
 
-                        if (string.IsNullOrEmpty(line.BorrowTime) == false)
-                        {
-                            string strReturningTime = "";
-                            // parameters:
-                            //      strBorrowTime   借阅起点时间。u 格式
-                            //      strReturningTime    返回应还时间。 u 格式
-                            nRet = AmerceOperLogLine.BuildReturingTimeString(line.BorrowTime,
-                line.BorrowPeriod,
-                out strReturningTime,
-                out strError);
-                            if (nRet == -1)
+                            if (string.IsNullOrEmpty(line.BorrowTime) == false)
                             {
-                                line.ReturningTime = "";
+                                string strReturningTime = "";
+                                // parameters:
+                                //      strBorrowTime   借阅起点时间。u 格式
+                                //      strReturningTime    返回应还时间。 u 格式
+                                nRet = AmerceOperLogLine.BuildReturingTimeString(line.BorrowTime,
+                    line.BorrowPeriod,
+                    out strReturningTime,
+                    out strError);
+                                if (nRet == -1)
+                                {
+                                    line.ReturningTime = "";
+                                }
+                                else
+                                    line.ReturningTime = strReturningTime;
                             }
                             else
-                                line.ReturningTime = strReturningTime;
+                                line.ReturningTime = "";
+
+                            string strPrice = searchresult.Cols[10];
+                            long value = 0;
+                            string strUnit = "";
+                            nRet = AmerceOperLogLine.ParsePriceString(strPrice,
+                    out value,
+                    out strUnit,
+                    out strError);
+                            if (nRet == -1)
+                            {
+                                line.Price = 0;
+                                line.Unit = "";
+                            }
+                            else
+                            {
+                                line.Price = value;
+                                line.Unit = strUnit;
+                            }
+
+                            string strItemDbName = Global.GetDbName(searchresult.Path);
+                            string strBiblioDbName = (string)dbname_table[strItemDbName];
+                            if (string.IsNullOrEmpty(strBiblioDbName) == true)
+                            {
+                                strBiblioDbName = Program.MainForm.GetBiblioDbNameFromItemDbName(strItemDbName);
+                                dbname_table[strItemDbName] = strBiblioDbName;
+                            }
+
+                            string strBiblioRecPath = strBiblioDbName + "/" + searchresult.Cols[3];
+
+                            line.BiblioRecPath = strBiblioRecPath;
+                            lines.Add(line);
+
+                            CONTINUE:
+                            i++;
                         }
-                        else
-                            line.ReturningTime = "";
 
-                        string strPrice = searchresult.Cols[10];
-                        long value = 0;
-                        string strUnit = "";
-                        nRet = AmerceOperLogLine.ParsePriceString(strPrice,
-                out value,
-                out strUnit,
-                out strError);
-                        if (nRet == -1)
+                        if (true)
                         {
-                            line.Price = 0;
-                            line.Unit = "";
-                        }
-                        else
-                        {
-                            line.Price = value;
-                            line.Unit = strUnit;
-                        }
-
-                        string strItemDbName = Global.GetDbName(searchresult.Path);
-                        string strBiblioDbName = (string)dbname_table[strItemDbName];
-                        if (string.IsNullOrEmpty(strBiblioDbName) == true)
-                        {
-                            strBiblioDbName = this.MainForm.GetBiblioDbNameFromItemDbName(strItemDbName);
-                            dbname_table[strItemDbName] = strBiblioDbName;
-                        }
-
-                        string strBiblioRecPath = strBiblioDbName + "/" + searchresult.Cols[3];
-
-                        line.BiblioRecPath = strBiblioRecPath;
-                        lines.Add(line);
-
-                    CONTINUE:
-                        i++;
-                    }
-
-                    if (true)
-                    {
-#if NO
-                        int nStart = 0;
-                        for (;; )
-                        {
-                            List<ItemLine> lines1 = new List<ItemLine>();
-                            int nLength = Math.Min(100, lines.Count - nStart);
-                            if (nLength <= 0)
-                                break;
-                            lines1.AddRange(lines.GetRange(nStart, nLength));
                             // 插入一批记录
                             nRet = ItemLine.AppendItemLines(
                                 connection,
-                                lines1,
+                                lines,
                                 true,   // 用 false 可以在测试阶段帮助发现重叠插入问题
                                 out strError);
                             if (nRet == -1)
                                 return -1;
-                            nStart += nLength;
+                            lIndex += lines.Count;
+                            lines.Clear();
                         }
-#endif
 
-                        // 插入一批记录
-                        nRet = ItemLine.AppendItemLines(
-                            connection,
-                            lines,
-                            true,   // 用 false 可以在测试阶段帮助发现重叠插入问题
-                            out strError);
-                        if (nRet == -1)
-                            return -1;
-                        lIndex += lines.Count;
-                        lines.Clear();
+                        lStart += searchresults.Length;
+                        lCount -= searchresults.Length;
+
+                        lProgress += searchresults.Length;
+                        // stop.SetProgressValue(lProgress);
+                        SetProgress(lProgress);
+
+                        stop.SetMessage(strItemDbNameParam + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
+                            + GetProgressTimeString(lProgress));
+
+                        if (lStart >= lHitCount || lCount <= 0)
+                            break;
                     }
 
-                    lStart += searchresults.Length;
-                    lCount -= searchresults.Length;
-
-                    lProgress += searchresults.Length;
-                    // stop.SetProgressValue(lProgress);
-                    SetProgress(lProgress);
-
-                    stop.SetMessage(strItemDbNameParam + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
-                        + GetProgressTimeString(lProgress));
-
-                    if (lStart >= lHitCount || lCount <= 0)
-                        break;
+                    if (lines.Count > 0)
+                    {
+                        Debug.Assert(false, "");
+                    }
                 }
-
-                if (lines.Count > 0)
+                finally
                 {
-                    Debug.Assert(false, "");
+                    this.DeleteResultSet(strResultSetName);
                 }
 
                 return 0;
             }
+
         }
 
         static string DumpResultItem(DigitalPlatform.LibraryClient.localhost.Record searchresult)
@@ -761,134 +800,144 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
             {
                 connection.Open();
 
-                long lRet = this.Channel.SearchReader(stop,
-                    strReaderDbNameParam,
-                    "", // (lIndex + 1).ToString() + "-", // 
-                    -1,
-                    "__id",
-                    "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
-                    "zh",
-                    null,   // strResultSetName
-                    // "",    // strSearchStyle
-                    "", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
-                    out strError);
-                if (lRet == -1)
-                    return -1;
-                if (lRet == 0)
-                    return 0;
-
-                long lHitCount = lRet;
-
-                AdjustProgressRange(lOldCount, lHitCount);
-
-                long lStart = lIndex;
-                long lCount = lHitCount - lIndex;
-                DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-                string strStyle = "id,cols,format:@coldef:*/barcode|*/department|*/readerType|*/name|*/state";
-
-                // 读者库名 --> 图书馆代码
-                Hashtable librarycode_table = new Hashtable();
-
-                List<ReaderLine> lines = new List<ReaderLine>();
-                // 装入浏览格式
-                for (; ; )
+                // 采用全局结果集
+                string strResultSetName = GetResultSetName();
+                try
                 {
-                    if (this.InvokeRequired == false)
-                        Application.DoEvents();	// 出让界面控制权
-
-                    if (stop != null && stop.State != 0)
-                    {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
-                        return -1;
-                    }
-
-                    lRet = this.Channel.GetSearchResult(
-                        stop,
-                        null,   // strResultSetName
-                        lStart,
-                        lCount,
-                        strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                    this.Channel.Timeout = TimeSpan.FromMinutes(5); // 2018/5/10
+                    long lRet = this.Channel.SearchReader(stop,
+                        strReaderDbNameParam,
+                        "", // (lIndex + 1).ToString() + "-", // 
+                        -1,
+                        "__id",
+                        "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
                         "zh",
-                        out searchresults,
+                        strResultSetName,
+                        // "",    // strSearchStyle
+                        "", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
                         out strError);
                     if (lRet == -1)
-                    {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
                         return -1;
-                    }
-
                     if (lRet == 0)
-                    {
                         return 0;
-                    }
 
-                    // 处理浏览结果
+                    long lHitCount = lRet;
 
-                    for (int i = 0; i < searchresults.Length; i++)
+                    AdjustProgressRange(lOldCount, lHitCount);
+
+                    long lStart = lIndex;
+                    long lCount = lHitCount - lIndex;
+                    DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                    string strStyle = "id,cols,format:@coldef:*/barcode|*/department|*/readerType|*/name|*/state";
+
+                    // 读者库名 --> 图书馆代码
+                    Hashtable librarycode_table = new Hashtable();
+
+                    List<ReaderLine> lines = new List<ReaderLine>();
+                    // 装入浏览格式
+                    for (; ; )
                     {
-                        DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
-                        if (searchresult.Cols.Length < 5)
+                        if (this.InvokeRequired == false)
+                            Application.DoEvents(); // 出让界面控制权
+
+                        if (stop != null && stop.State != 0)
                         {
-                            continue;   // 中途遇到服务器有人删除读者记录，很常见的现象
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
+                            return -1;
                         }
 
-                        ReaderLine line = new ReaderLine();
-                        line.ReaderRecPath = searchresult.Path;
-                        line.ReaderBarcode = searchresult.Cols[0];
-                        line.Department = searchresult.Cols[1];
-                        line.ReaderType = searchresult.Cols[2];
-                        line.Name = searchresult.Cols[3];
-                        line.State = searchresult.Cols[4];
-
-                        string strReaderDbName = Global.GetDbName(searchresult.Path);
-                        string strLibraryCode = (string)librarycode_table[strReaderDbName];
-                        if (string.IsNullOrEmpty(strLibraryCode) == true)
+                        lRet = this.Channel.GetSearchResult(
+                            stop,
+                            strResultSetName,
+                            lStart,
+                            lCount,
+                            strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                            "zh",
+                            out searchresults,
+                            out strError);
+                        if (lRet == -1)
                         {
-                            strLibraryCode = this.MainForm.GetReaderDbLibraryCode(strReaderDbName);
-                            librarycode_table[strReaderDbName] = strLibraryCode;
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
+                            return -1;
                         }
-                        line.LibraryCode = strLibraryCode;
-                        lines.Add(line);
-                    }
+
+                        if (lRet == 0)
+                        {
+                            return 0;
+                        }
+
+                        // 处理浏览结果
+
+                        for (int i = 0; i < searchresults.Length; i++)
+                        {
+                            DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
+                            if (searchresult.Cols.Length < 5)
+                            {
+                                continue;   // 中途遇到服务器有人删除读者记录，很常见的现象
+                            }
+
+                            ReaderLine line = new ReaderLine();
+                            line.ReaderRecPath = searchresult.Path;
+                            line.ReaderBarcode = searchresult.Cols[0];
+                            line.Department = searchresult.Cols[1];
+                            line.ReaderType = searchresult.Cols[2];
+                            line.Name = searchresult.Cols[3];
+                            line.State = searchresult.Cols[4];
+
+                            string strReaderDbName = Global.GetDbName(searchresult.Path);
+                            string strLibraryCode = (string)librarycode_table[strReaderDbName];
+                            if (string.IsNullOrEmpty(strLibraryCode) == true)
+                            {
+                                strLibraryCode = Program.MainForm.GetReaderDbLibraryCode(strReaderDbName);
+                                librarycode_table[strReaderDbName] = strLibraryCode;
+                            }
+                            line.LibraryCode = strLibraryCode;
+                            lines.Add(line);
+                        }
 
 #if NO
                     if (lines.Count >= INSERT_BATCH
                         || ((lStart + searchresults.Length >= lHitCount || lCount - searchresults.Length <= 0) && lines.Count > 0)
                         )
 #endif
-                    {
-                        // 插入一批读者记录
-                        nRet = ReaderLine.AppendReaderLines(
-                            connection,
-                            lines,
-                            true,   // 用 false 可以在测试阶段帮助发现重叠插入问题
-                            out strError);
-                        if (nRet == -1)
-                            return -1;
+                        {
+                            // 插入一批读者记录
+                            nRet = ReaderLine.AppendReaderLines(
+                                connection,
+                                lines,
+                                true,   // 用 false 可以在测试阶段帮助发现重叠插入问题
+                                out strError);
+                            if (nRet == -1)
+                                return -1;
 
-                        lIndex += lines.Count;
-                        lines.Clear();
+                            lIndex += lines.Count;
+                            lines.Clear();
+                        }
+
+                        lStart += searchresults.Length;
+                        lCount -= searchresults.Length;
+
+                        // lIndex += searchresults.Length;
+                        lProgress += searchresults.Length;
+                        // stop.SetProgressValue(lProgress);
+                        SetProgress(lProgress);
+
+                        stop.SetMessage(strReaderDbNameParam + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
+                            + GetProgressTimeString(lProgress));
+
+                        if (lStart >= lHitCount || lCount <= 0)
+                            break;
                     }
 
-                    lStart += searchresults.Length;
-                    lCount -= searchresults.Length;
-
-                    // lIndex += searchresults.Length;
-                    lProgress += searchresults.Length;
-                    // stop.SetProgressValue(lProgress);
-                    SetProgress(lProgress);
-
-                    stop.SetMessage(strReaderDbNameParam + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
-                        + GetProgressTimeString(lProgress));
-
-                    if (lStart >= lHitCount || lCount <= 0)
-                        break;
+                    if (lines.Count > 0)
+                    {
+                        Debug.Assert(false, "");
+                    }
                 }
-
-                if (lines.Count > 0)
+                finally
                 {
-                    Debug.Assert(false, "");
+                    this.DeleteResultSet(strResultSetName);
                 }
 
                 return 0;
@@ -914,167 +963,176 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
                 string strQueryXml = "";
 
                 // 2015/11/25
-                this.Channel.Timeout = new TimeSpan(0, 5, 0);
-                long lRet = this.Channel.SearchBiblio(stop,
-                    strBiblioDbNameParam,
-                    "", // (lIndex + 1).ToString() + "-", // 
-                    -1,
-                    "recid",     // "__id",
-                    "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
-                    "zh",
-                    null,   // strResultSetName
-                    "",    // strSearchStyle
-                    "", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
-                    "",
-                    out strQueryXml,
-                    out strError);
-                if (lRet == -1)
-                    return -1;
-                if (lRet == 0)
-                    return 0;
-
-                long lHitCount = lRet;
-
-                AdjustProgressRange(lOldCount, lHitCount);
-
-                long lStart = lIndex;
-                long lCount = lHitCount - lIndex;
-                DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-                // string strStyle = "id,cols,format:@coldef:*/barcode|*/department|*/readerType|*/name";
-                string strStyle = "id";
-
-                // 读者库名 --> 图书馆代码
-                // Hashtable librarycode_table = new Hashtable();
-
-                List<BiblioLine> lines = new List<BiblioLine>();
-                List<string> biblio_recpaths = new List<string>();
-                // 装入浏览格式
-                for (; ; )
+                // TODO: 采用全局结果集
+                string strResultSetName = GetResultSetName();
+                try
                 {
-                    if (this.InvokeRequired == false)
-                        Application.DoEvents();	// 出让界面控制权
-
-                    if (stop != null && stop.State != 0)
-                    {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
-                        return -1;
-                    }
-
-                    // 2015/11/25
-                    this.Channel.Timeout = new TimeSpan(0, 0, 30);
-                    lRet = this.Channel.GetSearchResult(
-                        stop,
-                        null,   // strResultSetName
-                        lStart,
-                        lCount,
-                        strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                    this.Channel.Timeout = new TimeSpan(0, 5, 0);
+                    long lRet = this.Channel.SearchBiblio(stop,
+                        strBiblioDbNameParam,
+                        "", // (lIndex + 1).ToString() + "-", // 
+                        -1,
+                        "recid",     // "__id",
+                        "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
                         "zh",
-                        out searchresults,
+                        strResultSetName,
+                        "",    // strSearchStyle
+                        "", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
+                        "",
+                        out strQueryXml,
                         out strError);
                     if (lRet == -1)
-                    {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
                         return -1;
-                    }
-
                     if (lRet == 0)
-                    {
                         return 0;
-                    }
 
-                    // 处理浏览结果
+                    long lHitCount = lRet;
 
-                    foreach (DigitalPlatform.LibraryClient.localhost.Record searchresult in searchresults)
+                    AdjustProgressRange(lOldCount, lHitCount);
+
+                    long lStart = lIndex;
+                    long lCount = lHitCount - lIndex;
+                    DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                    // string strStyle = "id,cols,format:@coldef:*/barcode|*/department|*/readerType|*/name";
+                    string strStyle = "id";
+
+                    // 读者库名 --> 图书馆代码
+                    // Hashtable librarycode_table = new Hashtable();
+
+                    List<BiblioLine> lines = new List<BiblioLine>();
+                    List<string> biblio_recpaths = new List<string>();
+                    // 装入浏览格式
+                    for (; ; )
                     {
-                        // DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
+                        if (this.InvokeRequired == false)
+                            Application.DoEvents(); // 出让界面控制权
 
-                        BiblioLine line = new BiblioLine();
-                        line.BiblioRecPath = searchresult.Path;
-                        lines.Add(line);
+                        if (stop != null && stop.State != 0)
+                        {
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
+                            return -1;
+                        }
 
-                        biblio_recpaths.Add(searchresult.Path);
-                    }
+                        // 2015/11/25
+                        this.Channel.Timeout = new TimeSpan(0, 0, 30);
+                        lRet = this.Channel.GetSearchResult(
+                            stop,
+                            strResultSetName,
+                            lStart,
+                            lCount,
+                            strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                            "zh",
+                            out searchresults,
+                            out strError);
+                        if (lRet == -1)
+                        {
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
+                            return -1;
+                        }
+
+                        if (lRet == 0)
+                        {
+                            return 0;
+                        }
+
+                        // 处理浏览结果
+
+                        foreach (DigitalPlatform.LibraryClient.localhost.Record searchresult in searchresults)
+                        {
+                            // DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
+
+                            BiblioLine line = new BiblioLine();
+                            line.BiblioRecPath = searchresult.Path;
+                            lines.Add(line);
+
+                            biblio_recpaths.Add(searchresult.Path);
+                        }
 
 #if NO
                     if (lines.Count >= INSERT_BATCH
                         || ((lStart + searchresults.Length >= lHitCount || lCount - searchresults.Length <= 0) && lines.Count > 0)
                         )
 #endif
-                    {
-                        Debug.Assert(biblio_recpaths.Count == lines.Count, "");
-
-                        // 2015/11/25
-                        this.Channel.Timeout = new TimeSpan(0, 0, 30);
-
-                        // 获得书目摘要
-                        BiblioLoader loader = new BiblioLoader();
-                        loader.Channel = this.Channel;
-                        loader.Stop = this.Progress;
-                        loader.Format = "summary";
-                        loader.GetBiblioInfoStyle = GetBiblioInfoStyle.None;
-                        loader.RecPaths = biblio_recpaths;
-
-                        loader.Prompt -= new MessagePromptEventHandler(loader_Prompt);
-                        loader.Prompt += new MessagePromptEventHandler(loader_Prompt);
-
-                        try
                         {
-                            int i = 0;
-                            foreach (BiblioItem item in loader)
+                            Debug.Assert(biblio_recpaths.Count == lines.Count, "");
+
+                            // 2015/11/25
+                            this.Channel.Timeout = new TimeSpan(0, 0, 30);
+
+                            // 获得书目摘要
+                            BiblioLoader loader = new BiblioLoader();
+                            loader.Channel = this.Channel;
+                            loader.Stop = this.Progress;
+                            loader.Format = "summary";
+                            loader.GetBiblioInfoStyle = GetBiblioInfoStyle.None;
+                            loader.RecPaths = biblio_recpaths;
+
+                            loader.Prompt -= new MessagePromptEventHandler(loader_Prompt);
+                            loader.Prompt += new MessagePromptEventHandler(loader_Prompt);
+
+                            try
                             {
-                                // this.Progress.SetMessage("正在加入 " + (i + 1).ToString() + "/" + targetLeft.Count.ToString() + " 个书目摘要，可能需要较长时间 ...");
-
-                                BiblioLine line = lines[i];
-                                if (string.IsNullOrEmpty(item.Content) == false)
+                                int i = 0;
+                                foreach (BiblioItem item in loader)
                                 {
-                                    if (item.Content.Length > 4000)
-                                        line.Summary = item.Content.Substring(0, 4000);
-                                    else
-                                        line.Summary = item.Content;
+                                    // this.Progress.SetMessage("正在加入 " + (i + 1).ToString() + "/" + targetLeft.Count.ToString() + " 个书目摘要，可能需要较长时间 ...");
+
+                                    BiblioLine line = lines[i];
+                                    if (string.IsNullOrEmpty(item.Content) == false)
+                                    {
+                                        if (item.Content.Length > 4000)
+                                            line.Summary = item.Content.Substring(0, 4000);
+                                        else
+                                            line.Summary = item.Content;
+                                    }
+
+                                    i++;
                                 }
-
-                                i++;
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            strError = "ReportForm {72A00ADB-1F9F-45FA-A31E-6956569045D9} exception: " + ExceptionUtil.GetAutoText(ex);
-                            return -1;
-                        }
-                        biblio_recpaths.Clear();
+                            catch (Exception ex)
+                            {
+                                strError = "ReportForm {72A00ADB-1F9F-45FA-A31E-6956569045D9} exception: " + ExceptionUtil.GetAutoText(ex);
+                                return -1;
+                            }
+                            biblio_recpaths.Clear();
 
-                        // 插入一批书目记录
-                        nRet = BiblioLine.AppendBiblioLines(
-                            connection,
-                            lines,
-                            true,   // 用 false 可以在测试阶段帮助发现重叠插入问题
-                            out strError);
-                        if (nRet == -1)
-                            return -1;
+                            // 插入一批书目记录
+                            nRet = BiblioLine.AppendBiblioLines(
+                                connection,
+                                lines,
+                                true,   // 用 false 可以在测试阶段帮助发现重叠插入问题
+                                out strError);
+                            if (nRet == -1)
+                                return -1;
 
-                        lIndex += lines.Count;
-                        lines.Clear();
+                            lIndex += lines.Count;
+                            lines.Clear();
+                        }
+
+                        lStart += searchresults.Length;
+                        lCount -= searchresults.Length;
+
+                        // lIndex += searchresults.Length;
+                        lProgress += searchresults.Length;
+                        // stop.SetProgressValue(lProgress);
+                        SetProgress(lProgress);
+
+                        stop.SetMessage(strBiblioDbNameParam + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
+                            + GetProgressTimeString(lProgress));
+
+                        if (lStart >= lHitCount || lCount <= 0)
+                            break;
                     }
 
-                    lStart += searchresults.Length;
-                    lCount -= searchresults.Length;
-
-                    // lIndex += searchresults.Length;
-                    lProgress += searchresults.Length;
-                    // stop.SetProgressValue(lProgress);
-                    SetProgress(lProgress);
-
-                    stop.SetMessage(strBiblioDbNameParam + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
-                        + GetProgressTimeString(lProgress));
-
-                    if (lStart >= lHitCount || lCount <= 0)
-                        break;
+                    if (lines.Count > 0)
+                    {
+                        Debug.Assert(false, "");
+                    }
                 }
-
-                if (lines.Count > 0)
+                finally
                 {
-                    Debug.Assert(false, "");
+                    this.DeleteResultSet(strResultSetName);
                 }
 
                 return 0;
@@ -1221,9 +1279,9 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
             strError = "";
             styles = new List<BiblioDbFromInfo>();
 
-            for (int i = 0; i < this.MainForm.BiblioDbFromInfos.Length; i++)
+            for (int i = 0; i < Program.MainForm.BiblioDbFromInfos.Length; i++)
             {
-                BiblioDbFromInfo info = this.MainForm.BiblioDbFromInfos[i];
+                BiblioDbFromInfo info = Program.MainForm.BiblioDbFromInfos[i];
                 if (StringUtil.IsInList("__class", info.Style) == true)
                 {
                     string strStyle = GetPureStyle(info.Style);
@@ -1250,9 +1308,9 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
             strError = "";
             styles = new List<string>();
 
-            for (int i = 0; i < this.MainForm.BiblioDbFromInfos.Length; i++)
+            for (int i = 0; i < Program.MainForm.BiblioDbFromInfos.Length; i++)
             {
-                BiblioDbFromInfo info = this.MainForm.BiblioDbFromInfos[i];
+                BiblioDbFromInfo info = Program.MainForm.BiblioDbFromInfos[i];
                 if (StringUtil.IsInList("__class", info.Style) == true)
                 {
                     string strStyle = GetPureStyle(info.Style);
@@ -1304,121 +1362,131 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
 
                 string strQueryXml = "";
 
-                long lRet = this.Channel.SearchBiblio(stop,
-                    strBiblioDbNameParam,
-                    "", // 
-                    -1,
-                    strClassFromStyle,     // "__id",
-                    "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
-                    "zh",
-                    null,   // strResultSetName
-                    "",    // strSearchStyle
-                    "keyid", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
-                    "",
-                    out strQueryXml,
-                    out strError);
-                if (lRet == -1)
+                // 采用全局结果集
+                string strResultSetName = GetResultSetName();
+                try
                 {
-                    if (this.Channel.ErrorCode == ErrorCode.FromNotFound)
-                        return 0;
-                    return -1;
-                }
-                if (lRet == 0)
-                    return 0;
-
-                long lHitCount = lRet;
-
-                AdjustProgressRange(lOldCount, lHitCount);
-
-                long lStart = lIndex;
-                long lCount = lHitCount - lIndex;
-                DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
-
-                // string strStyle = "id,cols,format:@coldef:*/barcode|*/department|*/readerType|*/name";
-                string strStyle = "keyid,id,key";
-
-                // 装入浏览格式
-                List<ClassLine> lines = new List<ClassLine>();
-                for (; ; )
-                {
-                    if (this.InvokeRequired == false)
-                        Application.DoEvents();	// 出让界面控制权
-
-                    if (stop != null && stop.State != 0)
-                    {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
-                        return -1;
-                    }
-
-                    lRet = this.Channel.GetSearchResult(
-                        stop,
-                        null,   // strResultSetName
-                        lStart,
-                        lCount,
-                        strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                    this.Channel.Timeout = TimeSpan.FromMinutes(5); // 2018/5/10
+                    long lRet = this.Channel.SearchBiblio(stop,
+                        strBiblioDbNameParam,
+                        "", // 
+                        -1,
+                        strClassFromStyle,     // "__id",
+                        "left", // this.textBox_queryWord.Text == "" ? "left" : "exact",    // 原来为left 2007/10/18 changed
                         "zh",
-                        out searchresults,
+                        strResultSetName,
+                        "",    // strSearchStyle
+                        "keyid", //strOutputStyle, // (bOutputKeyCount == true ? "keycount" : ""),
+                        "",
+                        out strQueryXml,
                         out strError);
                     if (lRet == -1)
                     {
-                        strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
+                        if (this.Channel.ErrorCode == ErrorCode.FromNotFound)
+                            return 0;
                         return -1;
                     }
-
                     if (lRet == 0)
-                    {
                         return 0;
-                    }
 
-                    // 处理浏览结果
-                    foreach (DigitalPlatform.LibraryClient.localhost.Record searchresult in searchresults)
+                    long lHitCount = lRet;
+
+                    AdjustProgressRange(lOldCount, lHitCount);
+
+                    long lStart = lIndex;
+                    long lCount = lHitCount - lIndex;
+                    DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                    // string strStyle = "id,cols,format:@coldef:*/barcode|*/department|*/readerType|*/name";
+                    string strStyle = "keyid,id,key";
+
+                    // 装入浏览格式
+                    List<ClassLine> lines = new List<ClassLine>();
+                    for (; ; )
                     {
-                        // DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
+                        if (this.InvokeRequired == false)
+                            Application.DoEvents(); // 出让界面控制权
 
-                        ClassLine line = new ClassLine();
-                        line.BiblioRecPath = searchresult.Path;
-                        if (searchresult.Keys != null && searchresult.Keys.Length > 0)
-                            line.Class = searchresult.Keys[0].Key;
-                        lines.Add(line);
-                    }
+                        if (stop != null && stop.State != 0)
+                        {
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，用户中断...";
+                            return -1;
+                        }
+
+                        lRet = this.Channel.GetSearchResult(
+                            stop,
+                            strResultSetName,
+                            lStart,
+                            lCount,
+                            strStyle, // bOutputKeyCount == true ? "keycount" : "id,cols",
+                            "zh",
+                            out searchresults,
+                            out strError);
+                        if (lRet == -1)
+                        {
+                            strError = "检索共命中 " + lHitCount.ToString() + " 条，已装入 " + lStart.ToString() + " 条，" + strError;
+                            return -1;
+                        }
+
+                        if (lRet == 0)
+                        {
+                            return 0;
+                        }
+
+                        // 处理浏览结果
+                        foreach (DigitalPlatform.LibraryClient.localhost.Record searchresult in searchresults)
+                        {
+                            // DigitalPlatform.LibraryClient.localhost.Record searchresult = searchresults[i];
+
+                            ClassLine line = new ClassLine();
+                            line.BiblioRecPath = searchresult.Path;
+                            if (searchresult.Keys != null && searchresult.Keys.Length > 0)
+                                line.Class = searchresult.Keys[0].Key;
+                            lines.Add(line);
+                        }
 
 #if NO
                     if (lines.Count >= INSERT_BATCH
                         || ((lStart + searchresults.Length >= lHitCount || lCount - searchresults.Length <= 0) && lines.Count > 0)
                         )
 #endif
-                    {
-                        // 插入一批分类号记录
-                        nRet = ClassLine.AppendClassLines(
-                            connection,
-                            strClassTableName,
-                            lines,
-                            out strError);
-                        if (nRet == -1)
-                            return -1;
+                        {
+                            // 插入一批分类号记录
+                            nRet = ClassLine.AppendClassLines(
+                                connection,
+                                strClassTableName,
+                                lines,
+                                out strError);
+                            if (nRet == -1)
+                                return -1;
 
-                        lIndex += lines.Count;
-                        lines.Clear();
+                            lIndex += lines.Count;
+                            lines.Clear();
+                        }
+
+                        lStart += searchresults.Length;
+                        lCount -= searchresults.Length;
+
+                        // lIndex += searchresults.Length;
+                        lProgress += searchresults.Length;
+                        // stop.SetProgressValue(lProgress);
+                        SetProgress(lProgress);
+
+                        stop.SetMessage(strBiblioDbNameParam + " " + strClassFromStyle + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
+                            + GetProgressTimeString(lProgress));
+
+                        if (lStart >= lHitCount || lCount <= 0)
+                            break;
                     }
 
-                    lStart += searchresults.Length;
-                    lCount -= searchresults.Length;
-
-                    // lIndex += searchresults.Length;
-                    lProgress += searchresults.Length;
-                    // stop.SetProgressValue(lProgress);
-                    SetProgress(lProgress);
-
-                    stop.SetMessage(strBiblioDbNameParam + " " + strClassFromStyle + " " + lStart.ToString() + "/" + lHitCount.ToString() + " "
-                        + GetProgressTimeString(lProgress));
-
-                    if (lStart >= lHitCount || lCount <= 0)
-                        break;
+                    if (lines.Count > 0)
+                    {
+                        Debug.Assert(false, "");
+                    }
                 }
-
-                if (lines.Count > 0)
+                finally
                 {
-                    Debug.Assert(false, "");
+                    this.DeleteResultSet(strResultSetName);
                 }
 
                 return 0;
@@ -2738,7 +2806,7 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
             }
 
             return 0;
-        FOUND:
+            FOUND:
             macro_table["%linecount%"] = tableDepartment.Count.ToString();
             macro_table["%daterange%"] = strDateRange;
 
@@ -2880,7 +2948,7 @@ System.Exception: 浏览事项异常: (lStart=293600 index=143)  path=图书总�
                 try
                 {
                     strOutputFileName = Path.Combine(strOutputDir,
-                        // strLibraryCode + "\\" + 
+                         // strLibraryCode + "\\" + 
                          strPureFileName);    // xlsx
                 }
                 catch (System.ArgumentException ex)
@@ -3897,7 +3965,7 @@ out string strError)
                 text.Append("\r\n\r\n");
             }
 
-            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
             using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
             {
@@ -3969,7 +4037,7 @@ out string strError)
                 text.Append("\r\n\r\n");
             }
 
-            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
             using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
             {
@@ -4053,7 +4121,7 @@ out string strError)
                 text.Append("\r\n\r\n");
             }
 
-            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
             using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
             {
@@ -4267,7 +4335,7 @@ select readerbarcode, name, department from reader  WHERE librarycode = '合肥�
                 // 122 表 按照读者 *姓名* 没有借书的读者
                 strCommand =
                      "create temp table tt as select operlogcircu.readerbarcode "
-                     + " FROM operlogcircu JOIN reader ON operlogcircu.readerbarcode <> '' AND operlogcircu.readerbarcode = reader.readerbarcode "
+                     + " FROM operlogcircu JOIN reader ON operlogcircu.readerbarcode <> '' AND operlogcircu.readerbarcode = reader.readerbarcode AND reader.state = '' "    // 2016/11/24 增加对 state 字段的判断
                      + " WHERE operlogcircu.operation = 'borrow' and operlogcircu.action = 'borrow' "
                      + "     AND operlogcircu.date >= '" + strStartDate + "' AND operlogcircu.date <= '" + strEndDate + "' "
                      + "     AND reader.librarycode = '" + strLibraryCode + "';"
@@ -4284,7 +4352,7 @@ select readerbarcode, name, department from reader  WHERE librarycode = '合肥�
                 // 9122 表 按照读者 *姓名* 没有阅读的读者
                 strCommand =
                      "create temp table tt as select operlogcircu.readerbarcode "
-                     + " FROM operlogcircu JOIN reader ON operlogcircu.readerbarcode <> '' AND operlogcircu.readerbarcode = reader.readerbarcode "
+                     + " FROM operlogcircu JOIN reader ON operlogcircu.readerbarcode <> '' AND operlogcircu.readerbarcode = reader.readerbarcode AND reader.state = '' "    // 2016/11/24 增加对 state 字段的判断
                      + " WHERE operlogcircu.operation = 'return' and operlogcircu.action = 'read' "
                      + "     AND operlogcircu.date >= '" + strStartDate + "' AND operlogcircu.date <= '" + strEndDate + "' "
                      + "     AND reader.librarycode = '" + strLibraryCode + "';"
@@ -4397,7 +4465,8 @@ select readerbarcode, name, department from reader  WHERE librarycode = '合肥�
             }
 
             string strLibraryCode = Global.GetLibraryCode(strLocation);
-            string strLocationLike = " operlogcircu.librarycode like '%," + strLibraryCode + ",%' ";
+            // string strLocationLike = " operlogcircu.librarycode like '%," + strLibraryCode + ",%' "; // 不知何时用的这种方法。这种方法的问题是，如果一些图书中途被划拨给某个其他分馆，用这种方式就会导致 [全部] 的几个表统计出来的数量偏少。而用 item.location 判断就没有这个问题 
+            string strLocationLike = " item.location like '" + strLocation + "%' "; // 2017/6/21 改回用这种方式。因为要统计洞庭湖校区的 2017 2 到 6 月的数据
             if (string.IsNullOrEmpty(Global.GetLocationRoom(strLocation)) == false)
             {
                 // 改为沿用以前的方法
@@ -4538,12 +4607,12 @@ select readerbarcode, name, department from reader  WHERE librarycode = '合肥�
                 // 2015/6/17 212 和 213 表合并为 212 表
 
                 strCommand =
-                    // "select substr(" + strDistinctClassTableName + ".class,1,1) as classhead, count(*) as count "
+    // "select substr(" + strDistinctClassTableName + ".class,1,1) as classhead, count(*) as count "
     "select " + strClassColumn + " as classhead, "
 
                     + " count(case operlogcircu.operation when 'borrow' then operlogcircu.action end) as borrow, "
                     + " count(case operlogcircu.operation when 'return' then operlogcircu.action end) as return "
-                    // strCommand = "select " + strClassTableName + ".class as class, count(*) as count "
+     // strCommand = "select " + strClassTableName + ".class as class, count(*) as count "
      + " FROM operlogcircu left outer JOIN item ON operlogcircu.itembarcode <> '' AND operlogcircu.itembarcode = item.itembarcode "
      + " left outer JOIN " + strDistinctClassTableName + " ON item.bibliorecpath <> '' AND " + strDistinctClassTableName + ".bibliorecpath = item.bibliorecpath "
      + " WHERE operlogcircu.date >= '" + strStartDate + "' AND operlogcircu.date <= '" + strEndDate + "' "
@@ -4684,7 +4753,7 @@ out strError);
 
                 string strTimeCondition = " substr(item.createtime,1,10) >= '" + strStartDate + "' "  // 限定册记录创建的时间在 start 以后
                      + " AND substr(item.createtime,1,10) <= '" + strEndDate + "' ";
-                if (strStartDate.Replace("-","") == "00010101")
+                if (strStartDate.Replace("-", "") == "00010101")
                     strTimeCondition = " ((substr(item.createtime,1,10) >= '" + strStartDate + "' "  // 限定册记录创建的时间在 start 以后
                      + " AND substr(item.createtime,1,10) <= '" + strEndDate + "' )"
                      + " OR item.createtime = '') ";
@@ -4692,7 +4761,7 @@ out strError);
 
                 // 301 表 按照图书 *分类* 分类的图书册数表
                 strCommand = "select classhead, count(path1) as bcount, sum (icount) from ( "
-                    // + "select substr(" + strDistinctClassTableName + ".class,1,1) as classhead, item.bibliorecpath as path1, count(item.itemrecpath) as icount "
+                     // + "select substr(" + strDistinctClassTableName + ".class,1,1) as classhead, item.bibliorecpath as path1, count(item.itemrecpath) as icount "
                      + "select " + strClassColumn + " as classhead, item.bibliorecpath as path1, count(item.itemrecpath) as icount "
                      + " FROM item "
                      + " LEFT OUTER JOIN " + strDistinctClassTableName + " ON item.bibliorecpath <> '' AND " + strDistinctClassTableName + ".bibliorecpath = item.bibliorecpath "
@@ -4740,7 +4809,7 @@ out strError);
                     + " count(case when item.borrower <> '' then item.borrower end) as outitems, "
                     + " count(case when item.borrower = '' then item.borrower end) as initems, "
                     + " count(item.itemrecpath) as icount "
-                    // + " printf(\"%.2f%\", 100.0 * count(case when item.borrower <> '' then item.borrower end) / count(item.itemrecpath)) as percent "
+                     // + " printf(\"%.2f%\", 100.0 * count(case when item.borrower <> '' then item.borrower end) / count(item.itemrecpath)) as percent "
                      + " FROM item "
                      + " LEFT OUTER JOIN " + strDistinctClassTableName + " ON item.bibliorecpath <> '' AND " + strDistinctClassTableName + ".bibliorecpath = item.bibliorecpath "
                      + "     WHERE " + strLocationLike
@@ -4772,7 +4841,7 @@ out strError);
                      + " WHERE librarycode = '" + strLibraryCode + "' "
                      + " GROUP BY department ;";
 
-            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
             using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
             {
@@ -4842,7 +4911,7 @@ out strError);
          + " WHERE " + strLibraryCodeFilter + " "
          + " GROUP BY location ;";
 
-            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
             using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
             {
@@ -4881,7 +4950,7 @@ out strError);
                 } // end of using command
             }
 
-        END1:
+            END1:
             // 去重
             StringUtil.RemoveDupNoSort(ref results);
 
@@ -4899,7 +4968,7 @@ out strError);
         // 去掉末尾的 -架号 部分
         static string RemoveShelfName(string strText)
         {
-            int index = strText.LastIndexOfAny(new char [] {'/','-'});
+            int index = strText.LastIndexOfAny(new char[] { '/', '-' });
             if (index == -1)
                 return strText;
             if (strText[index] == '/')
@@ -4923,7 +4992,7 @@ out strError);
                      + " WHERE librarycode = '" + strLibraryCode + "' "
                      + " ORDER BY department ;";
 
-            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+            this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
             using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
             {
@@ -5277,7 +5346,7 @@ from operlogamerce
                 strCommand = "select '', operlogpassgate.action, operlogpassgate.gatename, operlogpassgate.readerbarcode, reader.name, operlogpassgate.opertime, operlogpassgate.operator "  // 
                      + " FROM operlogpassgate "
                      + " left outer JOIN reader ON operlogpassgate.readerbarcode <> '' AND operlogpassgate.readerbarcode = reader.readerbarcode "
-                    // + " left outer JOIN user ON operlogamerce.operator = user.id "
+                     // + " left outer JOIN user ON operlogamerce.operator = user.id "
                      + " WHERE "
                      + "     operlogpassgate.date >= '" + strStartDate + "' AND operlogpassgate.date <= '" + strEndDate + "' "
                      + "     AND reader.librarycode = '" + strLibraryCode + "' "
@@ -5315,7 +5384,7 @@ from operlogamerce
             {
                 // 492 表，每个操作者获取对象的量
                 strCommand = "select operloggetres.operator, reader.name, reader.department, "  // 
-                    // + " operloggetres.unit, "
+                                                                                                // + " operloggetres.unit, "
                     + "  count(case operloggetres.action when '' then operloggetres.action end) as get_count,"
                     + "  sum(case operloggetres.action when '' then operloggetres.size end) as get_size,"
                     + "  count(*) as total_count "
@@ -5440,13 +5509,13 @@ out strError);
             HtmlPrintForm printform = new HtmlPrintForm();
 
             printform.Text = "打印统计结果";
-            printform.MainForm = this.MainForm;
+            // printform.MainForm = Program.MainForm;
 
             Debug.Assert(this.OutputFileNames != null, "");
             printform.Filenames = this.OutputFileNames;
-            this.MainForm.AppInfo.LinkFormState(printform, "printform_state");
+            Program.MainForm.AppInfo.LinkFormState(printform, "printform_state");
             printform.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(printform);
+            Program.MainForm.AppInfo.UnlinkFormState(printform);
         }
 
         #region 统计结果 HTML 文件管理
@@ -5463,7 +5532,7 @@ out strError);
         /// <returns>输出文件名</returns>
         public string NewOutputFileName()
         {
-            string strFileNamePrefix = this.MainForm.DataDir + "\\~report_";
+            string strFileNamePrefix = Program.MainForm.DataDir + "\\~report_";
             // string strFileNamePrefix = GetOutputFileNamePrefix();
 
             string strFileName = strFileNamePrefix + "_" + this.m_nFileNameSeed.ToString() + ".html";
@@ -5642,7 +5711,7 @@ out strError);
 
                 LibraryReportConfigForm dlg = new LibraryReportConfigForm();
 
-                dlg.MainForm = this.MainForm;
+                // dlg.MainForm = Program.MainForm;
                 dlg.ReportForm = this;
                 dlg.LoadData(nodeLibrary);
                 dlg.ModifyMode = true;
@@ -5667,7 +5736,7 @@ out strError);
             if (bChanged == true)
                 this._cfg.Save();
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -5683,11 +5752,11 @@ out strError);
             LibraryReportConfigForm dlg = new LibraryReportConfigForm();
 
             MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.ReportForm = this;
 
 
-            List<string> librarycodes = this.MainForm.GetAllLibraryCode();
+            List<string> librarycodes = Program.MainForm.GetAllLibraryCode();
             foreach (string code in librarycodes)
             {
                 nRet = dlg.AutoCreate(code, out strError);
@@ -5719,7 +5788,7 @@ out strError);
 
             this._cfg.Save();
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -5752,16 +5821,16 @@ out strError);
             LibraryReportConfigForm dlg = new LibraryReportConfigForm();
 
             MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.ReportForm = this;
             dlg.LoadData(nodeLibrary);
             dlg.ModifyMode = true;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "LibraryReportConfigForm_state");
-            dlg.UiState = this.MainForm.AppInfo.GetString(GetReportSection(), "LibraryReportConfigForm_ui_state", "");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "LibraryReportConfigForm_state");
+            dlg.UiState = Program.MainForm.AppInfo.GetString(GetReportSection(), "LibraryReportConfigForm_ui_state", "");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.SetString(GetReportSection(), "LibraryReportConfigForm_ui_state", dlg.UiState);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.SetString(GetReportSection(), "LibraryReportConfigForm_ui_state", dlg.UiState);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return;
@@ -5774,7 +5843,7 @@ out strError);
 
             this._cfg.Save();
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -5790,19 +5859,19 @@ out strError);
             LibraryReportConfigForm dlg = new LibraryReportConfigForm();
 
             MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.ReportForm = this;
 
             nRet = dlg.AutoCreate("", out strError);
             if (nRet == -1)
                 goto ERROR1;
 
-        REDO:
-            this.MainForm.AppInfo.LinkFormState(dlg, "LibraryReportConfigForm_state");
-            dlg.UiState = this.MainForm.AppInfo.GetString(GetReportSection(), "LibraryReportConfigForm_ui_state", "");
+            REDO:
+            Program.MainForm.AppInfo.LinkFormState(dlg, "LibraryReportConfigForm_state");
+            dlg.UiState = Program.MainForm.AppInfo.GetString(GetReportSection(), "LibraryReportConfigForm_ui_state", "");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.SetString(GetReportSection(), "LibraryReportConfigForm_ui_state", dlg.UiState);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.SetString(GetReportSection(), "LibraryReportConfigForm_ui_state", dlg.UiState);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return;
@@ -5836,7 +5905,7 @@ out strError);
 
             this._cfg.Save();
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -5884,7 +5953,7 @@ MessageBoxDefaultButton.Button2);
             if (this._cfg != null)
                 this._cfg.Save();
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -5933,7 +6002,8 @@ MessageBoxDefaultButton.Button2);
         // 0.08 (2014/11/6) reader 表增加了 state 字段 
         // 0.09 (2015/7/14) 增加了 operlogpassgate 和 operloggetres 表
         // 0.10 (2016/5/5) 给每个 operlogxxx 表增加了 librarycode 字段
-        static string _local_version = "0.10";
+        // 0.11 (2016/12/8) 以前版本 operlogamerce 中 action 为 undo 的行，price 字段内容都为空，会导致 472 报表中统计出来的实收金额偏大，这个版本修正了这个 bug
+        static string _local_version = "0.11";
 
         // TODO: 最好把第一次初始化本地 sql 表的动作也纳入 XML 文件中，这样做单项任务的时候，就不会毁掉其他的表
         // 创建批处理计划
@@ -5986,11 +6056,11 @@ MessageBoxDefaultButton.Button2);
                 {
                     // 获得全部实体库名
                     List<string> item_dbnames = new List<string>();
-                    if (this.MainForm.BiblioDbProperties != null)
+                    if (Program.MainForm.BiblioDbProperties != null)
                     {
-                        for (int i = 0; i < this.MainForm.BiblioDbProperties.Count; i++)
+                        for (int i = 0; i < Program.MainForm.BiblioDbProperties.Count; i++)
                         {
-                            BiblioDbProperty property = this.MainForm.BiblioDbProperties[i];
+                            BiblioDbProperty property = Program.MainForm.BiblioDbProperties[i];
 
                             if (String.IsNullOrEmpty(property.ItemDbName) == false)
                                 item_dbnames.Add(property.ItemDbName);
@@ -6002,6 +6072,7 @@ MessageBoxDefaultButton.Button2);
                     {
                         stop.SetMessage("正在计划任务 检索 " + strItemDbName + " ...");
 
+                        // 此处检索仅获得命中数即可
                         lRet = this.Channel.SearchItem(stop,
             strItemDbName,
             "", // 
@@ -6031,9 +6102,9 @@ MessageBoxDefaultButton.Button2);
                 {
                     // 获得全部读者库名
                     List<string> reader_dbnames = new List<string>();
-                    if (this.MainForm.ReaderDbNames != null)
+                    if (Program.MainForm.ReaderDbNames != null)
                     {
-                        foreach (string s in this.MainForm.ReaderDbNames)
+                        foreach (string s in Program.MainForm.ReaderDbNames)
                         {
                             if (String.IsNullOrEmpty(s) == false)
                                 reader_dbnames.Add(s);
@@ -6044,6 +6115,7 @@ MessageBoxDefaultButton.Button2);
                     foreach (string strReaderDbName in reader_dbnames)
                     {
                         stop.SetMessage("正在计划任务 检索 " + strReaderDbName + " ...");
+                        // 此处检索仅获得命中数即可
                         lRet = this.Channel.SearchReader(stop,
             strReaderDbName,
             "", // 
@@ -6073,9 +6145,9 @@ MessageBoxDefaultButton.Button2);
                 {
                     // 获得全部书目库名
                     List<string> biblio_dbnames = new List<string>();
-                    if (this.MainForm.BiblioDbProperties != null)
+                    if (Program.MainForm.BiblioDbProperties != null)
                     {
-                        foreach (BiblioDbProperty prop in this.MainForm.BiblioDbProperties)
+                        foreach (BiblioDbProperty prop in Program.MainForm.BiblioDbProperties)
                         {
                             if (String.IsNullOrEmpty(prop.DbName) == false)
                                 biblio_dbnames.Add(prop.DbName);
@@ -6127,6 +6199,7 @@ MessageBoxDefaultButton.Button2);
                     {
                         stop.SetMessage("正在计划任务 检索 " + strBiblioDbName + " ...");
                         string strQueryXml = "";
+                        // 此处检索仅获得命中数即可
                         lRet = this.Channel.SearchBiblio(stop,
                             strBiblioDbName,
                             "", // 
@@ -6153,6 +6226,7 @@ MessageBoxDefaultButton.Button2);
                         foreach (string strStyle in styles)
                         {
                             stop.SetMessage("正在计划任务 检索 " + strBiblioDbName + " " + strStyle + " ...");
+                            // 此处检索仅获得命中数即可
                             lRet = this.Channel.SearchBiblio(stop,
                                 strBiblioDbName,
                                 "", // 
@@ -6188,14 +6262,13 @@ MessageBoxDefaultButton.Button2);
                 if (strTypeList == "*"
                     || StringUtil.IsInList("operlog", strTypeList) == true)
                 {
-                    string strFirstDate = "";
                     // return:
                     //      -1  出错
                     //      0   没有找到
                     //      1   找到
                     nRet = GetFirstOperLogDate(
                         LogType.OperLog | LogType.AccessLog,
-                        out strFirstDate,
+                        out string strFirstDate,
                         out strError);
                     if (nRet == -1)
                     {
@@ -6211,7 +6284,10 @@ MessageBoxDefaultButton.Button2);
                     //      -1  出错
                     //      0   日志文件不存在，或者记录数为 0
                     //      >0  记录数
-                    long lCount = GetOperLogCount(strEndDate,
+                    long lCount = OperLogLoader.GetOperLogCount(
+                        stop,
+                        this.Channel,
+                        strEndDate,
                         LogType.OperLog,
                         out strError);
                     if (lCount < 0)
@@ -6226,10 +6302,10 @@ MessageBoxDefaultButton.Button2);
                             "first_operlog_date",
                             strFirstDate);
 
-                        this.MainForm.AppInfo.SetString(GetReportSection(),
+                        Program.MainForm.AppInfo.SetString(GetReportSection(),
                             "daily_report_end_date",
                             strFirstDate);
-                        this.MainForm.AppInfo.Save();   // 为防止程序中途崩溃丢失记忆，这里预先保存一下
+                        Program.MainForm.AppInfo.Save();   // 为防止程序中途崩溃丢失记忆，这里预先保存一下
 
                         XmlNode node = task_dom.CreateElement("operlog");
                         task_dom.DocumentElement.AppendChild(node);
@@ -6266,7 +6342,10 @@ MessageBoxDefaultButton.Button2);
                     //      -1  出错
                     //      0   日志文件不存在，或者记录数为 0
                     //      >0  记录数
-                    long lCount = GetOperLogCount(strEndDate,
+                    long lCount = OperLogLoader.GetOperLogCount(
+                        stop,
+                        this.Channel,
+                        strEndDate,
                         LogType.AccessLog,
                         out strError);
                     if (lCount == -1)
@@ -6428,8 +6507,7 @@ MessageBoxDefaultButton.Button2);
 
             try
             {
-
-                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
                 // 初始化各种表，除了 operlogXXX 表以外
                 string strInitilized = DomUtil.GetAttr(task_dom.DocumentElement,
@@ -6969,7 +7047,7 @@ MessageBoxDefaultButton.Button2);
                 goto ERROR1;
             }
             return;
-        ERROR1:
+            ERROR1:
             SetStartButtonStates();
             SetDailyReportButtonState();
             this.Invoke((Action)(() =>
@@ -7244,7 +7322,7 @@ MessageBoxDefaultButton.Button2);
         {
             // 2015/6/20 将数据库文件存储在和每个 dp2library 服务器和用户名相关的目录中
             string strDirectory = Path.Combine(Program.MainForm.ServerCfgDir, ReportForm.GetValidPathString(Program.MainForm.GetCurrentUserName()));
-            PathUtil.CreateDirIfNeed(strDirectory);
+            PathUtil.TryCreateDir(strDirectory);
             return strDirectory;
         }
 
@@ -7255,7 +7333,7 @@ MessageBoxDefaultButton.Button2);
 
         string GetOperlogConnectionString()
         {
-            // return SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+            // return SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
             return SQLiteUtil.GetConnectionString(GetBaseDirectory(), "operlog.bin");
         }
@@ -7327,9 +7405,9 @@ MessageBoxDefaultButton.Button2);
 
                 string strWarning = "";
                 List<string> dates = null;
-                nRet = OperLogStatisForm.MakeLogFileNames(strStartDate,
+                nRet = OperLogLoader.MakeLogFileNames(strStartDate,
                     strEndDate,
-                    false,  // 是否包含扩展名 ".log"
+                    true,  // 是否包含扩展名 ".log"
                     out dates,
                     out strWarning,
                     out strError);
@@ -7343,7 +7421,7 @@ MessageBoxDefaultButton.Button2);
 
                 this.Channel.Timeout = new TimeSpan(0, 1, 0);   // 一分钟
 
-                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
                 using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
                 {
@@ -7355,9 +7433,9 @@ MessageBoxDefaultButton.Button2);
                     loader.Channel = this.Channel;
                     loader.Stop = this.Progress;
                     // loader.owner = this;
-                    loader.estimate = estimate;
-                    loader.FileNames = dates;
-                    loader.Level = 2;  // this.MainForm.OperLogLevel;
+                    loader.Estimate = estimate;
+                    loader.Dates = dates;
+                    loader.Level = 2;  // Program.MainForm.OperLogLevel;
                     loader.AutoCache = false;
                     loader.CacheDir = "";
                     loader.LogType = logType;
@@ -7368,7 +7446,7 @@ MessageBoxDefaultButton.Button2);
                     // List<OperLogLine> lines = new List<OperLogLine>();
                     MultiBuffer buffer = new MultiBuffer();
                     buffer.Initial();
-                    OperLogLineBase.MainForm = this.MainForm;
+                    // OperLogLineBase.MainForm = Program.MainForm;
 
                     int nRecCount = 0;
 
@@ -7457,7 +7535,7 @@ MessageBoxDefaultButton.Button2);
                             string strAction = DomUtil.GetElementText(dom.DocumentElement, "action");
 
                             OperLogItem current_item = item;
-                            if (StringUtil.CompareVersion(this.MainForm.ServerVersion, "2.74") < 0
+                            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.74") < 0
     && strOperation == "amerce" && (strAction == "amerce" || strAction == "modifyprice"))
                             {
                                 // 重新获得当前日志记录，用最详细级别
@@ -7530,7 +7608,7 @@ MessageBoxDefaultButton.Button2);
                         }
 
                         // lProcessCount++;
-                    CONTINUE:
+                        CONTINUE:
                         // 便于循环外获得这些值
                         strLastItemDate = item.Date;
                         lLastItemIndex = item.Index + 1;
@@ -7879,7 +7957,7 @@ out strError);
             int nRet = 0;
 
             string strDbName = Global.GetDbName(strBiblioRecPath);
-            if (this.MainForm.IsBiblioDbName(strDbName) == false)
+            if (Program.MainForm.IsBiblioDbName(strDbName) == false)
                 return 0;
 
             // 把前面积累的关于删除书目记录的请求全部兑现了
@@ -8010,7 +8088,7 @@ out strError);
 
                     string[] results = null;
                     byte[] timestamp = null;
-                REDO:
+                    REDO:
                     long lRet = Channel.GetBiblioInfos(
                         Progress,
                         "@path-list:" + StringUtil.MakePathList(recpaths),
@@ -8180,7 +8258,7 @@ out strError);
                             }
                         }
 
-                    CONTINUE:
+                        CONTINUE:
                         i++;
                     }
 
@@ -8207,6 +8285,7 @@ out strError);
         /*
 <root>
   <operation>return</operation> 操作类型
+  <action>return</action> 动作。有 return/lost/inventory/read/boxing 几种。恢复动作目前仅恢复 return 和 lost 两种，其余会忽略
   <itemBarcode>0000001</itemBarcode> 册条码号
   <readerBarcode>R0000002</readerBarcode> 读者证条码号
   <operator>test</operator> 操作者
@@ -8230,8 +8309,8 @@ out string strError)
 
             string strAction = DomUtil.GetElementText(domLog.DocumentElement,
     "action");
-            if (strAction == "read")
-                return 0;   // read 动作并不会改变任何册记录，所以这里返回了
+            if (strAction != "return" && strAction != "lost")
+                return 0;   // 其余 inventory/read/boxing 动作并不会改变任何册记录，所以这里返回了
 
             //long lRet = 0;
             int nRet = 0;
@@ -8608,8 +8687,13 @@ out strError);
                     out node);
                 if (node == null)
                 {
+#if NO
                     strError = "日志记录中缺<record>元素";
                     return -1;
+#endif
+                    // 改为进行删除操作
+                    strAction = "delete";
+                    goto TRY_DELETE;
                 }
 
                 string strNewRecPath = DomUtil.GetAttr(node, "recPath");
@@ -8666,8 +8750,10 @@ out strError);
                         return -1;
                 }
 
+                return 0;
             }
-            else if (strAction == "delete")
+            TRY_DELETE:
+            if (strAction == "delete")
             {
                 XmlNode node = null;
                 string strOldRecord = DomUtil.GetElementText(domLog.DocumentElement,
@@ -8694,14 +8780,11 @@ out strError);
                     out strError);
                 if (nRet == -1)
                     return -1;
-            }
-            else
-            {
-                strError = "无法识别的<action>内容 '" + strAction + "'";
-                return -1;
+                return 0;
             }
 
-            return 0;
+            strError = "无法识别的<action>内容 '" + strAction + "'";
+            return -1;
         }
 
         // SetBiblioInfo() API 或 CopyBiblioInfo() API 的恢复动作
@@ -8807,6 +8890,7 @@ out strError);
                     return -1;
                 }
                 string strOldRecPath = DomUtil.GetAttr(node, "recPath");
+                bool bOldExist = DomUtil.GetBooleanParam(node, "exist", true);
 
                 string strMergeStyle = DomUtil.GetElementText(domLog.DocumentElement,
     "mergeStyle");
@@ -8859,11 +8943,14 @@ out strError);
                 {
                     if (String.IsNullOrEmpty(strOldRecord) == true)
                     {
-                        strError = "源记录 '" + strOldRecPath + "' 不存在，并且<record>元素无文本内容，这时<oldRecord>元素也无文本内容，无法获得要写入的记录内容";
-                        return -1;
+                        if (bOldExist == true)
+                        {
+                            strError = "源记录 '" + strOldRecPath + "' 不存在，并且<record>元素无文本内容，这时<oldRecord>元素也无文本内容，无法获得要写入的记录内容";
+                            return -1;
+                        }
                     }
-
-                    strTargetRecord = strOldRecord;
+                    else
+                        strTargetRecord = strOldRecord;
                 }
 
                 // 如果有“新记录”内容
@@ -9074,7 +9161,7 @@ out strError);
             string strParentID = DomUtil.GetElementText(dom.DocumentElement,
                 "parent");
             // 根据 册/订购/期/评注 记录路径和 parentid 构造所从属的书目记录路径
-            string strBiblioRecPath = this.MainForm.BuildBiblioRecPath("item",
+            string strBiblioRecPath = Program.MainForm.BuildBiblioRecPath("item",
                 strItemRecPath,
                 strParentID);
             if (string.IsNullOrEmpty(strBiblioRecPath) == true)
@@ -9162,7 +9249,7 @@ out strError);
             // 根据读者库名，得到馆代码
             string strReaderDbName = Global.GetDbName(strReaderRecPath);
 
-            string strLibraryCode = this.MainForm.GetReaderDbLibraryCode(strReaderDbName);
+            string strLibraryCode = Program.MainForm.GetReaderDbLibraryCode(strReaderDbName);
 
             ReaderLine line = null;
             //  XML 记录变换为 SQL 记录
@@ -9214,6 +9301,7 @@ out strError);
 
         #endregion
 
+#if NO
         // 获得日志文件中记录的总数
         // parameters:
         //      strDate 日志文件的日期，8 字符
@@ -9273,6 +9361,7 @@ out strError);
             Debug.Assert(lRecCount >= 0, "");
             return lRecCount;
         }
+#endif
 
         // 执行每日同步任务
         // 从上次记忆的断点位置，开始同步
@@ -9337,7 +9426,7 @@ out strError);
                 goto ERROR1;
             this.Invoke((Action)(() => MessageBox.Show(this, "处理完成")));
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() => MessageBox.Show(this, strError)));
         }
 
@@ -9437,7 +9526,7 @@ out strError);
 
                 // 如果结束的日期小于今天
                 if (nRet == 1   // 正常完成
-                    // && string.IsNullOrEmpty(strLastDate) == false && last_index != -1
+                                // && string.IsNullOrEmpty(strLastDate) == false && last_index != -1
                     && string.Compare(strLastDate, strToday) < 0)
                 {
                     // 把断点设置为今天的开始
@@ -9472,7 +9561,7 @@ out strError);
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -9566,7 +9655,7 @@ Stack:
 
                 this.listView_query_results.Clear();
 
-                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(this.MainForm.UserDir, "operlog.bin");
+                this._connectionString = GetOperlogConnectionString();  //  SQLiteUtil.GetConnectionString(Program.MainForm.UserDir, "operlog.bin");
 
                 using (SQLiteConnection connection = new SQLiteConnection(this._connectionString))
                 {
@@ -9654,7 +9743,7 @@ Stack:
             }
 
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -9781,12 +9870,14 @@ Stack:
             int nRet = 0;
 
 #if SN
-            nRet = this.MainForm.VerifySerialCode("report", false, out strError);
+#if REPORT_SN
+            nRet = Program.MainForm.VerifySerialCode("report", false, out strError);
             if (nRet == -1)
             {
                 MessageBox.Show("创建报表功能尚未被许可");
                 return;
             }
+#endif
 #endif
 
             string strTaskFileName = Path.Combine(GetBaseDirectory(), "dailyreport_task.xml");
@@ -9828,8 +9919,8 @@ MessageBoxDefaultButton.Button1);
                 goto ERROR1;
             }
 
-            ListViewItem firsr_item = this.listView_libraryConfig.SelectedItems[0];
-            string strFirstLibraryCode = ListViewUtil.GetItemText(firsr_item, 0);
+            ListViewItem first_item = this.listView_libraryConfig.SelectedItems[0];
+            string strFirstLibraryCode = ListViewUtil.GetItemText(first_item, 0);
             strFirstLibraryCode = GetOriginLibraryCode(strFirstLibraryCode);
 
             XmlNode nodeFirstLibrary = this._cfg.GetLibraryNode(strFirstLibraryCode);
@@ -9840,7 +9931,7 @@ MessageBoxDefaultButton.Button1);
             }
 
             // 这个日期是上次处理完成的那一天的后一天，也就是说下次处理，从这天开始即可
-            string strLastDate = this.MainForm.AppInfo.GetString(GetReportSection(),
+            string strLastDate = Program.MainForm.AppInfo.GetString(GetReportSection(),
 "daily_report_end_date",
 "20130101");
 
@@ -9859,7 +9950,7 @@ MessageBoxDefaultButton.Button1);
             }
 #endif
 
-            string strReportNameList = this.MainForm.AppInfo.GetString(GetReportSection(),
+            string strReportNameList = Program.MainForm.AppInfo.GetString(GetReportSection(),
     "createwhat_reportnames",
     "");
 
@@ -9868,12 +9959,12 @@ MessageBoxDefaultButton.Button1);
             // 询问那些报表需要创建
             CreateWhatsReportDialog dlg = new CreateWhatsReportDialog();
             MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.DateRange = this.MainForm.AppInfo.GetString(GetReportSection(),
+            dlg.DateRange = Program.MainForm.AppInfo.GetString(GetReportSection(),
     "createwhat_daterange",
     "");
             if (string.IsNullOrEmpty(dlg.DateRange) == true)
                 dlg.DateRange = strLastDate + "-" + strEndDate; // 从上次最后处理时间，到今天
-            dlg.Freguency = this.MainForm.AppInfo.GetString(GetReportSection(),
+            dlg.Freguency = Program.MainForm.AppInfo.GetString(GetReportSection(),
     "createwhat_frequency",
     "year,month,day");
             // dlg.ReportsNames = report_names;
@@ -9881,19 +9972,19 @@ MessageBoxDefaultButton.Button1);
 
             if (string.IsNullOrEmpty(strReportNameList) == false)
                 dlg.SelectedReportsNames = StringUtil.SplitList(strReportNameList, "|||");
-            this.MainForm.AppInfo.LinkFormState(dlg, "CreateWhatsReportDialog_state");
-            dlg.UiState = this.MainForm.AppInfo.GetString(GetReportSection(), "CreateWhatsReportDialog_ui_state", "");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "CreateWhatsReportDialog_state");
+            dlg.UiState = Program.MainForm.AppInfo.GetString(GetReportSection(), "CreateWhatsReportDialog_ui_state", "");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.SetString(GetReportSection(), "CreateWhatsReportDialog_ui_state", dlg.UiState);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.SetString(GetReportSection(), "CreateWhatsReportDialog_ui_state", dlg.UiState);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
-            this.MainForm.AppInfo.SetString(GetReportSection(),
+            Program.MainForm.AppInfo.SetString(GetReportSection(),
 "createwhat_reportnames",
 StringUtil.MakePathList(dlg.SelectedReportsNames, "|||"));
-            this.MainForm.AppInfo.SetString(GetReportSection(),
+            Program.MainForm.AppInfo.SetString(GetReportSection(),
 "createwhat_frequency",
 dlg.Freguency);
-            this.MainForm.AppInfo.SetString(GetReportSection(),
+            Program.MainForm.AppInfo.SetString(GetReportSection(),
 "createwhat_daterange",
 dlg.DateRange);
 
@@ -10085,7 +10176,7 @@ dlg.DateRange);
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
             return;
-        ERROR1:
+            ERROR1:
             if (task_dom != null && string.IsNullOrEmpty(strTaskFileName) == false)
                 task_dom.Save(strTaskFileName);
 
@@ -10213,12 +10304,14 @@ this.button_start_dailyReport.Enabled = true
             int nRet = 0;
 
 #if SN
-            nRet = this.MainForm.VerifySerialCode("report", false, out strError);
+#if REPORT_SN
+            nRet = Program.MainForm.VerifySerialCode("report", false, out strError);
             if (nRet == -1)
             {
                 MessageBox.Show("创建报表功能尚未被许可");
                 return;
             }
+#endif
 #endif
 
             bool bFirst = false;    // 是否为第一次做
@@ -10257,7 +10350,7 @@ MessageBoxDefaultButton.Button1);
 #if NO
             // 获得上次处理的末尾日期
             // 这个日期是上次处理完成的那一天的后一天，也就是说下次处理，从这天开始即可
-            string strLastDay = this.MainForm.AppInfo.GetString(GetReportSection(),
+            string strLastDay = Program.MainForm.AppInfo.GetString(GetReportSection(),
     "daily_report_end_date",
     "");
             if (string.IsNullOrEmpty(strLastDay) == true)
@@ -10303,7 +10396,7 @@ MessageBoxDefaultButton.Button1);
                 }
 
                 string strFirstDate = DomUtil.GetAttr(dom.DocumentElement, "first_operlog_date");
-                string strLastDay = this.MainForm.AppInfo.GetString(GetReportSection(),
+                string strLastDay = Program.MainForm.AppInfo.GetString(GetReportSection(),
                     "daily_report_end_date",
                     "");
                 if (strFirstDate == strLastDay)
@@ -10495,7 +10588,7 @@ MessageBoxDefaultButton.Button1);
             if (string.IsNullOrEmpty(strRealEndDate) == false)
             {
                 // 这个日期是上次处理完成的那一天的后一天，也就是说下次处理，从这天开始即可
-                this.MainForm.AppInfo.SetString(GetReportSection(),
+                Program.MainForm.AppInfo.SetString(GetReportSection(),
                     "daily_report_end_date",
                     GetNextDate(strRealEndDate));
                 SetDailyReportButtonState();
@@ -10524,7 +10617,7 @@ MessageBoxDefaultButton.Button1);
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
             return;
-        ERROR1:
+            ERROR1:
             if (task_dom != null && string.IsNullOrEmpty(strTaskFileName) == false)
                 task_dom.Save(strTaskFileName);
 
@@ -10578,12 +10671,14 @@ MessageBoxDefaultButton.Button1);
             int nRet = 0;
 
 #if SN
-            nRet = this.MainForm.VerifySerialCode("report", false, out strError);
+#if REPORT_SN
+            nRet = Program.MainForm.VerifySerialCode("report", false, out strError);
             if (nRet == -1)
             {
                 strError = "创建报表功能尚未被许可";
                 goto ERROR1;
             }
+#endif
 #endif
 
             int nDoneCount = 0;
@@ -10749,7 +10844,7 @@ MessageBoxDefaultButton.Button1);
             if (string.IsNullOrEmpty(strRealEndDate) == false)
             {
                 // 这个日期是上次处理完成的那一天的后一天，也就是说下次处理，从这天开始即可
-                this.MainForm.AppInfo.SetString(GetReportSection(),
+                Program.MainForm.AppInfo.SetString(GetReportSection(),
                     "daily_report_end_date",
                     GetNextDate(strRealEndDate));
                 SetDailyReportButtonState();
@@ -10770,10 +10865,10 @@ MessageBoxDefaultButton.Button1);
 
             ClearCache();
             this.Invoke((Action)(() =>
-            this.MainForm.StatusBarMessage = "耗费时间 " + ProgressEstimate.Format(_estimate.delta_passed)
+            Program.MainForm.StatusBarMessage = "耗费时间 " + ProgressEstimate.Format(_estimate.delta_passed)
 ));
             return 1;
-        ERROR1:
+            ERROR1:
 #if NO
             {
                 string strError1 = "";
@@ -10794,9 +10889,9 @@ MessageBoxDefaultButton.Button1);
         // 获得和当前服务器、用户相关的报表窗配置 section 名字字符串
         string GetReportSection()
         {
-            string strServerUrl = ReportForm.GetValidPathString(this.MainForm.LibraryServerUrl.Replace("/", "_"));
+            string strServerUrl = ReportForm.GetValidPathString(Program.MainForm.LibraryServerUrl.Replace("/", "_"));
 
-            return "r_" + strServerUrl + "_" + ReportForm.GetValidPathString(this.MainForm.GetCurrentUserName());
+            return "r_" + strServerUrl + "_" + ReportForm.GetValidPathString(Program.MainForm.GetCurrentUserName());
         }
 
         // 获得即将执行的每日报表的时间范围
@@ -10812,7 +10907,7 @@ MessageBoxDefaultButton.Button1);
 
             // 获得上次处理的末尾日期
             // 这个日期是上次处理完成的那一天的后一天，也就是说下次处理，从这天开始即可
-            string strLastDay = this.MainForm.AppInfo.GetString(GetReportSection(),
+            string strLastDay = Program.MainForm.AppInfo.GetString(GetReportSection(),
     "daily_report_end_date",
     "");
             if (string.IsNullOrEmpty(strLastDay) == true)
@@ -11179,7 +11274,7 @@ MessageBoxDefaultButton.Button1);
         // 特定分馆的报表输出目录
         string GetReportOutputDir(string strLibraryCode)
         {
-            // return Path.Combine(this.MainForm.UserDir, "reports\\" + GetValidPathString(GetDisplayLibraryCode(strLibraryCode)));
+            // return Path.Combine(Program.MainForm.UserDir, "reports\\" + GetValidPathString(GetDisplayLibraryCode(strLibraryCode)));
 
             // 2015/6/20 将创建好的报表文件存储在和每个 dp2library 服务器和用户名相关的目录中
             return Path.Combine(GetBaseDirectory(), "reports\\" + GetValidPathString(GetDisplayLibraryCode(strLibraryCode)));
@@ -11194,7 +11289,7 @@ MessageBoxDefaultButton.Button1);
             strTemplate = "";
             strError = "";
 
-            string strCssTemplateDir = Path.Combine(this.MainForm.UserDir, "report_def");   //  Path.Combine(this.MainForm.UserDir, "report_def");
+            string strCssTemplateDir = Path.Combine(Program.MainForm.UserDir, "report_def");   //  Path.Combine(Program.MainForm.UserDir, "report_def");
 
             string strHtmlTemplate = "";
 
@@ -11273,7 +11368,7 @@ MessageBoxDefaultButton.Button1);
 
             this._doneTable.Clear();
 
-            string strBreakPointFileName = Path.Combine(this.MainForm.UserDir, "dailyreport_breakpoint.txt");
+            string strBreakPointFileName = Path.Combine(Program.MainForm.UserDir, "dailyreport_breakpoint.txt");
             if (File.Exists(strBreakPointFileName) == false)
                 return 0;
 
@@ -11297,7 +11392,7 @@ MessageBoxDefaultButton.Button1);
         {
             strError = "";
 
-            string strBreakPointFileName = Path.Combine(this.MainForm.UserDir, "dailyreport_breakpoint.txt");
+            string strBreakPointFileName = Path.Combine(Program.MainForm.UserDir, "dailyreport_breakpoint.txt");
             if (bDelete == true)
             {
                 this._doneTable.Clear();
@@ -11365,9 +11460,9 @@ MessageBoxDefaultButton.Button1);
 #endif
 
             // 特定分馆的报表输出目录
-            // string strReportsDir = Path.Combine(this.MainForm.UserDir, "reports/" + (string.IsNullOrEmpty(strLibraryCode) == true ? "global" : strLibraryCode));
+            // string strReportsDir = Path.Combine(Program.MainForm.UserDir, "reports/" + (string.IsNullOrEmpty(strLibraryCode) == true ? "global" : strLibraryCode));
             string strReportsDir = GetReportOutputDir(strLibraryCode);
-            PathUtil.CreateDirIfNeed(strReportsDir);
+            PathUtil.TryCreateDir(strReportsDir);
 
             // 输出文件目录
             // string strOutputDir = Path.Combine(strReportsDir, time.Time);
@@ -12135,7 +12230,7 @@ MessageBoxDefaultButton.Button1);
                         }
                         catch (DirectoryNotFoundException)
                         {
-                            PathUtil.CreateDirIfNeed(Path.GetDirectoryName(filename));
+                            PathUtil.TryCreateDir(Path.GetDirectoryName(filename));
                             dom.Save(filename);
                         }
                     }
@@ -12846,17 +12941,17 @@ MessageBoxDefaultButton.Button1);
             // string strError = "";
 
             // 这个日期是上次处理完成的那一天的后一天，也就是说下次处理，从这天开始即可
-            string strLastDate = this.MainForm.AppInfo.GetString(GetReportSection(),
+            string strLastDate = Program.MainForm.AppInfo.GetString(GetReportSection(),
 "daily_report_end_date",
 "20130101");
 
-        REDO:
+            REDO:
             strLastDate = InputDlg.GetInput(
     this,
     "设置报表创建起点日期",
     "报表创建起点日期: ",
     strLastDate,
-    this.MainForm.DefaultFont);
+    Program.MainForm.DefaultFont);
             if (strLastDate == null)
                 return;
 
@@ -12869,7 +12964,7 @@ MessageBoxDefaultButton.Button1);
             }
 
             // 这个日期是上次处理完成的那一天的后一天，也就是说下次处理，从这天开始即可
-            this.MainForm.AppInfo.SetString(GetReportSection(),
+            Program.MainForm.AppInfo.SetString(GetReportSection(),
     "daily_report_end_date",
     strLastDate);
             SetDailyReportButtonState();
@@ -12916,12 +13011,14 @@ MessageBoxDefaultButton.Button1);
             int nRet = 0;
 
 #if SN
-            nRet = this.MainForm.VerifySerialCode("report", false, out strError);
+#if REPORT_SN
+            nRet = Program.MainForm.VerifySerialCode("report", false, out strError);
             if (nRet == -1)
             {
                 strError = "上传报表功能尚未被许可";
                 goto ERROR1;
             }
+#endif
 #endif
 
             string strReportDir = Path.Combine(GetBaseDirectory(), "reports");
@@ -13080,18 +13177,18 @@ MessageBoxDefaultButton.Button1);
 
             this.Invoke((Action)(() =>
             {
-                this.MainForm.StatusBarMessage = "完成上传 " + lUploadedFiles.ToString() + " 个文件, 总尺寸" + lUnzipFileLength.ToString() + "，压缩后尺寸 " + lZipFileLength.ToString();
+                Program.MainForm.StatusBarMessage = "完成上传 " + lUploadedFiles.ToString() + " 个文件, 总尺寸" + lUnzipFileLength.ToString() + "，压缩后尺寸 " + lZipFileLength.ToString();
                 if (this.DeleteReportFileAfterUpload == true && lUploadedFiles > 0)
-                    this.MainForm.StatusBarMessage += "。文件上传后，本地文件已经被删除";
+                    Program.MainForm.StatusBarMessage += "。文件上传后，本地文件已经被删除";
             }));
             return;
-        NOT_FOUND:
+            NOT_FOUND:
             this.Invoke((Action)(() =>
             {
-                this.MainForm.StatusBarMessage = strError;
+                Program.MainForm.StatusBarMessage = strError;
             }));
             return;
-        ERROR1:
+            ERROR1:
             BeginUpdateUploadButtonText();
             this.Invoke((Action)(() =>
             {
@@ -13113,23 +13210,25 @@ MessageBoxDefaultButton.Button1);
 
             int nRet = 0;
 #if SN
-            nRet = this.MainForm.VerifySerialCode("report", false, out strError);
+#if REPORT_SN
+            nRet = Program.MainForm.VerifySerialCode("report", false, out strError);
             if (nRet == -1)
             {
                 strError = "上传报表功能尚未被许可";
                 goto ERROR1;
             }
 #endif
+#endif
 
             FtpUploadDialog dlg = new FtpUploadDialog();
 
             MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.MainForm = this.MainForm;
-            this.MainForm.AppInfo.LinkFormState(dlg, "FtpUploadDialog_state");
-            dlg.UiState = this.MainForm.AppInfo.GetString(GetReportSection(), "FtpUploadDialog_ui_state", "");
+            // dlg.MainForm = Program.MainForm;
+            Program.MainForm.AppInfo.LinkFormState(dlg, "FtpUploadDialog_state");
+            dlg.UiState = Program.MainForm.AppInfo.GetString(GetReportSection(), "FtpUploadDialog_ui_state", "");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.SetString(GetReportSection(), "FtpUploadDialog_ui_state", dlg.UiState);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.SetString(GetReportSection(), "FtpUploadDialog_ui_state", dlg.UiState);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return;
@@ -13231,11 +13330,11 @@ MessageBoxDefaultButton.Button1);
                 // SetUploadButtonState();
                 BeginUpdateUploadButtonText();
             }
-            this.MainForm.StatusBarMessage = "完成上传 " + nUploadCount.ToString() + " 个文件";
+            Program.MainForm.StatusBarMessage = "完成上传 " + nUploadCount.ToString() + " 个文件";
             if (this.DeleteReportFileAfterUpload == true && nUploadCount > 0)
-                this.MainForm.StatusBarMessage += "。文件上传后，本地文件已经被删除";
+                Program.MainForm.StatusBarMessage += "。文件上传后，本地文件已经被删除";
             return;
-        ERROR1:
+            ERROR1:
             if (nUploadCount > 0)
             {
                 // SetUploadButtonState();
@@ -13364,7 +13463,7 @@ MessageBoxDefaultButton.Button1);
                             + Convert.ToString(fi.Length)
                             + " " + strPercent + " " + strClientFilePath + strWarning + strWaiting);
                     int nRedoCount = 0;
-                REDO:
+                    REDO:
                     long lRet = channel.SaveResObject(
                         stop,
                         strResPath,
@@ -13402,7 +13501,7 @@ MessageBoxDefaultButton.Button1);
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -13440,6 +13539,11 @@ MessageBoxDefaultButton.Button1);
             bool bRangeSetted = false;
             using (ZipFile zip = new ZipFile(encoding))
             {
+                // http://stackoverflow.com/questions/15337186/dotnetzip-badreadexception-on-extract
+                // https://dotnetzip.codeplex.com/workitem/14087
+                // uncommenting the following line can be used as a work-around
+                zip.ParallelDeflateThreshold = -1;
+
                 foreach (string filename in filenames)
                 {
                     if (Program.MainForm.InvokeRequired == false)
@@ -13541,9 +13645,9 @@ MessageBoxDefaultButton.Button1);
         private void listView_query_results_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (this.listView_query_results.SelectedIndices.Count == 0)
-                this.MainForm.StatusBarMessage = "";
+                Program.MainForm.StatusBarMessage = "";
             else
-                this.MainForm.StatusBarMessage = this.listView_query_results.SelectedIndices[0].ToString();
+                Program.MainForm.StatusBarMessage = this.listView_query_results.SelectedIndices[0].ToString();
         }
 
         /// <summary>
@@ -13607,12 +13711,12 @@ MessageBoxDefaultButton.Button1);
 
             ConvertReportFormatDialog dlg = new ConvertReportFormatDialog();
             MainForm.SetControlFont(dlg, this.Font, false);
-            dlg.MainForm = this.MainForm;
-            this.MainForm.AppInfo.LinkFormState(dlg, "ConvertReportFormatDialog_state");
-            dlg.UiState = this.MainForm.AppInfo.GetString(GetReportSection(), "ConvertReportFormatDialog_ui_state", "");
+            // dlg.MainForm = Program.MainForm;
+            Program.MainForm.AppInfo.LinkFormState(dlg, "ConvertReportFormatDialog_state");
+            dlg.UiState = Program.MainForm.AppInfo.GetString(GetReportSection(), "ConvertReportFormatDialog_ui_state", "");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.SetString(GetReportSection(), "ConvertReportFormatDialog_ui_state", dlg.UiState);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.SetString(GetReportSection(), "ConvertReportFormatDialog_ui_state", dlg.UiState);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
                 return;
@@ -13717,7 +13821,7 @@ MessageBoxDefaultButton.Button1);
                 MessageBox.Show(this, "成功转换文件 " + nCount.ToString() + " 个");
             }));
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -13747,7 +13851,7 @@ MessageBoxDefaultButton.Button1);
         private void tabPage_option_Enter(object sender, EventArgs e)
         {
             // Debug.WriteLine("Enter page");
-            this.checkBox_option_deleteReportFileAfterUpload.Checked = this.MainForm.AppInfo.GetBoolean(GetReportSection(),
+            this.checkBox_option_deleteReportFileAfterUpload.Checked = Program.MainForm.AppInfo.GetBoolean(GetReportSection(),
                 "deleteReportFileAfterUpload",
                 true);
         }
@@ -13755,7 +13859,7 @@ MessageBoxDefaultButton.Button1);
         private void tabPage_option_Leave(object sender, EventArgs e)
         {
             // Debug.WriteLine("Leave page");
-            this.MainForm.AppInfo.SetBoolean(GetReportSection(),
+            Program.MainForm.AppInfo.SetBoolean(GetReportSection(),
                 "deleteReportFileAfterUpload",
                 this.checkBox_option_deleteReportFileAfterUpload.Checked);
         }
@@ -13767,7 +13871,7 @@ MessageBoxDefaultButton.Button1);
         {
             get
             {
-                return this.MainForm.AppInfo.GetBoolean(GetReportSection(),
+                return Program.MainForm.AppInfo.GetBoolean(GetReportSection(),
     "deleteReportFileAfterUpload",
     true);
             }
@@ -13888,9 +13992,9 @@ MessageBoxDefaultButton.Button1);
                 this.EnableControls(true);
             }
 
-            this.MainForm.StatusBarMessage = "导出成功。";
+            Program.MainForm.StatusBarMessage = "导出成功。";
             return;
-        ERROR1:
+            ERROR1:
             this.Invoke((Action)(() =>
             {
                 MessageBox.Show(this, strError);
@@ -14052,7 +14156,7 @@ MessageBoxDefaultButton.Button1);
             foreach (OneClassType type in results)
             {
                 type.Filters.Sort(
-                    delegate(string s1, string s2)
+                    delegate (string s1, string s2)
                     {
                         return -1 * string.Compare(s1, s2);
                     });

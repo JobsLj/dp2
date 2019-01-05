@@ -40,7 +40,8 @@ namespace DigitalPlatform.LibraryClient
         /// <returns>返回通道对象</returns>
         public LibraryChannel GetChannel(string strUrl,
             string strUserName,
-            string strLang = "")
+            string strLang = null,
+            string strClientIP = null)
         {
             LibraryChannelWrapper wrapper = null;
 
@@ -68,7 +69,15 @@ namespace DigitalPlatform.LibraryClient
                 LibraryChannel inner_channel = new LibraryChannel();
                 inner_channel.Url = strUrl;
                 inner_channel.UserName = strUserName;
-                inner_channel.Lang = strLang;
+                if (strLang != null)
+                    inner_channel.Lang = strLang;
+                if (strClientIP != null)
+                    inner_channel.ClientIP = strClientIP;
+
+                // test
+                // inner_channel.ClientIP = "test:127.0.0.1";
+
+
                 inner_channel.BeforeLogin -= new BeforeLoginEventHandle(channel_BeforeLogin);
                 inner_channel.BeforeLogin += new BeforeLoginEventHandle(channel_BeforeLogin);
 
@@ -212,6 +221,29 @@ namespace DigitalPlatform.LibraryClient
             return deletes.Count;
         }
 
+        /*
+操作类型 crashReport -- 异常报告 
+主题 dp2circulation 
+内容 发生未捕获的界面线程异常: 
+Type: System.Threading.LockRecursionException
+Message: 此模式不下允许以递归方式获取写入锁定。
+Stack:
+在 System.Threading.ReaderWriterLockSlim.TryEnterWriteLockCore(TimeoutTracker timeout)
+在 System.Threading.ReaderWriterLockSlim.TryEnterWriteLock(TimeoutTracker timeout)
+在 System.Threading.ReaderWriterLockSlim.TryEnterWriteLock(Int32 millisecondsTimeout)
+在 DigitalPlatform.LibraryClient.LibraryChannelPool.Clear()
+在 DigitalPlatform.LibraryClient.LibraryChannelPool.Close()
+在 dp2Circulation.MainForm.MainForm_FormClosed(Object sender, FormClosedEventArgs e)
+在 System.Windows.Forms.Form.OnFormClosed(FormClosedEventArgs e)
+在 System.Windows.Forms.Form.WmClose(Message& m)
+在 dp2Circulation.MainForm.WndProc(Message& m)
+在 System.Windows.Forms.NativeWindow.Callback(IntPtr hWnd, Int32 msg, IntPtr wparam, IntPtr lparam)
+
+
+dp2Circulation 版本: dp2Circulation, Version=2.30.6550.17227, Culture=neutral, PublicKeyToken=null
+操作系统：Microsoft Windows NT 6.2.9200.0
+操作时间 2017/12/10 10:24:59 (Sun, 10 Dec 2017 10:24:59 +0800) 
+         * */
         /// <summary>
         /// 关闭所有通道，清除集合
         /// </summary>

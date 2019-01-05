@@ -499,7 +499,7 @@ namespace DigitalPlatform.rms
                     string strValue = strReadCount.Substring(1);
                     if (StringUtil.IsPureNumber(strValue) == false)
                     {
-                        strError = "strReadCount 参数值 '"+strReadCount+"' 应该为正负号引导的纯数字";
+                        strError = "strReadCount 参数值 '" + strReadCount + "' 应该为正负号引导的纯数字";
                         return -1;
                     }
                     long v = 0;
@@ -515,7 +515,7 @@ namespace DigitalPlatform.rms
 
                     oldRoot.SetAttribute("readCount", (old + v).ToString());
                 }
-                else 
+                else
                 {
                     long v = 0;
                     if (long.TryParse(strReadCount, out v) == false)
@@ -540,6 +540,48 @@ namespace DigitalPlatform.rms
             return 0;
         }
 
+        public static int ChangeMetadata(string strOldMetadata,
+    long lLength,
+    string strMime,
+    string strLocalPath,
+    out string strResult,
+    out string strError)
+        {
+            strResult = "";
+            strError = "";
+
+            XmlDocument oldDom = new XmlDocument();
+            oldDom.PreserveWhitespace = true; //设PreserveWhitespace为true
+            if (string.IsNullOrEmpty(strOldMetadata) == true)
+            {
+                // strOldMetadata = "<file/>";
+                XmlNode root = oldDom.CreateElement("file");
+                oldDom.AppendChild(root);
+            }
+            else
+            {
+                try
+                {
+                    oldDom.LoadXml(strOldMetadata);
+                }
+                catch (Exception ex)
+                {
+                    strError = "库中的元数据不合法\r\n" + ex.Message;
+                    return -1;
+                }
+            }
+
+            XmlElement oldRoot = oldDom.DocumentElement;
+
+            oldRoot.SetAttribute("size", Convert.ToString(lLength));
+            if (strMime != null)
+                oldRoot.SetAttribute("mimetype", strMime);
+            if (strLocalPath != null)
+                oldRoot.SetAttribute("localpath", strLocalPath);
+
+            strResult = oldRoot.OuterXml;
+            return 0;
+        }
 
 #if NOOOOOOOOOOOOOOOO
         // 检索范围是否合法,并返回真正能够取的长度
@@ -618,7 +660,7 @@ namespace DigitalPlatform.rms
             strError = "";
             if (String.IsNullOrEmpty(strXml) == true)
             {
-                using(Stream s = File.Create(strFileName))
+                using (Stream s = File.Create(strFileName))
                 {
 
                 }
@@ -636,12 +678,22 @@ namespace DigitalPlatform.rms
                 return -1;
             }
 
+            // 2017/12/5
+            // 以保持字符串原貌方式写入
+            using (StreamWriter w = new StreamWriter(strFileName, false, Encoding.UTF8))
+            {
+                w.Write(strXml);
+            }
+#if NO
+            // 这里的问题是要吞掉 tab 和回车
             using (XmlTextWriter w = new XmlTextWriter(strFileName,
                 System.Text.Encoding.UTF8))
             {
                 dom.Save(w);
                 // w.Close();
             }
+#endif
+
             return 0;
         }
 

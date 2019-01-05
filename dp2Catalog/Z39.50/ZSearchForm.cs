@@ -191,6 +191,7 @@ namespace dp2Catalog
             // 设置窗口尺寸状态
             this.MainForm.AppInfo.LoadMdiChildFormStates(this,
                 "mdi_form_state",
+                SizeStyle.All,
                 MainForm.DefaultMdiWindowWidth,
                 MainForm.DefaultMdiWindowHeight);
 
@@ -881,7 +882,8 @@ this.splitContainer_queryAndResultInfo,
                 + (connection.TargetInfo.IsbnRemoveHyphen == true ? "removehyphen," : "")
                 + (connection.TargetInfo.IsbnForce10 == true ? "force10," : "")
                 + (connection.TargetInfo.IsbnForce13 == true ? "force13," : "")
-                + (connection.TargetInfo.IsbnWild == true ? "wild," : "");
+                + (connection.TargetInfo.IsbnWild == true ? "wild," : "")
+                + (connection.TargetInfo.IssnForce8 == true ? "force8," : "");
 
             nRet = ZQueryControl.GetQueryString(
                 this.MainForm.Froms,
@@ -982,7 +984,8 @@ this.splitContainer_queryAndResultInfo,
                 + (connection.TargetInfo.IsbnRemoveHyphen == true ? "removehyphen," : "")
                 + (connection.TargetInfo.IsbnForce10 == true ? "force10," : "")
                 + (connection.TargetInfo.IsbnForce13 == true ? "force13," : "")
-                + (connection.TargetInfo.IsbnWild == true ? "wild," : "");
+                + (connection.TargetInfo.IsbnWild == true ? "wild," : "")
+                + (connection.TargetInfo.IssnForce8 == true ? "force8," : "");
 
 
                 nRet = ZQueryControl.GetQueryString(
@@ -3494,7 +3497,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5775.22847, Culture=neutral, PublicKe
                 if (exist_fixed != null)
                     exist_fixed.Activate();
 
-                form.SupressSizeSetting = true;
+                form.SuppressSizeSetting = true;
                 this.MainForm.SetMdiToNormal();
             }
             form.Show();
@@ -3692,7 +3695,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5775.22847, Culture=neutral, PublicKe
                     if (exist_fixed != null)
                         exist_fixed.Activate();
 
-                    form.SupressSizeSetting = true;
+                    form.SuppressSizeSetting = true;
                     this.MainForm.SetMdiToNormal();
                 }
                 form.Show();
@@ -4489,7 +4492,9 @@ MessageBoxDefaultButton.Button1);
         {
             dp2SearchForm dp2_searchform = this.GetDp2SearchForm();
 
+#if OLD_CHANNEL
             e.dp2Channels = dp2_searchform.Channels;
+#endif
             e.MainForm = this.MainForm;
         }
 

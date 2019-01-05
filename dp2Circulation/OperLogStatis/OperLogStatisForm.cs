@@ -16,6 +16,7 @@ using DigitalPlatform.CirculationClient;
 using DigitalPlatform.Script;
 using DigitalPlatform.IO;
 using DigitalPlatform.Xml;
+using DigitalPlatform.LibraryClient;
 
 namespace dp2Circulation
 {
@@ -24,25 +25,6 @@ namespace dp2Circulation
     /// </summary>
     public partial class OperLogStatisForm : MyScriptForm
     {
-        // bool Running = false;   // 正在执行运算
-
-        //string m_strMainCsDllName = "";
-
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        public MainForm MainForm
-        {
-            get
-            {
-                return (MainForm)this.MdiParent;
-            }
-        }
-        
-        DigitalPlatform.Stop stop = null;
-#endif
-
 #if NO
         /// <summary>
         /// 脚本管理器
@@ -77,12 +59,12 @@ namespace dp2Circulation
 
         private void OperLogStatisForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 #if NO
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -92,14 +74,14 @@ namespace dp2Circulation
 #endif
 
             ScriptManager.CfgFilePath = Path.Combine(
-    this.MainForm.UserDir,
+    Program.MainForm.UserDir,
     "statis_projects.xml");
 
 #if NO
-            ScriptManager.applicationInfo = this.MainForm.AppInfo;
+            ScriptManager.applicationInfo = Program.MainForm.AppInfo;
             ScriptManager.CfgFilePath =
-                this.MainForm.DataDir + "\\statis_projects.xml";
-            ScriptManager.DataDir = this.MainForm.DataDir;
+                Program.MainForm.DataDir + "\\statis_projects.xml";
+            ScriptManager.DataDir = Program.MainForm.DataDir;
 
             ScriptManager.CreateDefaultContent -= new CreateDefaultContentEventHandler(scriptManager_CreateDefaultContent);
             ScriptManager.CreateDefaultContent += new CreateDefaultContentEventHandler(scriptManager_CreateDefaultContent);
@@ -119,38 +101,38 @@ namespace dp2Circulation
 #endif
 
             // 方案名
-            this.textBox_projectName.Text = this.MainForm.AppInfo.GetString(
+            this.textBox_projectName.Text = Program.MainForm.AppInfo.GetString(
                 "operlogstatisform",
                 "projectname",
                 "");
 
             // 起始日期
-            this.dateControl_start.Text = this.MainForm.AppInfo.GetString(
+            this.dateControl_start.Text = Program.MainForm.AppInfo.GetString(
                  "operlogstatisform",
                  "start_date",
                  "");
 
             // 结束日期
-            this.dateControl_end.Text = this.MainForm.AppInfo.GetString(
+            this.dateControl_end.Text = Program.MainForm.AppInfo.GetString(
                 "operlogstatisform",
                 "end_date",
                 "");
 
             /*
             // 如何输出表格
-            this.checkBox_startToEndTable.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_startToEndTable.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "operlogstatisform",
                 "startToEndTable",
                 true);
-            this.checkBox_perYearTable.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_perYearTable.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "operlogstatisform",
                 "perYearTable",
                 false);
-            this.checkBox_perMonthTable.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_perMonthTable.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "operlogstatisform",
                 "perMonthTable",
                 false);
-            this.checkBox_perDayTable.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_perDayTable.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "operlogstatisform",
                 "perDayTable",
                 false);
@@ -185,37 +167,37 @@ namespace dp2Circulation
 #endif
 
             // 方案名
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "operlogstatisform",
                 "projectname",
                 this.textBox_projectName.Text);
 
             // 起始日期
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "operlogstatisform",
                 "start_date",
                 this.dateControl_start.Text);
             // 结束日期
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "operlogstatisform",
                 "end_date",
                 this.dateControl_end.Text);
 
             /*
             // 如何输出表格
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
                 "operlogstatisform",
                 "startToEndTable",
                 this.checkBox_startToEndTable.Checked);
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
                 "operlogstatisform",
                 "perYearTable",
                 this.checkBox_perYearTable.Checked);
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
                 "operlogstatisform",
                 "perMonthTable",
                 this.checkBox_perMonthTable.Checked);
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
                 "operlogstatisform",
                 "perDayTable",
                 this.checkBox_perDayTable.Checked);
@@ -280,8 +262,8 @@ namespace dp2Circulation
             dlg.ProjectsUrl = "http://dp2003.com/dp2circulation/projects/projects.xml";
             dlg.HostName = "OperLogStatisForm";
             dlg.scriptManager = this.ScriptManager;
-            dlg.AppInfo = this.MainForm.AppInfo;
-            dlg.DataDir = this.MainForm.DataDir;
+            dlg.AppInfo = Program.MainForm.AppInfo;
+            dlg.DataDir = Program.MainForm.DataDir;
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog(this);
         }
@@ -302,10 +284,14 @@ namespace dp2Circulation
             this.button_projectManage.Enabled = bEnable;
         }
 
-        int RunScript(string strProjectName,
-            string strProjectLocate,
-            out string strError)
+        public override int RunScript(string strProjectName,
+    string strProjectLocate,
+    string strInitialParamString,
+    out string strError,
+    out string strWarning)
         {
+            strWarning = "";
+
             EnableControls(false);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
@@ -313,7 +299,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             _dllPaths.Clear();
             _dllPaths.Add(strProjectLocate);
@@ -345,6 +331,10 @@ namespace dp2Circulation
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;
+
+                if (strInitialParamString == "test_compile")
+                    return 0;
+
 
                 /*
                  * 
@@ -528,7 +518,7 @@ namespace dp2Circulation
             // return:
             //      -1  错误
             //      0   成功
-            nRet = MakeLogFileNames(strStartDate,
+            nRet = OperLogLoader.MakeLogFileNames(strStartDate,
                 strEndDate,
                 true,
                 out LogFileNames,
@@ -541,7 +531,7 @@ namespace dp2Circulation
                 MessageBox.Show(this, strWarning);
 
             string strStyle = "";
-            if (this.MainForm.AutoCacheOperlogFile == true)
+            if (Program.MainForm.AutoCacheOperlogFile == true)
                 strStyle = "autocache";
 
             ProgressEstimate estimate = new ProgressEstimate();
@@ -551,9 +541,10 @@ stop,
 estimate,
 Channel,
 LogFileNames,
-this.MainForm.OperLogLevel,
+Program.MainForm.OperLogLevel,
 strStyle,
-this.MainForm.OperLogCacheDir,
+"", // strFilter
+Program.MainForm.OperLogCacheDir,
 null,   // param,
 procDoRecord,   // DoRecord,
 out strError);
@@ -577,7 +568,7 @@ out strError);
             string strWarning = "";
             string strMainCsDllName = PathUtil.MergePath(this.InstanceDir, "\\~operlog_statis_main_" + Convert.ToString(AssemblyVersion++) + ".dll");    // ++
 
-            string strLibPaths = "\"" + this.MainForm.DataDir + "\""
+            string strLibPaths = "\"" + Program.MainForm.DataDir + "\""
                 + ","
                 + "\"" + strProjectLocate + "\"";
 
@@ -702,7 +693,7 @@ out strError);
 
             strMainCsDllName = strProjectLocate + "\\~main_" + Convert.ToString(AssemblyVersion) + ".dll";    // ++
 
-            string strLibPaths = "\"" + this.MainForm.DataDir + "\""
+            string strLibPaths = "\"" + Program.MainForm.DataDir + "\""
                 + ","
                 + "\"" + strProjectLocate + "\"";
 
@@ -760,201 +751,6 @@ out strError);
             return 0;
         ERROR1:
             return -1;
-        }
-
-        // 根据日期范围，发生日志文件名
-        // parameters:
-        //      strStartDate    起始日期。8字符
-        //      strEndDate  结束日期。8字符
-        // return:
-        //      -1  错误
-        //      0   成功
-        /// <summary>
-        /// 根据日期范围，发生日志文件名
-        /// </summary>
-        /// <param name="strStartDate">起始日期。8字符</param>
-        /// <param name="strEndDate">结束日期。8字符</param>
-        /// <param name="bExt">是否包含扩展名 ".log"</param>
-        /// <param name="LogFileNames">返回创建的文件名</param>
-        /// <param name="strWarning">返回警告信息</param>
-        /// <param name="strError">返回错误信息</param>
-        /// <returns>-1: 出错; 0: 成功</returns>
-        public static int MakeLogFileNames(string strStartDate,
-            string strEndDate,
-            bool bExt,  // 是否包含扩展名 ".log"
-            out List<string> LogFileNames,
-            out string strWarning,
-            out string strError)
-        {
-            LogFileNames = new List<string>();
-            strError = "";
-            strWarning = "";
-            int nRet = 0;
-
-            if (String.Compare(strStartDate, strEndDate) > 0)
-            {
-                strError = "起始日期 '" + strStartDate + "' 不应大于结束日期 '" + strEndDate + "'。";
-                return -1;
-            }
-
-            string strLogFileName = strStartDate;
-
-            for (; ; )
-            {
-                LogFileNames.Add(strLogFileName + (bExt == true ? ".log" : ""));
-
-                string strNextLogFileName = "";
-                // 获得（理论上）下一个日志文件名
-                // return:
-                //      -1  error
-                //      0   正确
-                //      1   正确，并且strLogFileName已经是今天的日子了
-                nRet = NextLogFileName(strLogFileName,
-                    out strNextLogFileName,
-                    out strError);
-                if (nRet == -1)
-                    return -1;
-
-                if (nRet == 1)
-                {
-                    if (String.Compare(strLogFileName, strEndDate) < 0)
-                    {
-                        strWarning = "因日期范围的尾部 " + strEndDate + " 超过今天(" + DateTime.Now.ToLongDateString() + ")，部分日期被略去...";
-                        break;
-                    }
-                }
-
-                strLogFileName = strNextLogFileName;
-                if (String.Compare(strLogFileName, strEndDate) > 0)
-                    break;
-            }
-
-            return 0;
-        }
-
-        // 获得（理论上）下一个日志文件名
-        // return:
-        //      -1  error
-        //      0   正确
-        //      1   正确，并且strLogFileName已经是今天的日子了
-        static int NextLogFileName(string strLogFileName,
-            out string strNextLogFileName,
-            out string strError)
-        {
-            strError = "";
-            strNextLogFileName = "";
-            int nRet = 0;
-
-            string strYear = strLogFileName.Substring(0, 4);
-            string strMonth = strLogFileName.Substring(4, 2);
-            string strDay = strLogFileName.Substring(6, 2);
-
-            int nYear = 0;
-            int nMonth = 0;
-            int nDay = 0;
-
-            try
-            {
-                nYear = Convert.ToInt32(strYear);
-            }
-            catch
-            {
-                strError = "日志文件名 '" + strLogFileName + "' 中的 '"
-                    + strYear + "' 部分格式错误";
-                return -1;
-            }
-
-            try
-            {
-                nMonth = Convert.ToInt32(strMonth);
-            }
-            catch
-            {
-                strError = "日志文件名 '" + strLogFileName + "' 中的 '"
-                    + strMonth + "' 部分格式错误";
-                return -1;
-            }
-
-            try
-            {
-                nDay = Convert.ToInt32(strDay);
-            }
-            catch
-            {
-                strError = "日志文件名 '" + strLogFileName + "' 中的 '"
-                    + strDay + "' 部分格式错误";
-                return -1;
-            }
-
-            DateTime time = DateTime.Now;
-            try
-            {
-                time = new DateTime(nYear, nMonth, nDay);
-            }
-            catch (Exception ex)
-            {
-                strError = "日期 " + strLogFileName + " 格式错误: " + ex.Message;
-                return -1;
-            }
-
-            DateTime now = DateTime.Now;
-
-            // 正规化时间
-            nRet = RoundTime("day",
-                ref now,
-                out strError);
-            if (nRet == -1)
-                return -1;
-
-            nRet = RoundTime("day",
-                ref time,
-                out strError);
-            if (nRet == -1)
-                return -1;
-
-            bool bNow = false;
-            if (time >= now)
-                bNow = true;
-
-            time = time + new TimeSpan(1, 0, 0, 0); // 后面一天
-
-            strNextLogFileName = time.Year.ToString().PadLeft(4, '0')
-            + time.Month.ToString().PadLeft(2, '0')
-            + time.Day.ToString().PadLeft(2, '0');
-
-            if (bNow == true)
-                return 1;
-
-            return 0;
-        }
-
-        // 按照时间单位,把时间值零头去除,正规化,便于后面计算差额
-        /*public*/
-        static int RoundTime(string strUnit,
-            ref DateTime time,
-            out string strError)
-        {
-            strError = "";
-
-            time = time.ToLocalTime();
-            if (strUnit == "day")
-            {
-                time = new DateTime(time.Year, time.Month, time.Day,
-                    12, 0, 0, 0);
-            }
-            else if (strUnit == "hour")
-            {
-                time = new DateTime(time.Year, time.Month, time.Day,
-                    time.Hour, 0, 0, 0);
-            }
-            else
-            {
-                strError = "未知的时间单位 '" + strUnit + "'";
-                return -1;
-            }
-            time = time.ToUniversalTime();
-
-            return 0;
         }
 
         // 下一步 按钮
@@ -1095,9 +891,9 @@ out strError);
             dlg.ProjectName = this.textBox_projectName.Text;
             dlg.NoneProject = false;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "GetProjectNameDlg_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "GetProjectNameDlg_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
 
             if (dlg.DialogResult != DialogResult.OK)
@@ -1128,13 +924,13 @@ out strError);
             HtmlPrintForm printform = new HtmlPrintForm();
 
             printform.Text = "打印统计结果";
-            printform.MainForm = this.MainForm;
+            // printform.MainForm = Program.MainForm;
 
             Debug.Assert(this.objStatis != null, "");
             printform.Filenames = this.objStatis.OutputFileNames;
-            this.MainForm.AppInfo.LinkFormState(printform, "printform_state");
+            Program.MainForm.AppInfo.LinkFormState(printform, "printform_state");
             printform.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(printform);
+            Program.MainForm.AppInfo.UnlinkFormState(printform);
         }
 
         private void tabControl_main_SelectedIndexChanged(object sender, EventArgs e)
@@ -1259,7 +1055,7 @@ out strError);
 
             // 看看cache中是否已经有了
             StringCacheItem item = null;
-            item = this.MainForm.SummaryCache.SearchItem(
+            item = Program.MainForm.SummaryCache.SearchItem(
                 "P:" + strPatronBarcode);   // 前缀是为了和册条码号区别
             if (item != null)
             {
@@ -1309,7 +1105,7 @@ out strError);
                 "name");
 
             // 如果cache中没有，则加入cache
-            item = this.MainForm.SummaryCache.EnsureItem(
+            item = Program.MainForm.SummaryCache.EnsureItem(
                 "P:" + strPatronBarcode);
             item.Content = strSummary;
 
@@ -1376,7 +1172,7 @@ out strError);
 
         private void OperLogStatisForm_Activated(object sender, EventArgs e)
         {
-            // this.MainForm.stopManager.Active(this.stop);
+            // Program.MainForm.stopManager.Active(this.stop);
         }
 
         private void comboBox_quickSetFilenames_SelectedIndexChanged(object sender, EventArgs e)

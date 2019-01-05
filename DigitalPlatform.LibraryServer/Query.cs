@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Xml;
 
 namespace DigitalPlatform.LibraryServer
 {
@@ -126,15 +127,17 @@ namespace DigitalPlatform.LibraryServer
 
                 Debug.Assert(String.IsNullOrEmpty(strDbName) == false, "");
 
+#if NO
                 strError = EnsureKdbs(false);
                 if (strError != null)
                     return -1;
-
-                string strFromStyle = this.kdbs.GetFromStyles(strDbName, strFrom, strLang);
+#endif
 
                 string strRelation = "=";
                 string strDataType = "string";
 
+#if NO
+                string strFromStyle = this.kdbs.GetFromStyles(strDbName, strFrom, strLang);
                 if (strFrom == "__id")
                 {
                     // 如果为范围式
@@ -179,6 +182,7 @@ namespace DigitalPlatform.LibraryServer
                     // 最后统一修改为exact。不能在一开始修改，因为strMatchStyle值还有帮助判断的作用
                     strMatchStyle = "exact";
                 }
+#endif
 
                 // 2007/4/5 改造 加上了 GetXmlStringSimple()
                 string strOneDbQuery = "<target list='"
@@ -203,11 +207,21 @@ namespace DigitalPlatform.LibraryServer
                 strQueryXml = "<group>" + strQueryXml + "</group>";
             }
 
+            // 对 XML 检索式进行必要的变换。处理 range 和 time 检索细节
+            XmlDocument dom = new XmlDocument();
+            dom.LoadXml(strQueryXml);
+            int nRet = FilterXmlQuery(dom, out strError);
+            if (nRet == -1)
+                return -1;
+            if (nRet == 1)
+                strQueryXml = dom.DocumentElement.OuterXml;
+
             return 1;
         }
 
-
-        // 构造检索书目库的 XML 检索式
+        // 构造检索书目(规范)库的 XML 检索式
+        // parameters:
+        //      dbTypes [out] 检索涉及到的数据库类型
         // return:
         //      -2  没有找到指定风格的检索途径
         //      -1  出错
@@ -221,17 +235,21 @@ namespace DigitalPlatform.LibraryServer
     string strMatchStyle,
     string strLang,
     string strSearchStyle,
+    out List<string> dbTypes,
     out string strQueryXml,
             out string strError)
         {
             strQueryXml = "";
             strError = "";
+            dbTypes = new List<string>();
 
             List<string> dbnames = new List<string>();
 
             if (String.IsNullOrEmpty(strBiblioDbNames) == true
-                || strBiblioDbNames == "<全部>"
-                || strBiblioDbNames.ToLower() == "<all>")
+                || strBiblioDbNames == "<全部>"   // 兼容以前用法
+                || strBiblioDbNames.ToLower() == "<all>"    // 兼容以前用法
+                || strBiblioDbNames == "<全部书目>"
+                || strBiblioDbNames.ToLower() == "<all biblio>")
             {
                 foreach (ItemDbCfg cfg in this.ItemDbs)
                 {
@@ -248,6 +266,8 @@ namespace DigitalPlatform.LibraryServer
                     strError = "没有发现任何书目库";
                     return 0;
                 }
+
+                dbTypes.Add("biblio");
             }
             else if (strBiblioDbNames == "<全部图书>"
                 || strBiblioDbNames.ToLower() == "<all book>")
@@ -268,11 +288,12 @@ namespace DigitalPlatform.LibraryServer
                     strError = "没有发现任何图书类型的书目库";
                     return 0;
                 }
+                dbTypes.Add("biblio");
             }
             else if (strBiblioDbNames == "<全部期刊>"
                 || strBiblioDbNames.ToLower() == "<all series>")
             {
-                foreach(ItemDbCfg cfg in this.ItemDbs)
+                foreach (ItemDbCfg cfg in this.ItemDbs)
                 {
                     if (String.IsNullOrEmpty(cfg.IssueDbName) == true)
                         continue;
@@ -288,23 +309,46 @@ namespace DigitalPlatform.LibraryServer
                     strError = "没有发现任何期刊类型的书目库";
                     return 0;
                 }
+                dbTypes.Add("biblio");
+            }
+            else if (strBiblioDbNames == "<全部规范>"
+                || strBiblioDbNames.ToLower() == "<all authority>")
+            {
+                dbnames = GetAuthorityDbNames();
+                if (dbnames.Count == 0)
+                {
+                    strError = "没有发现任何规范库";
+                    return 0;
+                }
+                dbTypes.Add("authority");
             }
             else
             {
-                string[] splitted = strBiblioDbNames.Split(new char[] { ',' },StringSplitOptions.RemoveEmptyEntries);
+                int nBiblio = 0;
+                int nAuthority = 0;
+                string[] splitted = strBiblioDbNames.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (string strDbName in splitted)
                 {
                     if (String.IsNullOrEmpty(strDbName) == true)
                         continue;
 
-                    if (this.IsBiblioDbName(strDbName) == false)
+                    if (this.IsBiblioDbName(strDbName) == true)
+                        nBiblio++;
+                    else if (this.IsAuthorityDbName(strDbName) == true)
+                        nAuthority++;
+                    else
                     {
-                        strError = "库名 '" + strDbName + "' 不是合法的书目库名";
+                        strError = "库名 '" + strDbName + "' 不是合法的书目库或者规范库名";
                         return -1;
                     }
 
                     dbnames.Add(strDbName);
                 }
+
+                if (nBiblio > 0)
+                    dbTypes.Add("biblio");
+                if (nAuthority > 0)
+                    dbTypes.Add("authority");
             }
 
             bool bDesc = StringUtil.IsInList("desc", strSearchStyle);

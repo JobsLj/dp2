@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>DigitalPlatform.LibraryClient</RootNamespace>
     <AssemblyName>DigitalPlatform.LibraryClient</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -20,6 +21,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -28,8 +30,15 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="log4net, Version=2.0.8.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+      <HintPath>..\packages\log4net.2.0.8\lib\net45-full\log4net.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=11.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.11.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.IdentityModel" />
@@ -44,24 +53,39 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Behavior.cs" />
     <Compile Include="BiblioLoader.cs" />
     <Compile Include="BrowseLoader.cs" />
     <Compile Include="ChargingHistoryLoader.cs" />
+    <Compile Include="DirItemLoader.cs" />
+    <Compile Include="DynamicDownloader.cs" />
+    <Compile Include="FileItemLoader.cs" />
+    <Compile Include="IChannelManager.cs" />
     <Compile Include="ItemBarcodeLoader.cs" />
     <Compile Include="LibraryChannel.cs" />
+    <Compile Include="LibraryChannelManager.cs" />
     <Compile Include="LibraryChannelPool.cs" />
+    <Compile Include="OperLogDatesLoader.cs" />
+    <Compile Include="OperLogItemLoader.cs" />
+    <Compile Include="OperLogLoader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RestChannel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="ResultSetLoader.cs" />
     <Compile Include="Service References\localhost\Reference.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>Reference.svcmap</DependentUpon>
     </Compile>
+    <Compile Include="SubItemLoader.cs" />
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Service References\" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
+    <None Include="packages.config" />
     <None Include="Service References\localhost\DigitalPlatform.LibraryClient.localhost.AmerceItem.datasource">
       <DependentUpon>Reference.svcmap</DependentUpon>
     </None>
@@ -113,10 +137,16 @@
     <None Include="Service References\localhost\DigitalPlatform.LibraryClient.localhost.OperLogInfo.datasource">
       <DependentUpon>Reference.svcmap</DependentUpon>
     </None>
+    <None Include="Service References\localhost\DigitalPlatform.LibraryClient.localhost.Question.datasource">
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </None>
     <None Include="Service References\localhost\DigitalPlatform.LibraryClient.localhost.RangeStatisInfo.datasource">
       <DependentUpon>Reference.svcmap</DependentUpon>
     </None>
     <None Include="Service References\localhost\DigitalPlatform.LibraryClient.localhost.Record.datasource">
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </None>
+    <None Include="Service References\localhost\DigitalPlatform.LibraryClient.localhost.ResInfoItem.datasource">
       <DependentUpon>Reference.svcmap</DependentUpon>
     </None>
     <None Include="Service References\localhost\DigitalPlatform.LibraryClient.localhost.ReturnInfo.datasource">
@@ -165,6 +195,10 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\DigitalPlatform.Interfaces\DigitalPlatform.Interfaces.csproj">
+      <Project>{3c4f8133-8652-40b6-b37b-200b25c2b043}</Project>
+      <Name>DigitalPlatform.Interfaces</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DigitalPlatform.Range\DigitalPlatform.Range.csproj">
       <Project>{aa6c5e6a-252b-4e2a-a883-0e4e739f8701}</Project>
       <Name>DigitalPlatform.Range</Name>

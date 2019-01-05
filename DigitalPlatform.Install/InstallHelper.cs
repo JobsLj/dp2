@@ -14,6 +14,8 @@ using System.Data;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Configuration.Install;
+using System.ServiceProcess;
+using System.ComponentModel;
 
 using Microsoft.Win32;
 
@@ -22,12 +24,610 @@ using DigitalPlatform.IO;
 using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
 using DigitalPlatform.GUI;
-using DigitalPlatform.CirculationClient;
+using System.Threading.Tasks;
+// using DigitalPlatform.CirculationClient;
 
 namespace DigitalPlatform.Install
 {
     public class InstallHelper
     {
+        // 1056 调用前已经启动了
+        // 1060 service 尚未安装
+        // 1062 调用前已经停止了
+        public static int GetNativeErrorCode(Exception ex0)
+        {
+            if (ex0 is InvalidOperationException)
+            {
+                InvalidOperationException ex = ex0 as InvalidOperationException;
+
+                if (ex0.InnerException != null && ex0.InnerException is Win32Exception)
+                {
+                    Win32Exception ex1 = ex0.InnerException as Win32Exception;
+                    return ex1.NativeErrorCode;
+                }
+            }
+
+            return 0;
+        }
+
+        public static int StartService(string strServiceName,
+out string strError)
+        {
+            strError = "";
+
+            ServiceController service = new ServiceController(strServiceName);
+            try
+            {
+                TimeSpan timeout = TimeSpan.FromMinutes(2);
+
+                service.Start();
+                service.WaitForStatus(ServiceControllerStatus.Running, timeout);
+            }
+            catch (Exception ex)
+            {
+                if (GetNativeErrorCode(ex) == 1060)
+                {
+                    strError = "服务不存在";
+                    return -1;
+                }
+
+                else if (GetNativeErrorCode(ex) == 1056)
+                {
+                    strError = "调用前已经启动了";
+                    return 0;
+                }
+                else
+                {
+                    strError = ExceptionUtil.GetAutoText(ex);
+                    return -1;
+                }
+            }
+
+            return 1;
+        }
+
+        // return:
+        //      .Value  -1 表示出错。0 表示正确(可能 ErrorInfo 里面依然会有警告字符串)。
+        public static async Task<NormalResult> StopService(
+            IWin32Window owner,
+            string strServiceName)
+        {
+            // dlg.Font = this.Font;
+            //dlg.SourceFilePath = strPath;
+            //dlg.TargetFilePath = strTargetPath;
+            CancellationTokenSource cancel = new CancellationTokenSource();
+            using (FileDownloadDialog dlg = new FileDownloadDialog
+            {
+                Text = "正在停止 " + strServiceName
+            })
+            {
+                dlg.FormClosed += new FormClosedEventHandler(delegate (object o1, FormClosedEventArgs e1)
+                {
+                    cancel.Cancel();
+                });
+                dlg.StartMarquee();
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.Show(owner);
+                ServiceController service = new ServiceController(strServiceName);
+                try
+                {
+                    DateTime start = DateTime.Now;
+                    TimeSpan timeout = TimeSpan.FromMinutes(20);
+
+                    service.Stop();
+
+                    await WaitForStatusAsync(service,
+                        ServiceControllerStatus.Stopped,
+                        timeout,
+                        cancel.Token,
+                        () =>
+                        {
+                            TimeSpan delta = DateTime.Now - start;
+                            dlg.Invoke((Action)(() =>
+                            {
+                                dlg.Text = string.Format("({0}) 正在停止 " + strServiceName, Convert.ToInt64(delta.TotalSeconds));
+                            }));
+                        });
+                    // service.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
+                }
+                catch (Exception ex)
+                {
+                    if (GetNativeErrorCode(ex) == 1060)
+                    {
+                        return new NormalResult { Value = -1, ErrorInfo = "服务不存在" };
+                    }
+
+                    else if (GetNativeErrorCode(ex) == 1062)
+                    {
+                        return new NormalResult { ErrorInfo = "调用前已经停止了" };
+                    }
+                    else
+                    {
+                        return new NormalResult { Value = -1, ErrorInfo = ExceptionUtil.GetAutoText(ex) };
+                    }
+                }
+
+                return new NormalResult();
+            }
+        }
+
+        public delegate void Delagate_procIdle();
+
+        // https://stackoverflow.com/questions/38236238/how-do-do-an-async-servicecontroller-waitforstatus
+        public static async Task WaitForStatusAsync(ServiceController controller,
+            ServiceControllerStatus desiredStatus,
+            TimeSpan timeout,
+            CancellationToken cancellationToken,
+            Delagate_procIdle procIdle)
+        {
+            var utcNow = DateTime.UtcNow;
+            controller.Refresh();
+            while (controller.Status != desiredStatus)
+            {
+                if (DateTime.UtcNow - utcNow > timeout)
+                {
+                    throw new System.TimeoutException($"Failed to wait for '{controller.ServiceName}' to change status to '{desiredStatus}'.");
+                }
+                await Task.Delay(250, cancellationToken)
+                    .ConfigureAwait(false);
+
+                procIdle?.Invoke();
+
+                controller.Refresh();
+            }
+        }
+
+        public static int StopService(string strServiceName,
+            out string strError)
+        {
+            strError = "";
+
+            ServiceController service = new ServiceController(strServiceName);
+            try
+            {
+                TimeSpan timeout = TimeSpan.FromMinutes(2);
+
+                service.Stop();
+
+                service.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
+            }
+            catch (Exception ex)
+            {
+                if (GetNativeErrorCode(ex) == 1060)
+                {
+                    strError = "服务不存在";
+                    return -1;
+                }
+
+                else if (GetNativeErrorCode(ex) == 1062)
+                {
+                    strError = "调用前已经停止了";
+                    return 0;
+                }
+                else
+                {
+                    strError = ExceptionUtil.GetAutoText(ex);
+                    return -1;
+                }
+            }
+
+            return 1;
+        }
+
+        public static string GetPathOfService(string serviceName)
+        {
+            using (RegistryKey service = Registry.LocalMachine.CreateSubKey("System\\CurrentControlSet\\Services"))
+            {
+                // 2015/11/23 增加 using 部分
+                using (RegistryKey path = service.OpenSubKey(serviceName))
+                {
+                    if (path == null)
+                        return null;   // not found
+                    return (string)path.GetValue("ImagePath");
+                }
+            }
+        }
+
+        // 为 dp2library 的 library.xml 文件增配 MongoDB 相关参数。这之前要确保在 Windows 上安装了 MongoDB。
+        // parameters:
+        //      bAdd    是否添加配置？如果为 false，表示移除 MongoDB 配置
+        // return:
+        //      -1  出错
+        //      0   没有修改
+        //      1   发生了修改
+        public static int SetupMongoDB(
+            string strLibraryXmlFileName,
+            string strInstanceName,
+            bool bAdd,
+            out string strError)
+        {
+            strError = "";
+
+            if (File.Exists(strLibraryXmlFileName) == false)
+            {
+                strError = "配置文件 '" + strLibraryXmlFileName + "' 不存在，无法进行关于 MongoDB 的参数配置";
+                return -1;
+            }
+
+            XmlDocument dom = new XmlDocument();
+            dom.Load(strLibraryXmlFileName);
+
+            bool bChanged = false;
+
+            // mongoDB 元素 connectionString 和 instancePrefix 属性
+            {
+                XmlElement mongoDB = dom.DocumentElement.SelectSingleNode("mongoDB") as XmlElement;
+                if (mongoDB == null)
+                {
+                    mongoDB = dom.CreateElement("mongoDB");
+                    dom.DocumentElement.AppendChild(mongoDB);
+                    bChanged = true;
+                }
+
+                {
+                    string strOldValue = mongoDB.GetAttribute("connectionString");
+
+                    if (bAdd == true)
+                    {
+                        // 添加
+                        if (string.IsNullOrEmpty(strOldValue) == true)
+                        {
+                            string strNewValue = "mongodb://127.0.0.1"; // 2016/12/8 修改为 127.0.0.1 // "mongodb://localhost";
+                            mongoDB.SetAttribute("connectionString", strNewValue);
+                            bChanged = true;
+                        }
+                    }
+                    else
+                    {
+                        // 移除
+                        if (string.IsNullOrEmpty(strOldValue) == false)
+                        {
+                            mongoDB.RemoveAttribute("connectionString");
+                            bChanged = true;
+                        }
+                    }
+                }
+
+                {
+                    string strOldValue = mongoDB.GetAttribute("instancePrefix");
+
+                    if (bAdd == true)
+                    {
+                        // 添加
+                        if (string.IsNullOrEmpty(strOldValue) == true)
+                        {
+                            string strNewValue = strInstanceName;
+                            mongoDB.SetAttribute("instancePrefix", strNewValue);
+                            bChanged = true;
+                        }
+                    }
+                    else
+                    {
+                        // 移除
+                        if (string.IsNullOrEmpty(strOldValue) == false)
+                        {
+                            mongoDB.RemoveAttribute("instancePrefix");
+                            bChanged = true;
+                        }
+                    }
+                }
+            }
+
+            if (bChanged == true)
+            {
+                // 提前备份一个原来文件，避免保存中途出错造成 0 bytes 的文件
+                string strDataDir = Path.GetDirectoryName(strLibraryXmlFileName);
+                string strBackupFileName = Path.Combine(strDataDir, "library.xml.config.save");
+                File.Copy(strLibraryXmlFileName, strBackupFileName, true);
+
+                dom.Save(strLibraryXmlFileName);
+                return 1;   // 发生了修改
+            }
+
+            return 0;   // 没有发生修改
+        }
+
+        [DllImport("shlwapi.dll", SetLastError = true, EntryPoint = "#437")]
+        static extern bool IsOS(int os);
+
+        const int OS_ANYSERVER = 29;
+        public static bool isWindowsServer = IsOS(OS_ANYSERVER);
+
+        // 为 dp2library 的 library.xml 文件增配 MSMQ 相关参数。这之前要确保在 Windows 上启用了 Message Queue Service。
+        // parameters:
+        //      bAdd    是否添加配置？如果为 false，表示移除 MSMQ 配置
+        // return:
+        //      -1  出错
+        //      0   没有修改
+        //      1   发生了修改
+        public static int SetupMessageQueue(
+            string strLibraryXmlFileName,
+            string strInstanceName,
+            bool bAdd,
+            out string strError)
+        {
+            strError = "";
+
+            if (File.Exists(strLibraryXmlFileName) == false)
+            {
+                strError = "配置文件 '" + strLibraryXmlFileName + "' 不存在，无法进行关于 MSMQ 的参数配置";
+                return -1;
+            }
+
+            XmlDocument dom = new XmlDocument();
+            dom.Load(strLibraryXmlFileName);
+
+            bool bChanged = false;
+
+            // message 元素 defaultQueue 属性
+            if (DomUtil.ChangeAttribute(dom,
+                "message",
+                "defaultQueue",
+                (string condition, ref string action, ref string attr_value) =>
+                {
+                    if (bAdd == true)
+                    {
+                        // 添加
+                        if (string.IsNullOrEmpty(attr_value) == true)
+                        {
+                            attr_value = ".\\private$\\dp2library";
+                            if (string.IsNullOrEmpty(strInstanceName) == false)
+                                attr_value += "_" + strInstanceName;
+                        }
+                    }
+                    else
+                    {
+                        // 移除
+                        if (string.IsNullOrEmpty(attr_value) == false)
+                        {
+                            // TODO: 从 strOldValue 中移除 strNewValue 部分
+                            // 现在先简单实现为直接清除整个值
+                            // message.SetAttribute("defaultQueue", strNewValue);
+                            attr_value = null;
+                        }
+                    }
+                }) == true)
+                bChanged = true;
+#if NO
+            // message 元素 defaultQueue 属性
+            {
+                XmlElement message = dom.DocumentElement.SelectSingleNode("message") as XmlElement;
+                if (message == null)
+                {
+                    message = dom.CreateElement("message");
+                    dom.DocumentElement.AppendChild(message);
+                    bChanged = true;
+                }
+
+                string strOldValue = message.GetAttribute("defaultQueue");
+
+                if (bAdd == true)
+                {
+                    // 添加
+                    if (string.IsNullOrEmpty(strOldValue) == true)
+                    {
+                        string strNewValue = ".\\private$\\dp2library";
+                        if (string.IsNullOrEmpty(strInstanceName) == false)
+                            strNewValue += "_" + strInstanceName;
+                        message.SetAttribute("defaultQueue", strNewValue);
+                        bChanged = true;
+                    }
+                }
+                else
+                {
+                    // 移除
+                    if (string.IsNullOrEmpty(strOldValue) == false)
+                    {
+                        string strNewValue = ".\\private$\\dp2library";
+                        if (string.IsNullOrEmpty(strInstanceName) == false)
+                            strNewValue += "_" + strInstanceName;
+                        // TODO: 从 strOldValue 中移除 strNewValue 部分
+                        // 现在先简单实现为直接清除整个值
+                        // message.SetAttribute("defaultQueue", strNewValue);
+                        message.RemoveAttribute("defaultQueue");
+                        bChanged = true;
+                    }
+                }
+            }
+#endif
+
+            // arrived 元素的 notifyTypes 属性
+            if (DomUtil.ChangeAttribute(dom,
+    "arrived",
+    "notifyTypes",
+    (string condition, ref string action, ref string attr_value) =>
+    {
+        if (bAdd == true)
+        {
+            // 添加
+            if (string.IsNullOrEmpty(attr_value) == true)
+            {
+                // 默认值
+                attr_value = "dpmail,mail,mq";
+            }
+            else
+            {
+                // 增加 mq
+                StringUtil.SetInList(ref attr_value, "mq", true);
+            }
+
+        }
+        else
+        {
+            // 删除 mq
+            if (string.IsNullOrEmpty(attr_value) != true)
+                StringUtil.SetInList(ref attr_value, "mq", false);
+        }
+    }) == true)
+                bChanged = true;
+
+            // monitors/readersMonitor 元素的 types 元素
+            if (DomUtil.ChangeAttribute(dom,
+"monitors/readersMonitor",
+"types",
+(string condition, ref string action, ref string attr_value) =>
+{
+    if (bAdd == true)
+    {
+        if (condition == "element_not_exists")
+            return; // 如果原来就不存在这个 readersMonitor 元素，则不添加 mq 了
+
+        // 添加
+        if (string.IsNullOrEmpty(attr_value) == true)
+        {
+            // 默认值
+            attr_value = "dpmail,email,mq"; // 注：因缺省值为 "dpmail,email"，所以添加 mq 以后应该是 "dpmail,email,mq"
+        }
+        else
+        {
+            // 增加 mq
+            StringUtil.SetInList(ref attr_value, "mq", true);
+        }
+
+    }
+    else
+    {
+        // 删除 mq
+        if (string.IsNullOrEmpty(attr_value) != true)
+            StringUtil.SetInList(ref attr_value, "mq", false);
+    }
+}) == true)
+                bChanged = true;
+
+            // circulation 元素的 notifyTypes 属性
+            if (DomUtil.ChangeAttribute(dom,
+"circulation",
+"notifyTypes",
+(string condition, ref string action, ref string attr_value) =>
+{
+    if (bAdd == true)
+    {
+        // 添加
+        if (string.IsNullOrEmpty(attr_value) == true)
+        {
+            // 默认值
+            attr_value = "mq";
+        }
+        else
+        {
+            // 增加 mq
+            StringUtil.SetInList(ref attr_value, "mq", true);
+        }
+
+    }
+    else
+    {
+        // 删除 mq
+        if (string.IsNullOrEmpty(attr_value) != true)
+            StringUtil.SetInList(ref attr_value, "mq", false);
+    }
+}) == true)
+                bChanged = true;
+#if NO
+            if (bAdd == true)
+            {
+                // arrived 元素的 notifyTypes 属性
+                {
+                    XmlElement arrived = dom.DocumentElement.SelectSingleNode("arrived") as XmlElement;
+                    if (arrived == null)
+                    {
+                        arrived = dom.CreateElement("arrived");
+                        dom.DocumentElement.AppendChild(arrived);
+                        bChanged = true;
+                    }
+
+                    string strOldValue = arrived.GetAttribute("notifyTypes");
+                    if (string.IsNullOrEmpty(strOldValue) == true)
+                    {
+                        string strNewValue = "dpmail,mail,mq";
+                        arrived.SetAttribute("notifyTypes", strNewValue);
+                        bChanged = true;
+                    }
+                    else
+                    {
+                        // 增加 mq
+                        string strNewValue = strOldValue;
+                        StringUtil.SetInList(ref strNewValue, "mq", true);
+                        if (strNewValue != strOldValue)
+                        {
+                            arrived.SetAttribute("notifyTypes", strNewValue);
+                            bChanged = true;
+                        }
+                    }
+                }
+
+                // monitors/readersMonitor 元素的 types 元素
+                {
+                    XmlElement readersMonitor = dom.DocumentElement.SelectSingleNode("monitors/readersMonitor") as XmlElement;
+                    if (readersMonitor != null)
+                    {
+                        string strOldValue = readersMonitor.GetAttribute("types");
+                        if (string.IsNullOrEmpty(strOldValue) == true)
+                        {
+                            string strNewValue = "dpmail,email,mq"; // 注：因缺省值为 "dpmail,email"，所以添加 mq 以后应该是 "dpmail,email,mq"
+                            readersMonitor.SetAttribute("types", strNewValue);
+                            bChanged = true;
+                        }
+                        else
+                        {
+                            // 增加 mq
+                            string strNewValue = strOldValue;
+                            StringUtil.SetInList(ref strNewValue, "mq", true);
+                            if (strNewValue != strOldValue)
+                            {
+                                readersMonitor.SetAttribute("types", strNewValue);
+                                bChanged = true;
+                            }
+                        }
+                    }
+                }
+
+                // circulation 元素的 notifyTypes 属性
+                {
+                    XmlElement circulation = dom.DocumentElement.SelectSingleNode("circulation") as XmlElement;
+                    if (circulation == null)
+                    {
+                        circulation = dom.CreateElement("circulation");
+                        dom.DocumentElement.AppendChild(circulation);
+                        bChanged = true;
+                    }
+
+                    string strOldValue = circulation.GetAttribute("notifyTypes");
+                    if (string.IsNullOrEmpty(strOldValue) == true)
+                    {
+                        string strNewValue = "mq";
+                        circulation.SetAttribute("notifyTypes", strNewValue);
+                        bChanged = true;
+                    }
+                    else
+                    {
+                        // 增加 mq
+                        string strNewValue = strOldValue;
+                        StringUtil.SetInList(ref strNewValue, "mq", true);
+                        if (strNewValue != strOldValue)
+                        {
+                            circulation.SetAttribute("notifyTypes", strNewValue);
+                            bChanged = true;
+                        }
+                    }
+                }
+            }
+#endif
+
+            if (bChanged == true)
+            {
+                // 提前备份一个原来文件，避免保存中途出错造成 0 bytes 的文件
+                string strDataDir = Path.GetDirectoryName(strLibraryXmlFileName);
+                string strBackupFileName = Path.Combine(strDataDir, "library.xml.config.save");
+                File.Copy(strLibraryXmlFileName, strBackupFileName, true);
+
+                dom.Save(strLibraryXmlFileName);
+                return 1;   // 发生了修改
+            }
+
+            return 0;   // 没有发生修改
+        }
+
         public static int InstallService(string fullFileName,
 bool bInstall,
 out string strError)
@@ -138,7 +738,7 @@ out string strError)
             out string strError)
         {
             strError = "";
-        REDO_DELETE_DATADIR:
+            REDO_DELETE_DATADIR:
             try
             {
                 Directory.Delete(strDataDir, true);
@@ -1349,6 +1949,94 @@ MessageBoxDefaultButton.Button1);
             return 0;
         }
 
+        // 不但记忆字符串，也记忆其从属的实例名
+        class InstanceValue
+        {
+            public string Instance { get; set; }
+            public string Value { get; set; }
+        }
+
+        // 2017/2/9
+        // 检查不同实例的 dp2kernel 中所用的 SQL 数据库名是否发生了重复和冲突
+        // return:
+        //      -1  检查过程出错
+        //      0   没有冲突
+        //      1   发生了冲突。报错信息在 strError 中
+        public static int CheckDatabasesXml(
+            string strInstanceName,
+            string strDataDir,
+            Hashtable prefix_table,
+            Hashtable name_table,
+            out string strError)
+        {
+            strError = "";
+
+            string strFileName = Path.Combine(strDataDir, "databases.xml");
+            XmlDocument dom = new XmlDocument();
+            try
+            {
+                dom.Load(strFileName);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return 0;   // 路径中某一级不存在
+            }
+            catch (FileNotFoundException)
+            {
+                return 0;   // 文件不存在
+            }
+            catch (Exception ex)
+            {
+                strError = "文件 '" + strFileName + "' 装入 XMLDOM 时出错: " + ex.Message;
+                return -1;
+            }
+
+            // 检查 dbs/@instancename
+            string strInstancePrefix = "";
+            XmlAttribute prefix = dom.DocumentElement.SelectSingleNode("dbs/@instancename") as XmlAttribute;
+            if (prefix != null)
+                strInstancePrefix = prefix.Value;
+
+            if (prefix_table.ContainsKey(strInstancePrefix))
+            {
+                InstanceValue data = (InstanceValue)prefix_table[strInstancePrefix];
+                strError = "实例 '" + strInstanceName + "' (配置文件 " + strFileName + ") 中 dbs 元素 instancename 属性值 '" + strInstancePrefix + "' 和实例 '" + data.Instance + "' 的用法重复了";
+                return 1;
+            }
+            else
+            {
+                InstanceValue data = new InstanceValue();
+                data.Instance = strInstanceName;
+                data.Value = strInstancePrefix;
+                prefix_table[strInstancePrefix] = data;
+            }
+
+            // 检查 sqlserverdb/@name
+            XmlNodeList name_nodes = dom.DocumentElement.SelectNodes("dbs/database/property/sqlserverdb/@name");
+            foreach (XmlAttribute attr in name_nodes)
+            {
+                string value = attr.Value;
+                if (string.IsNullOrEmpty(value))
+                    continue;
+                value = value.ToLower();
+                if (name_table.ContainsKey(value))
+                {
+                    InstanceValue data = (InstanceValue)name_table[value];
+                    strError = "实例 '" + strInstanceName + "' 中 SQL 数据库名 '" + value + "' 和实例 '" + data.Instance + "' 中另一 SQL 数据库名重复了";
+                    return 1;
+                }
+
+                {
+                    InstanceValue data = new InstanceValue();
+                    data.Instance = strInstanceName;
+                    data.Value = value;
+                    name_table[value] = data;
+                }
+            }
+
+            return 0;
+        }
+
 #if NOOOOOOOOOOOOOOOOOOO
         // 查找虚拟目录所从属的站点编号
         // return
@@ -1657,6 +2345,6 @@ MessageBoxDefaultButton.Button1);
 
             return null;
         }
-    } 
+    }
 
 }

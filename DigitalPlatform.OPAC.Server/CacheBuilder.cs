@@ -244,7 +244,7 @@ namespace DigitalPlatform.OPAC.Server
             this.SetProgressText("休眠");
 
             return;
-        ERROR1:
+            ERROR1:
             AppendResultText("CacheBuilder thread error : " + strError + "\r\n");
             this.SetProgressText("CacheBuilder thread error : " + strError);
             this.App.WriteErrorLog("CacheBuilder thread error : " + strError + "\r\n");
@@ -372,6 +372,40 @@ namespace DigitalPlatform.OPAC.Server
         }
 
         // 兑现宏
+        // parameters:
+        //      attr_list   要替换的属性名列表。例如 name, command
+        public static int MacroDom(XmlDocument dom,
+            List<string> attr_list,
+            out string strError)
+        {
+            strError = "";
+            int nRet = 0;
+            string strResult = "";
+            XmlNodeList nodes = dom.DocumentElement.SelectNodes("//class");
+            foreach (XmlElement node in nodes)
+            {
+                foreach (string attr in attr_list)
+                {
+                    string strName = node.GetAttribute(attr);
+                    if (string.IsNullOrEmpty(strName) == false
+                        && strName.IndexOf("%") != -1)
+                    {
+                        // 解析宏
+                        nRet = ParseMacro(
+                            strName,
+                            out strResult,
+                            out strError);
+                        if (nRet == -1)
+                            return -1;
+                        node.SetAttribute(attr, strResult);
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+#if NO
         public static int MacroDom(XmlDocument dom,
             out string strError)
         {
@@ -412,6 +446,7 @@ namespace DigitalPlatform.OPAC.Server
 
             return 0;
         }
+#endif
 
         // 解析宏
         static int ParseMacro(
@@ -590,7 +625,6 @@ namespace DigitalPlatform.OPAC.Server
 
             string strDataFilePath = this.App.DataDir + "/browse/" + strDataFile;
 
-
             XmlDocument dom = new XmlDocument();
             try
             {
@@ -605,6 +639,7 @@ namespace DigitalPlatform.OPAC.Server
             // 2014/12/2
             // 兑现宏
             nRet = CacheBuilder.MacroDom(dom,
+                new List<string> { "name", "command" },
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -652,7 +687,7 @@ namespace DigitalPlatform.OPAC.Server
             string strPrefix = strNode;
             string strCacheDir = this.App.DataDir + "/browse/cache/" + strDataFile;
 
-            PathUtil.CreateDirIfNeed(strCacheDir);
+            PathUtil.TryCreateDir(strCacheDir);
             string strResultsetFilename = strCacheDir + "/" + strPrefix;
             string strTempResultsetFilename = strCacheDir + "/_temp_" + strPrefix;
 
@@ -764,9 +799,8 @@ namespace DigitalPlatform.OPAC.Server
                     }
                      * */
 
-                    string strXml = "";
                     nRet = BuildXmlQuery(node,
-                        out strXml,
+                        out string strXml,
                         out strError);
                     if (nRet == -1)
                         return -1;
@@ -779,11 +813,10 @@ namespace DigitalPlatform.OPAC.Server
 
                     string strResultSetName = "opac_browse_" + strPureCaption;
 
-
                     long lRet = 0;
                     int nRedoCount = 0;
 
-                REDO_SEARCH:
+                    REDO_SEARCH:
 
                     this.SetProgressText("检索" + " " + strPureCaption);
                     this.AppendResultText("检索" + " " + strPureCaption + "\r\n");
@@ -1027,6 +1060,7 @@ namespace DigitalPlatform.OPAC.Server
             // 2014/12/2
             // 兑现宏
             int nRet = CacheBuilder.MacroDom(dom,
+                new List<string> { "name", "command" },
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -1077,7 +1111,7 @@ namespace DigitalPlatform.OPAC.Server
                     // strDataFile 中为纯文件名
                     string strCacheDir = app.DataDir + "/browse/cache/" + strDataFile;
 
-                    PathUtil.CreateDirIfNeed(strCacheDir);
+                    PathUtil.TryCreateDir(strCacheDir);
                     string strResultsetFilename = strCacheDir + "/" + strPrefix;
 
                     string strRssString = "datafile=" + strDataFile + "&node=" + strPrefix;
@@ -1096,7 +1130,7 @@ namespace DigitalPlatform.OPAC.Server
                     continue;
                 }
 
-            DO_ADD:
+                DO_ADD:
                 {
                     string strLine = strDataFile + ":" + strPrefix;
                     lines.Add(strLine.ToLower());
@@ -1154,9 +1188,12 @@ namespace DigitalPlatform.OPAC.Server
             return 0;
         }
 
-        public static XmlNode GetDataNode(XmlNode root,
-    string strNodePath)
+        public static XmlNode GetDataNode(XmlNode root, string strNodePath)
         {
+            // 2018/1/27
+            if (strNodePath == null)
+                throw new ArgumentException("strNodePath 参数值不应为 null", "strNodePath");
+
             string[] path = strNodePath.Split(new char[] { '_' });
             XmlNode current_node = root;
             for (int i = 1; i < path.Length; i++)
@@ -1216,7 +1253,6 @@ namespace DigitalPlatform.OPAC.Server
             strXml = "";
 
             string strCommand = DomUtil.GetAttr(node, "command");
-
 
             if (String.IsNullOrEmpty(strCommand) == true)
             {
@@ -1283,7 +1319,6 @@ namespace DigitalPlatform.OPAC.Server
                 strDbName = strDbName.Replace("|", ",");
 
                 // 构造单个检索式
-                string strSingle = "";
                 // 根据检索参数创建XML检索式
                 // return:
                 //      -1  出错
@@ -1299,7 +1334,7 @@ namespace DigitalPlatform.OPAC.Server
                     (string)result["datatype"],
                     result["maxcount"] == null ? -1 : Convert.ToInt32((string)result["maxcount"]),
                     "", // strSearchStyle
-                    out strSingle,
+                    out string strSingle,
                     out strError);
                 if (nRet == -1)
                     return -1;
@@ -1345,7 +1380,7 @@ namespace DigitalPlatform.OPAC.Server
             if (sessioninfo.IsReader == false)
                 strType = "worker";
             string strDir = PathUtil.MergePath(app.DataDir + "/personaldata/" + strType, strUserID);
-            PathUtil.CreateDirIfNeed(strDir);
+            PathUtil.TryCreateDir(strDir);
             return PathUtil.MergePath(strDir, "mybookshelf.resultset");
         }
 
@@ -1551,7 +1586,6 @@ namespace DigitalPlatform.OPAC.Server
                                 continue;
                             }
 
-                            string strBiblioRecPath = "";
 
 #if NO
                             // 从册记录XML中获得书目记录路径
@@ -1579,7 +1613,7 @@ namespace DigitalPlatform.OPAC.Server
                             int nRet = GetBiblioRecPathByParentID(
                                 rec.Path,
                                 rec.Cols[0],
-                                out strBiblioRecPath,
+                                out string strBiblioRecPath,
                                 out strError);
                             if (nRet == -1)
                                 return -1;
@@ -1708,6 +1742,23 @@ namespace DigitalPlatform.OPAC.Server
                     }
                 }
 
+                // 要从 dp2library 获得 “内部”结果集，然后从当前结果集中减去这个部分
+                if (string.IsNullOrEmpty(this.App.BiblioFilter) == false
+                    && resultset.Count > 0)
+                {
+                    this.AppendResultText("开始过滤。事项数 " + resultset.Count + "\r\n");
+
+                    int nRet = FilterResultset(this.App.BiblioFilter,
+                        channel,
+                        resultset,
+                        strResultsetFilename,
+                        out strError);
+                    if (nRet == -1)
+                        return -1;
+
+                    this.AppendResultText("结束过滤。事项数 " + resultset.Count + "\r\n");
+                }
+
                 this.SetProgressText("输出结果集完成");
                 bDone = true;
             }
@@ -1728,6 +1779,143 @@ namespace DigitalPlatform.OPAC.Server
             }
 
             return 0;
+        }
+
+        int FilterResultset(string strBiblioFilter,
+            LibraryChannel channel,
+            DpResultSet resultset,
+            string strResultsetFilename,
+            out string strError)
+        {
+            strError = "";
+
+            string strOperator = "AND";
+            string strFilter = strBiblioFilter;
+            if (strFilter.StartsWith("-"))
+            {
+                strFilter = strFilter.Substring(1);
+                strOperator = "SUB";
+            }
+            string strGlobalFilename = Path.Combine(Path.GetDirectoryName(strResultsetFilename), "_global_" + strFilter);
+            DpResultSet global = GetGlobalResultset(
+channel,
+"#" + strFilter,
+strGlobalFilename);
+
+            global.QuickSort();
+            global.Sorted = true;
+
+            string strTargetFilename = strResultsetFilename + "_target";
+
+            string strDataFileName = "";
+            string strIndexFileName = "";
+            string strDataFileName1 = "";
+            string strIndexFileName1 = "";
+
+            DpResultSet target = new DpResultSet(false, false);
+            target.Create(strTargetFilename,
+    strTargetFilename + ".index");
+            try
+            {
+                // 2019/1/2
+                if (resultset.Sorted == false)
+                {
+                    this.SetProgressText("正在排序");
+
+                    this.AppendResultText("开始排序。事项数 " + resultset.Count + "\r\n");
+                    resultset.QuickSort();
+                    this.AppendResultText("结束排序。事项数 " + resultset.Count + "\r\n");
+
+                    this.SetProgressText("正在去重");
+                    resultset.Sorted = true;    // 2012/5/30
+
+                    this.AppendResultText("开始去重。事项数 " + resultset.Count + "\r\n");
+                    resultset.RemoveDup();
+                    this.AppendResultText("结束去重。事项数 " + resultset.Count + "\r\n");
+                }
+                StringBuilder debugInfo = null;
+                int nRet = DpResultSetManager.Merge(strOperator == "AND" ? LogicOper.AND : LogicOper.SUB,
+                    resultset,
+                    global,
+                    "", // strOutputStyle,
+                    target,
+                    null,
+                    null,
+                    null,   // stop
+                    null,   // param
+                    ref debugInfo,
+                    out strError);
+                if (nRet == -1)
+                    return -1;
+            }
+            finally
+            {
+                target.Detach(out strDataFileName1, out strIndexFileName1);
+            }
+
+#if NO
+            resultset.Detach(out strDataFileName, out strIndexFileName);
+            if (string.IsNullOrEmpty(strDataFileName) == false)
+                File.Delete(strDataFileName);
+            if (string.IsNullOrEmpty(strIndexFileName) == false)
+                File.Delete(strIndexFileName);
+#endif
+            strDataFileName = resultset.m_strBigFileName;
+            strIndexFileName = resultset.m_strSmallFileName;
+
+            if (string.IsNullOrEmpty(strDataFileName1) == false
+                && string.IsNullOrEmpty(strDataFileName) == false)
+                File.Copy(strDataFileName1, strDataFileName, true);
+            if (string.IsNullOrEmpty(strIndexFileName1) == false
+                && string.IsNullOrEmpty(strIndexFileName) == false)
+                File.Copy(strIndexFileName1, strIndexFileName, true);
+
+#if NO
+            resultset = new DpResultSet(false, false);
+            resultset.Attach(strDataFileName, strIndexFileName);
+            resultset.Sorted = true;
+#endif
+            resultset.RefreshCount();
+            return 0;
+        }
+
+        // name --> DpResultSet
+        Hashtable _globalResultsets = new Hashtable();
+
+        DpResultSet GetGlobalResultset(
+            LibraryChannel channel,
+            string strResultsetName,
+            string strResultsetFilename)
+        {
+            DpResultSet resultset = (DpResultSet)_globalResultsets[strResultsetName];
+            if (resultset != null)
+                return resultset;
+
+            resultset = new DpResultSet(false, false);
+            resultset.Create(strResultsetFilename,
+                strResultsetFilename + ".index");
+            try
+            {
+                ResultSetLoader loader = new ResultSetLoader(
+                    channel,
+                    null,
+                    strResultsetName,
+                    "id");
+
+                foreach (Record record in loader)
+                {
+                    DpRecord item = new DpRecord(record.Path);
+                    resultset.Add(item);
+                }
+
+                _globalResultsets[strResultsetName] = resultset;
+                return resultset;
+            }
+            catch (Exception ex)
+            {
+                resultset.Close();
+                throw ex;
+            }
         }
 
         // 实体库名 --> 书目库名 对照表
@@ -2105,7 +2293,7 @@ namespace DigitalPlatform.OPAC.Server
                             strMetaData = strItemMetadata;
 
                         // 取metadata
-                        Hashtable values = StringUtil.ParseMedaDataXml(strMetaData,
+                        Hashtable values = StringUtil.ParseMetaDataXml(strMetaData,
                             out strError);
                         if (values == null)
                         {

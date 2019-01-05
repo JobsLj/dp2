@@ -1,4 +1,5 @@
-﻿using System;
+﻿using DigitalPlatform.CommonControl;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -68,7 +69,7 @@ namespace dp2Circulation
             this.DialogResult = System.Windows.Forms.DialogResult.OK;
             this.Close();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -114,8 +115,17 @@ namespace dp2Circulation
                 this.textBox_biblioDumpFileName.Text = dlg.FileName;
             }
 
-            if (string.IsNullOrEmpty(this.textBox_objectDirectoryName.Text))
-                this.textBox_objectDirectoryName.Text = this.textBox_biblioDumpFileName.Text + ".object";
+            AutoBuildObjectDirectoryName(false);
+        }
+
+        void AutoBuildObjectDirectoryName(bool bForce)
+        {
+            if (string.IsNullOrEmpty(this.textBox_objectDirectoryName.Text)
+                || bForce)
+            {
+                if (string.IsNullOrEmpty(this.textBox_biblioDumpFileName.Text) == false)
+                    this.textBox_objectDirectoryName.Text = this.textBox_biblioDumpFileName.Text + ".object";
+            }
         }
 
         private void button_getObjectDirectoryName_Click(object sender, EventArgs e)
@@ -229,6 +239,39 @@ namespace dp2Circulation
             set
             {
                 this.checkBox_includeObjectFile.Checked = value;
+            }
+        }
+
+        private void textBox_biblioDumpFileName_TextChanged(object sender, EventArgs e)
+        {
+            AutoBuildObjectDirectoryName(true);
+        }
+
+        public string UiState
+        {
+            get
+            {
+                List<object> controls = new List<object>();
+                controls.Add(this.textBox_biblioDumpFileName);
+                controls.Add(this.checkBox_includeEntities);
+                controls.Add(this.checkBox_includeOrders);
+                controls.Add(this.checkBox_includeIssues);
+                controls.Add(this.checkBox_includeComments);
+                controls.Add(this.checkBox_includeObjectFile);
+                controls.Add(this.textBox_objectDirectoryName);
+                return GuiState.GetUiState(controls);
+            }
+            set
+            {
+                List<object> controls = new List<object>();
+                controls.Add(this.textBox_biblioDumpFileName);
+                controls.Add(this.checkBox_includeEntities);
+                controls.Add(this.checkBox_includeOrders);
+                controls.Add(this.checkBox_includeIssues);
+                controls.Add(this.checkBox_includeComments);
+                controls.Add(this.checkBox_includeObjectFile);
+                controls.Add(this.textBox_objectDirectoryName);
+                GuiState.SetUiState(controls, value);
             }
         }
     }

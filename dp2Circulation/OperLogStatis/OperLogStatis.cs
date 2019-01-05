@@ -133,7 +133,7 @@ namespace dp2Circulation
         {
             Dispose(true);
             // This object will be cleaned up by the Dispose method.
-            // Therefore, you should call GC.SupressFinalize to
+            // Therefore, you should call GC.SuppressFinalize to
             // take this object off the finalization queue 
             // and prevent finalization code for this object
             // from executing a second time.
@@ -629,8 +629,6 @@ amerce 交费
                 strError = "动作类型是modifyprice，不能由本函数处理，应当由ComputeAmerceModifiedPrice()函数处理。";
                 return -1;
             }
-
-
 
             // 根据日志记录中的<amerceRecord>元素创建ID-价格列表
             nRet = BuildIdPriceListFromAmerceRecordTag(domOperLog,

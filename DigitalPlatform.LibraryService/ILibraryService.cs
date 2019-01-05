@@ -1,11 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.Serialization;
 using System.ServiceModel;
-using System.Text;
-
-using System.Net.Security;
 
 using DigitalPlatform.LibraryServer;
 using DigitalPlatform.Message;
@@ -168,6 +163,7 @@ namespace dp2Library
             string strBiblio,
             byte[] baTimestamp,
             string strComment,
+            string strStyle,
             out string strOutputBiblioRecPath,
             out byte[] baOutputTimestamp);
 
@@ -308,7 +304,7 @@ namespace dp2Library
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult GetIssueInfo(
                     string strRefID,
-                    // string strBiblioRecPath,
+            // string strBiblioRecPath,
                     string strItemXml,
                     string strResultType,
                     out string strResult,
@@ -370,7 +366,7 @@ namespace dp2Library
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult GetOrderInfo(
                     string strRefID,
-                    // string strBiblioRecPath,
+            // string strBiblioRecPath,
                     string strItemXml,
                     string strResultType,
                     out string strResult,
@@ -465,9 +461,10 @@ namespace dp2Library
 
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult ManageDatabase(string strAction,
-                    string strDatabaseName,
-                    string strDatabaseInfo,
-                    out string strOutputInfo);
+            string strDatabaseName,
+            string strDatabaseInfo,
+            string strStyle,
+            out string strOutputInfo);
 
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult GetUser(
@@ -505,8 +502,10 @@ namespace dp2Library
 
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult VerifyBarcode(
+            string strAction,
             string strLibraryCode,
-            string strBarcode);
+            string strBarcode,
+            out string strOutputBarcode);
 
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult GetSystemParameter(
@@ -705,7 +704,7 @@ namespace dp2Library
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult GetCommentInfo(
                     string strRefID,
-                    // string strBiblioRecPath,
+            // string strBiblioRecPath,
                     string strItemXml,
                     string strResultType,
                     out string strResult,
@@ -769,12 +768,13 @@ namespace dp2Library
 
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult GetFile(
-    string strCategory,
-    string strFileName,
-    long lStart,
-    long lLength,
-    out byte[] baContent,
-    out string strFileTime);
+            string strCategory,
+            string strFileName,
+            long lStart,
+            long lLength,
+            string strStyle,
+            out byte[] baContent,
+            out string strFileTime);
 
         [OperationContract(IsInitiating = true, IsTerminating = false)]
         LibraryServerResult ListFile(
@@ -810,5 +810,37 @@ namespace dp2Library
     string strStyle,
     string strResultTypeList,
     out string[] results);
+
+        [OperationContract(IsInitiating = true, IsTerminating = false)]
+        LibraryServerResult Dir(string strResPath,
+        long lStart,
+        long lLength,
+        string strLang,
+        string strStyle,
+        out ResInfoItem[] items,
+        out DigitalPlatform.rms.Client.rmsws_localhost.ErrorCodeValue kernel_errorcode);
+
+        [OperationContract(IsInitiating = true, IsTerminating = false)]
+        LibraryServerResult GetAuthorNumber(
+    string strAuthor,
+    bool bSelectPinyin,
+    bool bSelectEntry,
+    bool bOutputDebugInfo,
+    ref List<Question> questions,
+    out string strNumber,
+    out string strDebugInfo);
+
+        [OperationContract(IsInitiating = true, IsTerminating = false)]
+        LibraryServerResult GetPinyin(
+            string strType,
+            string strText,
+            out string strPinyinXml);
+
+        [OperationContract(IsInitiating = true, IsTerminating = false)]
+        LibraryServerResult SetPinyin(
+string strPinyinXml);
+
     }
+
+
 }

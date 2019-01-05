@@ -190,7 +190,8 @@ namespace DigitalPlatform.LibraryServer
             out UserInfo[] userinfos,
             out string strError)
         {
-            this.m_lock.AcquireReaderLock(m_nLockTimeout);
+            // this.m_lock.AcquireReaderLock(m_nLockTimeout);
+            this.LockForRead();    // 2016/10/16
             try
             {
                 strError = "";
@@ -257,7 +258,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseReaderLock();
+                // this.m_lock.ReleaseReaderLock();
+                this.UnlockForRead();
             }
         }
 
@@ -377,7 +379,8 @@ namespace DigitalPlatform.LibraryServer
         SKIP_VERIFY:
             XmlElement nodeAccount = null;
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
                 // 查重
@@ -444,13 +447,14 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
 
             // 写入日志
             {
                 XmlDocument domOperLog = PrepareOperlogDom("new", strOperator);
-                XmlNode node = domOperLog.CreateElement("account");
+                XmlElement node = domOperLog.CreateElement("account");
                 domOperLog.DocumentElement.AppendChild(node);
 
                 DomUtil.SetElementOuterXml(node, nodeAccount.OuterXml);
@@ -512,7 +516,8 @@ namespace DigitalPlatform.LibraryServer
         // 对用户名查重
         public bool SearchUserNameDup(string strUserName)
         {
-            this.m_lock.AcquireReaderLock(m_nLockTimeout);
+            // this.m_lock.AcquireReaderLock(m_nLockTimeout);
+            this.LockForRead();    // 2016/10/16
             try
             {
                 // 查重
@@ -524,7 +529,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseReaderLock();
+                // this.m_lock.ReleaseReaderLock();
+                this.UnlockForRead();
             }
         }
 
@@ -548,14 +554,15 @@ namespace DigitalPlatform.LibraryServer
                 return -1;
             }
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
                 // 查重
                 XmlNode node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("//accounts/account[@name='" + strUserName + "']");
                 if (node == null)
                 {
-                    strError = "用户 '" + strUserName + "' 不存在";
+                    strError = "用户 '" + strUserName + "' 不存在 (1)";
                     return -1;
                 }
 
@@ -626,7 +633,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
 
             // return 0;
@@ -947,6 +955,8 @@ namespace DigitalPlatform.LibraryServer
                 }
             }
 
+            if (bChanged == true)
+                return 1;
             return 0;
         }
 
@@ -1035,14 +1045,15 @@ namespace DigitalPlatform.LibraryServer
             XmlNode nodeAccount = null;
             string strOldOuterXml = "";
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
                 // 查重
                 nodeAccount = this.LibraryCfgDom.DocumentElement.SelectSingleNode("//accounts/account[@name='" + strUserName + "']");
                 if (nodeAccount == null)
                 {
-                    strError = "用户 '" + strUserName + "' 不存在";
+                    strError = "用户 '" + strUserName + "' 不存在 (2)";
                     return -1;
                 }
 
@@ -1106,7 +1117,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
 
             // 写入日志
@@ -1115,7 +1127,7 @@ namespace DigitalPlatform.LibraryServer
 
                 if (string.IsNullOrEmpty(strOldOuterXml) == false)
                 {
-                    XmlNode node_old = domOperLog.CreateElement("oldAccount");
+                    XmlElement node_old = domOperLog.CreateElement("oldAccount");
                     domOperLog.DocumentElement.AppendChild(node_old);
                     node_old = DomUtil.SetElementOuterXml(node_old, strOldOuterXml);
                     DomUtil.RenameNode(node_old,
@@ -1123,7 +1135,7 @@ namespace DigitalPlatform.LibraryServer
                         "oldAccount");
                 }
 
-                XmlNode node = domOperLog.CreateElement("account");
+                XmlElement node = domOperLog.CreateElement("account");
                 domOperLog.DocumentElement.AppendChild(node);
 
                 DomUtil.SetElementOuterXml(node, nodeAccount.OuterXml);
@@ -1199,14 +1211,15 @@ namespace DigitalPlatform.LibraryServer
             XmlNode nodeAccount = null;
             string strHashedPassword = "";
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
                 // 查重
                 nodeAccount = this.LibraryCfgDom.DocumentElement.SelectSingleNode("//accounts/account[@name='" + strUserName + "']");
                 if (nodeAccount == null)
                 {
-                    strError = "用户 '" + strUserName + "' 不存在";
+                    strError = "用户 '" + strUserName + "' 不存在 (3)";
                     return -1;
                 }
 
@@ -1240,7 +1253,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
 
             {
@@ -1293,14 +1307,15 @@ namespace DigitalPlatform.LibraryServer
             XmlNode nodeAccount = null;
             string strOldOuterXml = "";
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
                 // 查重
                 nodeAccount = this.LibraryCfgDom.DocumentElement.SelectSingleNode("//accounts/account[@name='" + strUserName + "']");
                 if (nodeAccount == null)
                 {
-                    strError = "用户 '" + strUserName + "' 不存在";
+                    strError = "用户 '" + strUserName + "' 不存在 (4)";
                     return -1;
                 }
                 strOldOuterXml = nodeAccount.OuterXml;
@@ -1329,7 +1344,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
 
             {
@@ -1337,7 +1353,7 @@ namespace DigitalPlatform.LibraryServer
 
                 if (string.IsNullOrEmpty(strOldOuterXml) == false)
                 {
-                    XmlNode node_old = domOperLog.CreateElement("oldAccount");
+                    XmlElement node_old = domOperLog.CreateElement("oldAccount");
                     domOperLog.DocumentElement.AppendChild(node_old);
                     node_old = DomUtil.SetElementOuterXml(node_old, strOldOuterXml);
                     DomUtil.RenameNode(node_old,

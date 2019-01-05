@@ -247,9 +247,9 @@ namespace DigitalPlatform.LibraryServer
                 {
                     // 通知系统挂起
                     //this.App.HangupReason = HangupReason.OperLogError;
-                    this.App.HangupList.Add("OperLogError");
 
                     this.App.WriteErrorLog("系统启动时，试图将备用日志文件中的信息写入当日日志文件，以使系统恢复正常，但是这一努力失败了。请试着为数据目录腾出更多富余磁盘空间，然后重新启动系统。");
+                    this.App.AddHangup("OperLogError");
 
                     this.m_stream.SetLength(lSaveLength);
                 }
@@ -299,7 +299,7 @@ namespace DigitalPlatform.LibraryServer
             {
                 m_strDirectory = strDirectory;
 
-                PathUtil.CreateDirIfNeed(m_strDirectory);
+                PathUtil.TryCreateDir(m_strDirectory);
 
                 // 2013/6/16
                 nRet = this.VerifyLogFiles(true, out strError);
@@ -838,7 +838,7 @@ namespace DigitalPlatform.LibraryServer
 
                     // 通知系统挂起
                     // this.App.HangupReason = HangupReason.OperLogError;
-                    this.App.HangupList.Add("OperLogError");
+                    this.App.AddHangup("OperLogError");
 
                     this.App.WriteErrorLog("系统因此挂起。请检查数据目录是否有足够的富余磁盘空间。问题解决后，重启系统。");
 
@@ -905,7 +905,7 @@ namespace DigitalPlatform.LibraryServer
 
                             // 通知系统挂起
                             // this.App.HangupReason = HangupReason.OperLogError;
-                            this.App.HangupList.Add("OperLogError");
+                            this.App.AddHangup("OperLogError");
                             this.App.WriteErrorLog("系统因此挂起。请检查数据目录是否有足够的富余磁盘空间。问题解决后，重启系统。");
                             throw ex;
                         }
@@ -1116,7 +1116,11 @@ namespace DigitalPlatform.LibraryServer
             // 1.01 (2014/3/8) 修改了 operation=amerce;action=expire 记录中元素名 oldReeaderRecord 为 oldReaderRecord
             // 1.02 (2015/9/8) 日志中增加了 time 元素 linkUID 和 uid 元素
             // 1.03 (2015/9/13) SetReaderInfo 中增加了 changedEntityRecord 元素 
-            DomUtil.SetElementText(dom.DocumentElement, "version", "1.02");
+            // 1.04 (2017/1/12) Borrow() Return() 中，readerRecord 元素增加了 clipping 属性，如果值为 "true"，表示这里记载的读者记录是不完全的，不应用于快照恢复读者记录
+            // 1.05 (2017/1/16) CopyBiblioINfo() API 的操作日志增加了 overwritedRecord 元素。记载被覆盖以前的记录内容
+            // 1.06 (2017/5/16) 对 ManageDatabase() API 也写入日志了
+            // 1.07 (2018/3/7) passgate 日志记录中增加了 readerRefID 元素
+            DomUtil.SetElementText(dom.DocumentElement, "version", "1.07");
 
             if (start_time != new DateTime(0))
             {
@@ -1180,6 +1184,7 @@ namespace DigitalPlatform.LibraryServer
             Debug.Assert(this.m_streamSpare != null, "");
 
             WriteClientAddress(dom, strClientAddress);
+            DomUtil.SetElementText(dom.DocumentElement, "version", "1.06");
 
             int nRet = WriteEnventLog(dom.OuterXml,
                 attachment,
@@ -1203,6 +1208,7 @@ namespace DigitalPlatform.LibraryServer
         //              目前的含义是记录起始位置。
         //      strStyle    如果不包含 supervisor，则本函数会自动过滤掉日志记录中读者记录的 password 字段
         //      attachment  承载输出的附件部分的 Stream 对象。如果为 null，表示不输出附件部分
+        //                  本函数返回后，attachment 的文件指针在文件末尾。调用时需引起注意
         // return:
         //      -1  error
         //      0   file not found
@@ -1920,7 +1926,7 @@ out strTargetLibraryCode);
             {
                 DomUtil.DeleteElement(dom.DocumentElement, "newPassword");
                 XmlNodeList nodes = dom.DocumentElement.SelectNodes("account | oldAccount");
-                foreach(XmlElement account in nodes)
+                foreach (XmlElement account in nodes)
                 {
                     account.RemoveAttribute("password");
                 }
@@ -2120,6 +2126,7 @@ out strTargetLibraryCode);
         //      lIndex  记录序号。从0开始计数。lIndex为-1时调用本函数，表示希望获得整个文件尺寸值，将返回在lHintNext中。
         //      lHint   记录位置暗示性参数。这是一个只有服务器才能明白含义的值，对于前端来说是不透明的。
         //              目前的含义是记录起始位置。
+        //      nAttachmentFragmentLength   要读出的附件内容字节数。如果为 -1，表示尽可能多读出内容
         // return:
         //      -1  error
         //      0   file not found
@@ -2242,6 +2249,8 @@ out strTargetLibraryCode);
                 }
 
 
+                // parameters:
+                //      nAttachmentFragmentLength   要读出的附件内容字节数。如果为 -1，表示尽可能多读出内容
                 // return:
                 //      -1  出错
                 //      >=0 整个附件的尺寸
@@ -2390,6 +2399,7 @@ out strTargetLibraryCode);
         //      lHint   记录位置暗示性参数。这是一个只有服务器才能明白含义的值，对于前端来说是不透明的。
         //              目前的含义是记录起始位置。
         //      strStyle    如果不包含 supervisor，则本函数会自动过滤掉日志记录中读者记录的 password 字段
+        //                  如果包含 dont_return_xml 表示在 strXml 不返回内容
         // return:
         //      -1  error
         //      0   file not found
@@ -2621,6 +2631,10 @@ out strTargetLibraryCode);
 
                 // END1:
                 lHintNext = cache_item.Stream.Position;
+
+                // 2017/12/5
+                if (StringUtil.IsInList("dont_return_xml", strStyle) == true)
+                    strXml = "";
                 return 1;
             }
             finally
@@ -2743,6 +2757,7 @@ out strTargetLibraryCode);
         // 要读出附件
         // parameters:
         //      attachment  承载输出的附件部分的 Stream 对象。如果为 null，表示不输出附件部分
+        //                  本函数返回后，attachment 的文件指针在文件末尾。调用时需引起注意
         // return:
         //      1   出错
         //      0   成功
@@ -2908,6 +2923,8 @@ out strTargetLibraryCode);
 
         // 2012/9/23
         // 从日志文件当前位置读出一条日志记录的附件部分
+        // parameters:
+        //      nAttachmentFragmentLength   要读出的附件内容字节数。如果为 -1，表示尽可能多读出内容
         // return:
         //      -1  出错
         //      >=0 整个附件的尺寸
@@ -2956,6 +2973,8 @@ out strTargetLibraryCode);
                 return -1;
 
             // 读出attachment事项
+            // parameters:
+            //      nAttachmentFragmentLength   要读出的附件内容字节数。如果为 -1，表示尽可能多读出内容
             // return:
             //      -1  出错
             //      >=0 整个附件的尺寸
@@ -3101,6 +3120,7 @@ out strTargetLibraryCode);
         // 读出一个事项(Stream类型)
         // parameters:
         //      streamBody  承载输出的 body 部分的 Stream 对象。如果为 null，表示不输出这部分
+        //                  本函数返回后，streamBody 的文件指针在文件末尾。调用时需引起注意
         public static int ReadEntry(
             Stream stream,
             out string strMetaData,
@@ -3217,6 +3237,7 @@ out strTargetLibraryCode);
         // 2012/9/23
         // 读出一个事项(byte []类型)
         // parameters:
+        //      nAttachmentFragmentLength   要读出的附件内容字节数。如果为 -1，表示尽可能多读出内容
         // return:
         //      -1  出错
         //      >=0 整个附件的尺寸
@@ -3293,14 +3314,19 @@ out strTargetLibraryCode);
 
             if (lBodyLength > 0)
             {
-                if (nAttachmentFragmentLength > 0)
+                if (nAttachmentFragmentLength > 0 || nAttachmentFragmentLength == -1)   // 2017/5/16 添加的 -1
                 {
+                    long lTemp = (lBodyLength - lAttachmentFragmentStart);
                     // 尽量多读入
                     if (nAttachmentFragmentLength == -1)
                     {
-                        long lTemp = (lBodyLength - lAttachmentFragmentStart);
                         // 看看是否超过每次的限制尺寸
                         nAttachmentFragmentLength = (int)Math.Min((long)(100 * 1024), lTemp);
+                    }
+                    else
+                    {
+                        // 2017/5/16 确保 nAttachmentFragmentLength 不超过附件剩余部分长度
+                        nAttachmentFragmentLength = (int)(Math.Min(lTemp, (long)nAttachmentFragmentLength));
                     }
 
                     attachment_data = new byte[nAttachmentFragmentLength];
@@ -3782,9 +3808,9 @@ out strTargetLibraryCode);
 
                     // 通知系统挂起
                     //this.App.HangupReason = HangupReason.OperLogError;
-                    this.App.HangupList.Add("OperLogError");
 
                     this.App.WriteErrorLog("系统启动时，试图合并临时日志文件，但是这一努力失败了 [" + strError + "]。请试着为数据目录腾出更多富余磁盘空间，然后重新启动系统。");
+                    this.App.AddHangup("OperLogError");
                     return -1;
                 }
             }

@@ -10,7 +10,6 @@ using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
 using DigitalPlatform.IO;
 using DigitalPlatform.rms.Client;
-// using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
 
 namespace DigitalPlatform.LibraryServer
@@ -1633,6 +1632,8 @@ namespace DigitalPlatform.LibraryServer
             nRet = this.App.OrderItemDatabase.SearchChildItems(channel,
                 strBiblioRecPath,
                 "return_record_xml", // "return_record_xml,check_circulation_info",
+                (DigitalPlatform.LibraryServer.LibraryApplication.Delegate_checkRecord)null,
+                null,
                 out lHitCount,
                 out orderinfos,
                 out strError);
@@ -1655,6 +1656,8 @@ namespace DigitalPlatform.LibraryServer
             nRet = this.App.IssueItemDatabase.SearchChildItems(channel,
                 strBiblioRecPath,
                 "return_record_xml", // "return_record_xml,check_circulation_info",
+                (DigitalPlatform.LibraryServer.LibraryApplication.Delegate_checkRecord)null,
+                null,
                 out lHitCount,
                 out issueinfos,
                 out strError);
@@ -1676,6 +1679,8 @@ namespace DigitalPlatform.LibraryServer
             nRet = this.App.CommentItemDatabase.SearchChildItems(channel,
                 strBiblioRecPath,
                 "return_record_xml", // "return_record_xml,check_circulation_info",
+                (DigitalPlatform.LibraryServer.LibraryApplication.Delegate_checkRecord)null,
+                null,
                 out lHitCount,
                 out commentinfos,
                 out strError);
@@ -2205,7 +2210,7 @@ namespace DigitalPlatform.LibraryServer
         // 变换为字符串
         public override string ToString()
         {
-            StringBuilder text = new StringBuilder(4096);
+            StringBuilder text = new StringBuilder();
             foreach (BreakPointInfo info in this)
             {
                 text.Append(info.ToString() + ";");
@@ -2217,7 +2222,7 @@ namespace DigitalPlatform.LibraryServer
         // 小结文字
         public string GetSummary()
         {
-            StringBuilder text = new StringBuilder(4096);
+            StringBuilder text = new StringBuilder();
             foreach (BreakPointInfo info in this)
             {
                 text.Append(info.GetSummary() + "\r\n");

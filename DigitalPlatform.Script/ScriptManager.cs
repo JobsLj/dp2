@@ -274,6 +274,24 @@ namespace DigitalPlatform.Script
             }
         }
 
+        public List<string> GetAllProjectNames(out string strError)
+        {
+            strError = "";
+
+            List<string> results = new List<string>();
+
+            XmlNodeList nodes = this.dom.DocumentElement.SelectNodes("//project");
+
+            foreach (XmlElement node in nodes)
+            {
+                string strName = node.GetAttribute("name");
+                // TODO: 要考虑名字前面的路径
+                results.Add(strName);
+            }
+
+            return results;
+        }
+
         // 列出全部已经安装的URL
         public int GetInstalledUrls(out List<string> urls,
             out string strError)
@@ -778,7 +796,7 @@ namespace DigitalPlatform.Script
                     }
                 }
 
-            REDO_CHECKDUP:
+                REDO_CHECKDUP:
 
                 // 查重
                 string strExistLocate;
@@ -893,7 +911,7 @@ namespace DigitalPlatform.Script
                 {
                     this.Save();
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     strError = "保存方案配置文件时出现异常: " + ex.Message;
                     return -1;
@@ -1163,6 +1181,10 @@ namespace DigitalPlatform.Script
         {
             if (string.IsNullOrEmpty(line) == true)
                 return true;
+            line = line.Trim();
+            if (string.IsNullOrEmpty(line) == true)
+                return true;
+
             if (line.StartsWith("using ") == true)
                 return true;
             if (line.StartsWith("//") == true)
@@ -1171,6 +1193,81 @@ namespace DigitalPlatform.Script
             return false;
         }
 
+        static bool IsEqual(string strText1, string strText2)
+        {
+            return string.Compare(strText1.Trim(), strText2.Trim(), true) == 0;
+        }
+
+        // 为了兼容以前代码，对 using 部分进行修改
+        public static string ModifyCode(string strCode)
+        {
+            StringBuilder text = new StringBuilder();
+            List<string> lines = StringUtil.SplitList(strCode, "\r\n");
+
+            bool bHasCirculationClientUsing = false;
+            bool bHasLibraryClientUsing = false;
+
+            bool in_using = true;
+            foreach (string line in lines)
+            {
+                if (IsUsing(line) == false)
+                    in_using = false;
+
+                if (in_using == false)
+                    goto CONTINUE;
+
+                if (IsEqual(line, "using DigitalPlatform.CirculationClient;"))
+                    bHasCirculationClientUsing = true;
+                if (IsEqual(line, "using DigitalPlatform.LibraryClient;"))
+                    bHasLibraryClientUsing = true;
+                if (IsEqual(line, "using DigitalPlatform.CirculationClient.localhost;"))
+                {
+                    text.Append("using DigitalPlatform.LibraryClient.localhost; // 为兼容而作的自动修改\r\n");
+                    continue;
+                }
+
+                // 2018/8/18
+                if (IsEqual(line, "using DigitalPlatform.GcatClient;"))
+                    continue;
+                CONTINUE:
+                text.Append(line + "\r\n");
+            }
+
+            if (bHasCirculationClientUsing == true && bHasLibraryClientUsing == false)
+            {
+                return "using DigitalPlatform.LibraryClient; // 为兼容而作的自动修改\r\n\r\n"
+                    + text.ToString();
+            }
+            else
+                return text.ToString();
+        }
+
+        public static int LoadCode(string strCodeFileName,
+    out string strCode,
+    out string strError)
+        {
+            strCode = "";
+            strError = "";
+
+            try
+            {
+                StringBuilder text = new StringBuilder();
+                using (StreamReader sr = new StreamReader(strCodeFileName, true))
+                {
+                    text.Append(sr.ReadToEnd());
+                }
+
+                strCode = ModifyCode(text.ToString());
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                strError = ExceptionUtil.GetAutoText(ex);
+                return -1;
+            }
+
+        }
+#if NO
         public static int LoadCode(string strCodeFileName,
             out string strCode,
             out string strError)
@@ -1207,6 +1304,11 @@ namespace DigitalPlatform.Script
                             text.Append("using DigitalPlatform.LibraryClient.localhost; // 为兼容而作的自动修改\r\n");
                             continue;
                         }
+
+                        // 2018/8/18
+                        if (line == "using DigitalPlatform.GcatClient;")
+                            continue;
+
                         text.Append(line + "\r\n");
                     }
                     text.Append(sr.ReadToEnd());
@@ -1225,8 +1327,10 @@ namespace DigitalPlatform.Script
             }
             else
                 strCode = text.ToString();
+
             return 0;
         }
+#endif
 
         // 从xml字符串中得到refs字符串数组
         // return:
@@ -2203,7 +2307,6 @@ namespace DigitalPlatform.Script
             // CompilerParameters对象
             System.CodeDom.Compiler.CompilerParameters compilerParams;
             compilerParams = new CompilerParameters();
-
             compilerParams.GenerateInMemory = true; //Assembly is created in memory
             compilerParams.IncludeDebugInformation = true;
 
@@ -2222,7 +2325,8 @@ namespace DigitalPlatform.Script
 
             compilerParams.ReferencedAssemblies.AddRange(refs);
 
-
+            // Microsoft.CSharp.CSharpCodeProvider provider;
+            // Microsoft.CodeDom.Providers.DotNetCompilerPlatform.CSharpCodeProvider provider;
             CSharpCodeProvider provider;
 
             System.CodeDom.Compiler.CompilerResults results = null;
@@ -2230,7 +2334,7 @@ namespace DigitalPlatform.Script
             {
                 Dictionary<string, string> options = new Dictionary<string, string>
                 {
-                {"CompilerVersion","v3.5"}
+                {"CompilerVersion","v3.5"}  // "v3.5"
                 };
                 provider = new CSharpCodeProvider();
                 // compiler = provider.CreateCompiler();
@@ -2415,7 +2519,7 @@ namespace DigitalPlatform.Script
 
 
             // 试探磁盘目录中同名文件
-            PathUtil.CreateDirIfNeed(this.DefaultCodeFileDir);
+            PathUtil.TryCreateDir(this.DefaultCodeFileDir);
             DirectoryInfo di = new DirectoryInfo(this.DefaultCodeFileDir);
 
             FileSystemInfo[] fis = di.GetFileSystemInfos();
@@ -2461,7 +2565,7 @@ namespace DigitalPlatform.Script
                     + strPrefix + Convert.ToString(nPrefixNumber);
             }
 
-            PathUtil.CreateDirIfNeed(strNewPath);
+            PathUtil.TryCreateDir(strNewPath);
 
             return strNewPath;
         }
@@ -2518,7 +2622,7 @@ namespace DigitalPlatform.Script
 
 
             // 试探磁盘目录中同名文件
-            PathUtil.CreateDirIfNeed(this.DefaultCodeFileDir);
+            PathUtil.TryCreateDir(this.DefaultCodeFileDir);
             DirectoryInfo di = new DirectoryInfo(this.DefaultCodeFileDir);
 
             FileInfo[] fis = di.GetFiles();

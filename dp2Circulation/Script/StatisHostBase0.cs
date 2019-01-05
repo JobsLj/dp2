@@ -15,6 +15,21 @@ namespace dp2Circulation
     public class StatisHostBase0
     {
         /// <summary>
+        /// 当前窗口所从属的框架窗口
+        /// </summary>
+        public virtual MainForm MainForm
+        {
+            get
+            {
+                return Program.MainForm;
+            }
+            set
+            {
+                // 为了让脚本代码能兼容
+            }
+        }
+
+        /// <summary>
         /// 统计方案存储目录
         /// </summary>
         public string ProjectDir = "";  // 方案源文件所在目录
@@ -68,7 +83,7 @@ namespace dp2Circulation
         {
             Dispose(true);
             // This object will be cleaned up by the Dispose method.
-            // Therefore, you should call GC.SupressFinalize to
+            // Therefore, you should call GC.SuppressFinalize to
             // take this object off the finalization queue 
             // and prevent finalization code for this object
             // from executing a second time.

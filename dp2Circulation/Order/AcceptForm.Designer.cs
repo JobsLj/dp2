@@ -1,4 +1,4 @@
-namespace dp2Circulation
+Ôªønamespace dp2Circulation
 {
     partial class AcceptForm
     {
@@ -38,6 +38,9 @@ namespace dp2Circulation
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(AcceptForm));
             this.tabControl_main = new System.Windows.Forms.TabControl();
             this.tabPage_prepare = new System.Windows.Forms.TabPage();
+            this.label5 = new System.Windows.Forms.Label();
+            this.comboBox_sellerFilter = new System.Windows.Forms.ComboBox();
+            this.button_defaultEntityFields = new System.Windows.Forms.Button();
             this.checkBox_prepare_createCallNumber = new System.Windows.Forms.CheckBox();
             this.label4 = new System.Windows.Forms.Label();
             this.comboBox_prepare_priceDefault = new System.Windows.Forms.ComboBox();
@@ -70,6 +73,7 @@ namespace dp2Circulation
             this.button_next = new System.Windows.Forms.Button();
             this.toolTip_info = new System.Windows.Forms.ToolTip(this.components);
             this.panel_main = new System.Windows.Forms.Panel();
+            this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
             this.tabControl_main.SuspendLayout();
             this.tabPage_prepare.SuspendLayout();
             this.tabPage_accept.SuspendLayout();
@@ -85,17 +89,19 @@ namespace dp2Circulation
             this.tabControl_main.Controls.Add(this.tabPage_finish);
             this.tabControl_main.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tabControl_main.Location = new System.Drawing.Point(0, 0);
-            this.tabControl_main.Margin = new System.Windows.Forms.Padding(2);
             this.tabControl_main.Multiline = true;
             this.tabControl_main.Name = "tabControl_main";
             this.tabControl_main.SelectedIndex = 0;
-            this.tabControl_main.Size = new System.Drawing.Size(396, 308);
+            this.tabControl_main.Size = new System.Drawing.Size(493, 431);
             this.tabControl_main.TabIndex = 0;
             this.tabControl_main.SelectedIndexChanged += new System.EventHandler(this.tabControl_main_SelectedIndexChanged);
             // 
             // tabPage_prepare
             // 
             this.tabPage_prepare.AutoScroll = true;
+            this.tabPage_prepare.Controls.Add(this.label5);
+            this.tabPage_prepare.Controls.Add(this.comboBox_sellerFilter);
+            this.tabPage_prepare.Controls.Add(this.button_defaultEntityFields);
             this.tabPage_prepare.Controls.Add(this.checkBox_prepare_createCallNumber);
             this.tabPage_prepare.Controls.Add(this.label4);
             this.tabPage_prepare.Controls.Add(this.comboBox_prepare_priceDefault);
@@ -110,71 +116,95 @@ namespace dp2Circulation
             this.tabPage_prepare.Controls.Add(this.button_viewDatabaseDefs);
             this.tabPage_prepare.Controls.Add(this.label1);
             this.tabPage_prepare.Location = new System.Drawing.Point(4, 4);
-            this.tabPage_prepare.Margin = new System.Windows.Forms.Padding(2);
             this.tabPage_prepare.Name = "tabPage_prepare";
-            this.tabPage_prepare.Padding = new System.Windows.Forms.Padding(2);
-            this.tabPage_prepare.Size = new System.Drawing.Size(388, 282);
+            this.tabPage_prepare.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPage_prepare.Size = new System.Drawing.Size(485, 399);
             this.tabPage_prepare.TabIndex = 0;
-            this.tabPage_prepare.Text = "◊º±∏";
+            this.tabPage_prepare.Text = "ÂáÜÂ§á";
             this.tabPage_prepare.UseVisualStyleBackColor = true;
+            // 
+            // label5
+            // 
+            this.label5.AutoSize = true;
+            this.label5.Location = new System.Drawing.Point(6, 73);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(134, 18);
+            this.label5.TabIndex = 14;
+            this.label5.Text = "‰π¶ÂïÜ(Ê∏†ÈÅì)(&S):";
+            // 
+            // comboBox_sellerFilter
+            // 
+            this.comboBox_sellerFilter.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.comboBox_sellerFilter.FormattingEnabled = true;
+            this.comboBox_sellerFilter.Items.AddRange(new object[] {
+            "<‰∏çÁ≠õÈÄâ>"});
+            this.comboBox_sellerFilter.Location = new System.Drawing.Point(157, 70);
+            this.comboBox_sellerFilter.Name = "comboBox_sellerFilter";
+            this.comboBox_sellerFilter.Size = new System.Drawing.Size(197, 26);
+            this.comboBox_sellerFilter.TabIndex = 15;
+            // 
+            // button_defaultEntityFields
+            // 
+            this.button_defaultEntityFields.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button_defaultEntityFields.Location = new System.Drawing.Point(9, 218);
+            this.button_defaultEntityFields.Name = "button_defaultEntityFields";
+            this.button_defaultEntityFields.Size = new System.Drawing.Size(345, 45);
+            this.button_defaultEntityFields.TabIndex = 13;
+            this.button_defaultEntityFields.Text = "ÂÜåËÆ∞ÂΩïÈªòËÆ§ÂÄº...";
+            this.button_defaultEntityFields.UseVisualStyleBackColor = true;
+            this.button_defaultEntityFields.Click += new System.EventHandler(this.button_defaultEntityFields_Click);
             // 
             // checkBox_prepare_createCallNumber
             // 
             this.checkBox_prepare_createCallNumber.AutoSize = true;
             this.checkBox_prepare_createCallNumber.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.checkBox_prepare_createCallNumber.Location = new System.Drawing.Point(7, 99);
-            this.checkBox_prepare_createCallNumber.Margin = new System.Windows.Forms.Padding(2);
+            this.checkBox_prepare_createCallNumber.Location = new System.Drawing.Point(8, 153);
             this.checkBox_prepare_createCallNumber.Name = "checkBox_prepare_createCallNumber";
-            this.checkBox_prepare_createCallNumber.Size = new System.Drawing.Size(171, 16);
+            this.checkBox_prepare_createCallNumber.Size = new System.Drawing.Size(254, 22);
             this.checkBox_prepare_createCallNumber.TabIndex = 6;
-            this.checkBox_prepare_createCallNumber.Text = "Œ™–¬—È ’µƒ≤·¥¥Ω®À˜»°∫≈(&C)";
+            this.checkBox_prepare_createCallNumber.Text = "‰∏∫Êñ∞È™åÊî∂ÁöÑÂÜåÂàõÂª∫Á¥¢ÂèñÂè∑(&C)";
             this.checkBox_prepare_createCallNumber.UseVisualStyleBackColor = true;
             // 
             // label4
             // 
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(4, 122);
-            this.label4.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label4.Location = new System.Drawing.Point(4, 182);
             this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(89, 12);
+            this.label4.Size = new System.Drawing.Size(134, 18);
             this.label4.TabIndex = 7;
-            this.label4.Text = "≤·º€∏Ò ◊—°(&P):";
+            this.label4.Text = "ÂÜå‰ª∑Ê†ºÈ¶ñÈÄâ(&P):";
             // 
             // comboBox_prepare_priceDefault
             // 
             this.comboBox_prepare_priceDefault.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_prepare_priceDefault.FormattingEnabled = true;
             this.comboBox_prepare_priceDefault.Items.AddRange(new object[] {
-            " Èƒøº€",
-            "∂©π∫º€",
-            "—È ’º€",
-            "ø’∞◊"});
-            this.comboBox_prepare_priceDefault.Location = new System.Drawing.Point(119, 119);
-            this.comboBox_prepare_priceDefault.Margin = new System.Windows.Forms.Padding(2);
+            "‰π¶ÁõÆ‰ª∑",
+            "ËÆ¢Ë¥≠‰ª∑",
+            "È™åÊî∂‰ª∑",
+            "Á©∫ÁôΩ"});
+            this.comboBox_prepare_priceDefault.Location = new System.Drawing.Point(157, 179);
             this.comboBox_prepare_priceDefault.Name = "comboBox_prepare_priceDefault";
-            this.comboBox_prepare_priceDefault.Size = new System.Drawing.Size(116, 20);
+            this.comboBox_prepare_priceDefault.Size = new System.Drawing.Size(197, 26);
             this.comboBox_prepare_priceDefault.TabIndex = 8;
-            this.comboBox_prepare_priceDefault.Text = "—È ’º€";
+            this.comboBox_prepare_priceDefault.Text = "È™åÊî∂‰ª∑";
             // 
             // groupBox1
             // 
-            this.groupBox1.Location = new System.Drawing.Point(259, 2);
-            this.groupBox1.Margin = new System.Windows.Forms.Padding(2);
+            this.groupBox1.Location = new System.Drawing.Point(360, 3);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Padding = new System.Windows.Forms.Padding(2);
-            this.groupBox1.Size = new System.Drawing.Size(1, 170);
+            this.groupBox1.Size = new System.Drawing.Size(2, 204);
             this.groupBox1.TabIndex = 10;
             this.groupBox1.TabStop = false;
             // 
             // label2
             // 
             this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(4, 162);
-            this.label2.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label2.Location = new System.Drawing.Point(5, 276);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(125, 12);
+            this.label2.Size = new System.Drawing.Size(188, 18);
             this.label2.TabIndex = 11;
-            this.label2.Text = "≤Œ”ÎºÏÀ˜µƒ Èƒøø‚(&N):";
+            this.label2.Text = "ÂèÇ‰∏éÊ£ÄÁ¥¢ÁöÑ‰π¶ÁõÆÂ∫ì(&N):";
             // 
             // checkedListBox_prepare_dbNames
             // 
@@ -183,10 +213,9 @@ namespace dp2Circulation
             this.checkedListBox_prepare_dbNames.FormattingEnabled = true;
             this.checkedListBox_prepare_dbNames.HorizontalScrollbar = true;
             this.checkedListBox_prepare_dbNames.IntegralHeight = false;
-            this.checkedListBox_prepare_dbNames.Location = new System.Drawing.Point(6, 181);
-            this.checkedListBox_prepare_dbNames.Margin = new System.Windows.Forms.Padding(2);
+            this.checkedListBox_prepare_dbNames.Location = new System.Drawing.Point(7, 299);
             this.checkedListBox_prepare_dbNames.Name = "checkedListBox_prepare_dbNames";
-            this.checkedListBox_prepare_dbNames.Size = new System.Drawing.Size(229, 124);
+            this.checkedListBox_prepare_dbNames.Size = new System.Drawing.Size(347, 149);
             this.checkedListBox_prepare_dbNames.TabIndex = 12;
             this.checkedListBox_prepare_dbNames.ItemCheck += new System.Windows.Forms.ItemCheckEventHandler(this.checkedListBox_prepare_dbNames_ItemCheck);
             // 
@@ -194,12 +223,11 @@ namespace dp2Circulation
             // 
             this.checkBox_prepare_setProcessingState.AutoSize = true;
             this.checkBox_prepare_setProcessingState.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.checkBox_prepare_setProcessingState.Location = new System.Drawing.Point(7, 79);
-            this.checkBox_prepare_setProcessingState.Margin = new System.Windows.Forms.Padding(2);
+            this.checkBox_prepare_setProcessingState.Location = new System.Drawing.Point(8, 129);
             this.checkBox_prepare_setProcessingState.Name = "checkBox_prepare_setProcessingState";
-            this.checkBox_prepare_setProcessingState.Size = new System.Drawing.Size(219, 16);
+            this.checkBox_prepare_setProcessingState.Size = new System.Drawing.Size(326, 22);
             this.checkBox_prepare_setProcessingState.TabIndex = 5;
-            this.checkBox_prepare_setProcessingState.Text = "Œ™–¬—È ’µƒ≤·…Ë÷√°∞º”π§÷–°±◊¥Ã¨(&U)";
+            this.checkBox_prepare_setProcessingState.Text = "‰∏∫Êñ∞È™åÊî∂ÁöÑÂÜåËÆæÁΩÆ‚ÄúÂä†Â∑•‰∏≠‚ÄùÁä∂ÊÄÅ(&U)";
             this.checkBox_prepare_setProcessingState.UseVisualStyleBackColor = true;
             // 
             // tabComboBox_prepare_batchNo
@@ -208,50 +236,47 @@ namespace dp2Circulation
             this.tabComboBox_prepare_batchNo.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.tabComboBox_prepare_batchNo.FormattingEnabled = true;
             this.tabComboBox_prepare_batchNo.LeftFontStyle = System.Drawing.FontStyle.Bold;
-            this.tabComboBox_prepare_batchNo.Location = new System.Drawing.Point(119, 6);
-            this.tabComboBox_prepare_batchNo.Margin = new System.Windows.Forms.Padding(2);
+            this.tabComboBox_prepare_batchNo.Location = new System.Drawing.Point(157, 8);
             this.tabComboBox_prepare_batchNo.Name = "tabComboBox_prepare_batchNo";
             this.tabComboBox_prepare_batchNo.RightFontStyle = System.Drawing.FontStyle.Italic;
-            this.tabComboBox_prepare_batchNo.Size = new System.Drawing.Size(116, 22);
+            this.tabComboBox_prepare_batchNo.Size = new System.Drawing.Size(197, 29);
             this.tabComboBox_prepare_batchNo.TabIndex = 1;
             this.tabComboBox_prepare_batchNo.DropDown += new System.EventHandler(this.tabComboBox_prepare_batchNo_DropDown);
             this.tabComboBox_prepare_batchNo.TextChanged += new System.EventHandler(this.tabComboBox_prepare_batchNo_TextChanged);
+            this.tabComboBox_prepare_batchNo.Leave += new System.EventHandler(this.tabComboBox_prepare_batchNo_Leave);
             // 
             // checkBox_prepare_inputItemBarcode
             // 
             this.checkBox_prepare_inputItemBarcode.AutoSize = true;
             this.checkBox_prepare_inputItemBarcode.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.checkBox_prepare_inputItemBarcode.Location = new System.Drawing.Point(7, 59);
-            this.checkBox_prepare_inputItemBarcode.Margin = new System.Windows.Forms.Padding(2);
+            this.checkBox_prepare_inputItemBarcode.Location = new System.Drawing.Point(8, 105);
             this.checkBox_prepare_inputItemBarcode.Name = "checkBox_prepare_inputItemBarcode";
-            this.checkBox_prepare_inputItemBarcode.Size = new System.Drawing.Size(171, 16);
+            this.checkBox_prepare_inputItemBarcode.Size = new System.Drawing.Size(254, 22);
             this.checkBox_prepare_inputItemBarcode.TabIndex = 4;
-            this.checkBox_prepare_inputItemBarcode.Text = "—È ’ ±¡¢º¥ ‰»Î≤·Ãı¬Î∫≈(&I)";
+            this.checkBox_prepare_inputItemBarcode.Text = "È™åÊî∂Êó∂Á´ãÂç≥ËæìÂÖ•ÂÜåÊù°Á†ÅÂè∑(&I)";
             this.checkBox_prepare_inputItemBarcode.UseVisualStyleBackColor = true;
             // 
             // label3
             // 
             this.label3.AutoSize = true;
-            this.label3.Location = new System.Drawing.Point(4, 34);
-            this.label3.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label3.Location = new System.Drawing.Point(6, 43);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(89, 12);
+            this.label3.Size = new System.Drawing.Size(134, 18);
             this.label3.TabIndex = 2;
-            this.label3.Text = "≥ˆ∞ÊŒÔ¿‡–Õ(&T):";
+            this.label3.Text = "Âá∫ÁâàÁâ©Á±ªÂûã(&T):";
             // 
             // comboBox_prepare_type
             // 
             this.comboBox_prepare_type.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_prepare_type.FormattingEnabled = true;
             this.comboBox_prepare_type.Items.AddRange(new object[] {
-            "Õº È",
-            "¡¨–¯≥ˆ∞ÊŒÔ"});
-            this.comboBox_prepare_type.Location = new System.Drawing.Point(119, 31);
-            this.comboBox_prepare_type.Margin = new System.Windows.Forms.Padding(2);
+            "Âõæ‰π¶",
+            "ËøûÁª≠Âá∫ÁâàÁâ©"});
+            this.comboBox_prepare_type.Location = new System.Drawing.Point(157, 40);
             this.comboBox_prepare_type.Name = "comboBox_prepare_type";
-            this.comboBox_prepare_type.Size = new System.Drawing.Size(116, 20);
+            this.comboBox_prepare_type.Size = new System.Drawing.Size(197, 26);
             this.comboBox_prepare_type.TabIndex = 3;
-            this.comboBox_prepare_type.Text = "Õº È";
+            this.comboBox_prepare_type.Text = "Âõæ‰π¶";
             this.comboBox_prepare_type.SelectedIndexChanged += new System.EventHandler(this.comboBox_prepare_type_SelectedIndexChanged);
             this.comboBox_prepare_type.TextChanged += new System.EventHandler(this.comboBox_prepare_type_TextChanged);
             // 
@@ -259,24 +284,22 @@ namespace dp2Circulation
             // 
             this.button_viewDatabaseDefs.AutoSize = true;
             this.button_viewDatabaseDefs.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.button_viewDatabaseDefs.Location = new System.Drawing.Point(6, 331);
-            this.button_viewDatabaseDefs.Margin = new System.Windows.Forms.Padding(2);
+            this.button_viewDatabaseDefs.Location = new System.Drawing.Point(7, 479);
             this.button_viewDatabaseDefs.Name = "button_viewDatabaseDefs";
-            this.button_viewDatabaseDefs.Size = new System.Drawing.Size(134, 24);
+            this.button_viewDatabaseDefs.Size = new System.Drawing.Size(347, 45);
             this.button_viewDatabaseDefs.TabIndex = 9;
-            this.button_viewDatabaseDefs.Text = "π€≤Ï ˝æ›ø‚∂®“Â...";
+            this.button_viewDatabaseDefs.Text = "ËßÇÂØüÊï∞ÊçÆÂ∫ìÂÆö‰πâ...";
             this.button_viewDatabaseDefs.UseVisualStyleBackColor = true;
             this.button_viewDatabaseDefs.Click += new System.EventHandler(this.button_viewDatabaseDefs_Click);
             // 
             // label1
             // 
             this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(4, 8);
-            this.label1.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label1.Location = new System.Drawing.Point(6, 11);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(89, 12);
+            this.label1.Size = new System.Drawing.Size(134, 18);
             this.label1.TabIndex = 0;
-            this.label1.Text = "—È ’≈˙¥Œ∫≈(&B):";
+            this.label1.Text = "È™åÊî∂ÊâπÊ¨°Âè∑(&B):";
             // 
             // tabPage_accept
             // 
@@ -289,12 +312,11 @@ namespace dp2Circulation
             this.tabPage_accept.Controls.Add(this.button_accept_searchISBN);
             this.tabPage_accept.Controls.Add(this.textBox_accept_queryWord);
             this.tabPage_accept.Location = new System.Drawing.Point(4, 4);
-            this.tabPage_accept.Margin = new System.Windows.Forms.Padding(2);
             this.tabPage_accept.Name = "tabPage_accept";
-            this.tabPage_accept.Padding = new System.Windows.Forms.Padding(2);
-            this.tabPage_accept.Size = new System.Drawing.Size(388, 282);
+            this.tabPage_accept.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPage_accept.Size = new System.Drawing.Size(485, 399);
             this.tabPage_accept.TabIndex = 1;
-            this.tabPage_accept.Text = "—È ’";
+            this.tabPage_accept.Text = "È™åÊî∂";
             this.tabPage_accept.UseVisualStyleBackColor = true;
             // 
             // label_biblioSource
@@ -303,12 +325,11 @@ namespace dp2Circulation
             this.label_biblioSource.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(255)))), ((int)(((byte)(192)))));
             this.label_biblioSource.Image = ((System.Drawing.Image)(resources.GetObject("label_biblioSource.Image")));
             this.label_biblioSource.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.label_biblioSource.Location = new System.Drawing.Point(2, 67);
-            this.label_biblioSource.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label_biblioSource.Location = new System.Drawing.Point(3, 81);
             this.label_biblioSource.Name = "label_biblioSource";
-            this.label_biblioSource.Size = new System.Drawing.Size(74, 18);
+            this.label_biblioSource.Size = new System.Drawing.Size(84, 21);
             this.label_biblioSource.TabIndex = 13;
-            this.label_biblioSource.Text = "Õ‚‘¥(ø’)";
+            this.label_biblioSource.Text = "Â§ñÊ∫ê(Á©∫)";
             this.label_biblioSource.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.label_biblioSource.DragDrop += new System.Windows.Forms.DragEventHandler(this.label_biblioSource_DragDrop);
             this.label_biblioSource.DragEnter += new System.Windows.Forms.DragEventHandler(this.label_biblioSource_DragEnter);
@@ -322,15 +343,14 @@ namespace dp2Circulation
             this.comboBox_accept_matchStyle.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_accept_matchStyle.FormattingEnabled = true;
             this.comboBox_accept_matchStyle.Items.AddRange(new object[] {
-            "«∞∑Ω“ª÷¬",
-            "÷–º‰“ª÷¬",
-            "∫Û∑Ω“ª÷¬",
-            "æ´»∑“ª÷¬",
-            "ø’÷µ"});
-            this.comboBox_accept_matchStyle.Location = new System.Drawing.Point(100, 5);
-            this.comboBox_accept_matchStyle.Margin = new System.Windows.Forms.Padding(2);
+            "ÂâçÊñπ‰∏ÄËá¥",
+            "‰∏≠Èó¥‰∏ÄËá¥",
+            "ÂêéÊñπ‰∏ÄËá¥",
+            "Á≤æÁ°Æ‰∏ÄËá¥",
+            "Á©∫ÂÄº"});
+            this.comboBox_accept_matchStyle.Location = new System.Drawing.Point(112, 6);
             this.comboBox_accept_matchStyle.Name = "comboBox_accept_matchStyle";
-            this.comboBox_accept_matchStyle.Size = new System.Drawing.Size(92, 20);
+            this.comboBox_accept_matchStyle.Size = new System.Drawing.Size(103, 26);
             this.comboBox_accept_matchStyle.TabIndex = 12;
             this.comboBox_accept_matchStyle.TextChanged += new System.EventHandler(this.comboBox_accept_matchStyle_TextChanged);
             // 
@@ -341,10 +361,9 @@ namespace dp2Circulation
             this.comboBox_accept_from.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.comboBox_accept_from.FormattingEnabled = true;
             this.comboBox_accept_from.IntegralHeight = false;
-            this.comboBox_accept_from.Location = new System.Drawing.Point(4, 5);
-            this.comboBox_accept_from.Margin = new System.Windows.Forms.Padding(2);
+            this.comboBox_accept_from.Location = new System.Drawing.Point(4, 6);
             this.comboBox_accept_from.Name = "comboBox_accept_from";
-            this.comboBox_accept_from.Size = new System.Drawing.Size(92, 20);
+            this.comboBox_accept_from.Size = new System.Drawing.Size(103, 26);
             this.comboBox_accept_from.TabIndex = 11;
             // 
             // label_target
@@ -353,12 +372,11 @@ namespace dp2Circulation
             this.label_target.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(192)))), ((int)(((byte)(192)))));
             this.label_target.Image = ((System.Drawing.Image)(resources.GetObject("label_target.Image")));
             this.label_target.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.label_target.Location = new System.Drawing.Point(2, 49);
-            this.label_target.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label_target.Location = new System.Drawing.Point(3, 58);
             this.label_target.Name = "label_target";
-            this.label_target.Size = new System.Drawing.Size(74, 18);
+            this.label_target.Size = new System.Drawing.Size(84, 21);
             this.label_target.TabIndex = 10;
-            this.label_target.Text = "ƒø±Í(ø’)";
+            this.label_target.Text = "ÁõÆÊ†á(Á©∫)";
             this.label_target.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.label_target.DragDrop += new System.Windows.Forms.DragEventHandler(this.label_target_DragDrop);
             this.label_target.DragEnter += new System.Windows.Forms.DragEventHandler(this.label_target_DragEnter);
@@ -372,12 +390,11 @@ namespace dp2Circulation
             this.label_source.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(192)))), ((int)(((byte)(255)))));
             this.label_source.Image = ((System.Drawing.Image)(resources.GetObject("label_source.Image")));
             this.label_source.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.label_source.Location = new System.Drawing.Point(2, 30);
-            this.label_source.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label_source.Location = new System.Drawing.Point(3, 36);
             this.label_source.Name = "label_source";
-            this.label_source.Size = new System.Drawing.Size(74, 18);
+            this.label_source.Size = new System.Drawing.Size(84, 21);
             this.label_source.TabIndex = 9;
-            this.label_source.Text = "‘¥(ø’)";
+            this.label_source.Text = "Ê∫ê(Á©∫)";
             this.label_source.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.label_source.DragDrop += new System.Windows.Forms.DragEventHandler(this.label_source_DragDrop);
             this.label_source.DragEnter += new System.Windows.Forms.DragEventHandler(this.label_source_DragEnter);
@@ -400,9 +417,9 @@ namespace dp2Circulation
             this.listView_accept_records.FullRowSelect = true;
             this.listView_accept_records.HideSelection = false;
             this.listView_accept_records.LargeImageList = this.imageList_lineType;
-            this.listView_accept_records.Location = new System.Drawing.Point(77, 30);
+            this.listView_accept_records.Location = new System.Drawing.Point(87, 36);
             this.listView_accept_records.Name = "listView_accept_records";
-            this.listView_accept_records.Size = new System.Drawing.Size(310, 247);
+            this.listView_accept_records.Size = new System.Drawing.Size(390, 311);
             this.listView_accept_records.SmallImageList = this.imageList_lineType;
             this.listView_accept_records.TabIndex = 8;
             this.listView_accept_records.UseCompatibleStateImageBehavior = false;
@@ -418,17 +435,17 @@ namespace dp2Circulation
             // 
             // columnHeader_path
             // 
-            this.columnHeader_path.Text = "¬∑æ∂";
+            this.columnHeader_path.Text = "Ë∑ØÂæÑ";
             this.columnHeader_path.Width = 120;
             // 
             // columnHeader_role
             // 
-            this.columnHeader_role.Text = "Ω«…´";
+            this.columnHeader_role.Text = "ËßíËâ≤";
             this.columnHeader_role.Width = 100;
             // 
             // columnHeader_targetRecPath
             // 
-            this.columnHeader_targetRecPath.Text = "ƒø±Íº«¬º¬∑æ∂";
+            this.columnHeader_targetRecPath.Text = "ÁõÆÊ†áËÆ∞ÂΩïË∑ØÂæÑ";
             this.columnHeader_targetRecPath.Width = 120;
             // 
             // columnHeader_1
@@ -450,12 +467,11 @@ namespace dp2Circulation
             // 
             this.button_accept_searchISBN.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.button_accept_searchISBN.AutoSize = true;
-            this.button_accept_searchISBN.Location = new System.Drawing.Point(324, 5);
-            this.button_accept_searchISBN.Margin = new System.Windows.Forms.Padding(2);
+            this.button_accept_searchISBN.Location = new System.Drawing.Point(355, 3);
             this.button_accept_searchISBN.Name = "button_accept_searchISBN";
-            this.button_accept_searchISBN.Size = new System.Drawing.Size(64, 24);
+            this.button_accept_searchISBN.Size = new System.Drawing.Size(122, 42);
             this.button_accept_searchISBN.TabIndex = 4;
-            this.button_accept_searchISBN.Text = "ºÏÀ˜(&S)";
+            this.button_accept_searchISBN.Text = "Ê£ÄÁ¥¢(&S)";
             this.button_accept_searchISBN.UseVisualStyleBackColor = true;
             this.button_accept_searchISBN.Click += new System.EventHandler(this.button_accept_searchISBN_Click);
             // 
@@ -464,10 +480,9 @@ namespace dp2Circulation
             this.textBox_accept_queryWord.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBox_accept_queryWord.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.textBox_accept_queryWord.Location = new System.Drawing.Point(195, 5);
-            this.textBox_accept_queryWord.Margin = new System.Windows.Forms.Padding(2);
+            this.textBox_accept_queryWord.Location = new System.Drawing.Point(219, 6);
             this.textBox_accept_queryWord.Name = "textBox_accept_queryWord";
-            this.textBox_accept_queryWord.Size = new System.Drawing.Size(125, 21);
+            this.textBox_accept_queryWord.Size = new System.Drawing.Size(130, 28);
             this.textBox_accept_queryWord.TabIndex = 3;
             this.textBox_accept_queryWord.Enter += new System.EventHandler(this.textBox_accept_isbn_Enter);
             this.textBox_accept_queryWord.Leave += new System.EventHandler(this.textBox_accept_isbn_Leave);
@@ -476,11 +491,10 @@ namespace dp2Circulation
             // 
             this.tabPage_finish.Controls.Add(this.button_finish_printAcceptList);
             this.tabPage_finish.Location = new System.Drawing.Point(4, 4);
-            this.tabPage_finish.Margin = new System.Windows.Forms.Padding(2);
             this.tabPage_finish.Name = "tabPage_finish";
-            this.tabPage_finish.Size = new System.Drawing.Size(388, 282);
+            this.tabPage_finish.Size = new System.Drawing.Size(485, 399);
             this.tabPage_finish.TabIndex = 2;
-            this.tabPage_finish.Text = "Ω·Œ≤";
+            this.tabPage_finish.Text = "ÁªìÂ∞æ";
             this.tabPage_finish.UseVisualStyleBackColor = true;
             // 
             // button_finish_printAcceptList
@@ -488,12 +502,11 @@ namespace dp2Circulation
             this.button_finish_printAcceptList.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.button_finish_printAcceptList.AutoSize = true;
             this.button_finish_printAcceptList.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.button_finish_printAcceptList.Location = new System.Drawing.Point(134, 110);
-            this.button_finish_printAcceptList.Margin = new System.Windows.Forms.Padding(2);
+            this.button_finish_printAcceptList.Location = new System.Drawing.Point(95, 132);
             this.button_finish_printAcceptList.Name = "button_finish_printAcceptList";
-            this.button_finish_printAcceptList.Size = new System.Drawing.Size(125, 24);
+            this.button_finish_printAcceptList.Size = new System.Drawing.Size(273, 45);
             this.button_finish_printAcceptList.TabIndex = 0;
-            this.button_finish_printAcceptList.Text = "¥Ú”°—È ’«Âµ•(&P)...";
+            this.button_finish_printAcceptList.Text = "ÊâìÂç∞È™åÊî∂Ê∏ÖÂçï(&P)...";
             this.button_finish_printAcceptList.UseVisualStyleBackColor = true;
             this.button_finish_printAcceptList.Click += new System.EventHandler(this.button_finish_printAcceptList_Click);
             // 
@@ -503,13 +516,12 @@ namespace dp2Circulation
             this.button_next.AutoSize = true;
             this.button_next.Enabled = false;
             this.button_next.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.button_next.Font = new System.Drawing.Font("Œ¢»Ì—≈∫⁄", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.button_next.Location = new System.Drawing.Point(302, 277);
-            this.button_next.Margin = new System.Windows.Forms.Padding(2);
+            this.button_next.Font = new System.Drawing.Font("ÂæÆËΩØÈõÖÈªë", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.button_next.Location = new System.Drawing.Point(303, 393);
             this.button_next.Name = "button_next";
-            this.button_next.Size = new System.Drawing.Size(94, 29);
+            this.button_next.Size = new System.Drawing.Size(188, 37);
             this.button_next.TabIndex = 1;
-            this.button_next.Text = "œ¬“ªª∑Ω⁄(&N)";
+            this.button_next.Text = "‰∏ã‰∏ÄÁéØËäÇ(&N)";
             this.button_next.UseVisualStyleBackColor = true;
             this.button_next.Click += new System.EventHandler(this.button_next_Click);
             // 
@@ -520,21 +532,21 @@ namespace dp2Circulation
             this.panel_main.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel_main.Location = new System.Drawing.Point(0, 0);
             this.panel_main.Name = "panel_main";
-            this.panel_main.Size = new System.Drawing.Size(396, 308);
+            this.panel_main.Size = new System.Drawing.Size(493, 431);
             this.panel_main.TabIndex = 2;
             // 
             // AcceptForm
             // 
             this.AcceptButton = this.button_next;
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
-            this.ClientSize = new System.Drawing.Size(396, 308);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 18F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.ClientSize = new System.Drawing.Size(493, 431);
             this.Controls.Add(this.panel_main);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.SizableToolWindow;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.Margin = new System.Windows.Forms.Padding(2);
             this.Name = "AcceptForm";
             this.ShowInTaskbar = false;
-            this.Text = "—È ’";
+            this.Text = "È™åÊî∂";
             this.Activated += new System.EventHandler(this.AcceptForm_Activated);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.AcceptForm_FormClosing);
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.AcceptForm_FormClosed);
@@ -589,5 +601,9 @@ namespace dp2Circulation
         private System.Windows.Forms.ComboBox comboBox_prepare_priceDefault;
         private System.Windows.Forms.CheckBox checkBox_prepare_createCallNumber;
         private System.Windows.Forms.Panel panel_main;
+        private System.Windows.Forms.Button button_defaultEntityFields;
+        private System.Windows.Forms.Label label5;
+        private System.Windows.Forms.ComboBox comboBox_sellerFilter;
+        private System.Windows.Forms.ToolTip toolTip1;
     }
 }

@@ -35,10 +35,27 @@ namespace dp2Circulation
         /// </summary>
         public TC Items = null;
 
+        /*
         /// <summary>
         /// 框架窗口
         /// </summary>
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
+         * */
+
+        /// <summary>
+        /// 当前窗口所从属的框架窗口
+        /// </summary>
+        public virtual MainForm MainForm
+        {
+            get
+            {
+                return Program.MainForm;
+            }
+            set
+            {
+                // 为了让脚本代码能兼容
+            }
+        }
 
         /// <summary>
         /// 订购控件
@@ -66,7 +83,6 @@ namespace dp2Circulation
             this.Items = items;
 
             this.StartItem = item;
-
             return 0;
         }
 
@@ -162,7 +178,7 @@ namespace dp2Circulation
         {
             string strError = "";
             string[] values = null;
-            int nRet = MainForm.GetValueTable(e.TableName,
+            int nRet = Program.MainForm.GetValueTable(e.TableName,
                 e.DbName,
                 out values,
                 out strError);
@@ -221,9 +237,14 @@ namespace dp2Circulation
             if (nRet == -1)
                 goto ERROR1;
 
-            nRet = Restore(out strError);
-            if (nRet == -1)
-                goto ERROR1;
+            if (this.Item != null)
+            {
+                nRet = Restore(out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+            }
+            else
+                return 0;
 
             return nRet;
         ERROR1:
@@ -370,7 +391,7 @@ namespace dp2Circulation
 
             // 在listview中滚动到可见范围
             new_item.HilightListViewItem(true);
-            this.Text = "册信息";
+            // this.Text = "册信息";   // ??
             return;
         ERROR1:
             MessageBox.Show(this, strError);
@@ -541,10 +562,9 @@ namespace dp2Circulation
         /// <param name="e">一个包含事件数据的 System.EventArgs</param>
         protected override void OnLoad(EventArgs e)
         {
-            if (this.MainForm != null)
-            {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
-            }
+            if (Program.MainForm != null)
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
+
             if (this._editing != null)
             {
                 LoadItem(this.Item);
@@ -563,12 +583,10 @@ namespace dp2Circulation
                     if (nRet == -1)
                         MessageBox.Show(this, strError);
 
-
                     this._existing.SetReadOnly("all");
 
                     // 突出差异内容
                     this._editing.HighlightDifferences(this._existing);
-
                 }
                 else
                 {
@@ -580,6 +598,7 @@ namespace dp2Circulation
                     this._existing.Enabled = false;
                 }
             }
+
             base.OnLoad(e);
         }
 
@@ -646,7 +665,8 @@ namespace dp2Circulation
                 this.Item.Timestamp = this.Item.Error.OldTimestamp;
             }
 
-            this.Item.Error = null; // 结束报错状态
+            if (this.Item != null)
+                this.Item.Error = null; // 结束报错状态
 
             this.DialogResult = DialogResult.OK;
             this.Close();

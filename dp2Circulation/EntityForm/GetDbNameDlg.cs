@@ -7,6 +7,7 @@ using System.Text;
 using System.Windows.Forms;
 
 using DigitalPlatform;
+using DigitalPlatform.GUI;
 
 namespace dp2Circulation
 {
@@ -23,7 +24,7 @@ namespace dp2Circulation
         /// <summary>
         /// 框架窗口
         /// </summary>
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
 
         public bool EnableNotAsk = false;
 
@@ -53,37 +54,44 @@ namespace dp2Circulation
             // 填充数据库名列表
             if (this.m_strDbType == "biblio")
             {
-                if (this.MainForm != null
-                    && this.MainForm.BiblioDbProperties != null)
+                if (Program.MainForm != null
+                    && Program.MainForm.BiblioDbProperties != null)
                 {
-                    for (int i = 0; i < this.MainForm.BiblioDbProperties.Count; i++)
+                    for (int i = 0; i < Program.MainForm.BiblioDbProperties.Count; i++)
                     {
-                        this.listBox_biblioDbNames.Items.Add(this.MainForm.BiblioDbProperties[i].DbName);
+                        this.listBox_biblioDbNames.Items.Add(Program.MainForm.BiblioDbProperties[i].DbName);
                     }
                 }
             }
             else if (this.m_strDbType == "reader")
             {
-                if (this.MainForm != null
-                    && this.MainForm.ReaderDbNames != null)
+                if (Program.MainForm != null
+                    && Program.MainForm.ReaderDbNames != null)
                 {
-                    for (int i = 0; i < this.MainForm.ReaderDbNames.Length; i++)
+                    for (int i = 0; i < Program.MainForm.ReaderDbNames.Length; i++)
                     {
-                        this.listBox_biblioDbNames.Items.Add(this.MainForm.ReaderDbNames[i]);
+                        this.listBox_biblioDbNames.Items.Add(Program.MainForm.ReaderDbNames[i]);
                     }
                 }
             }
 
-
             // 选定项目
             if (String.IsNullOrEmpty(this.DbName) == false)
+            {
                 this.listBox_biblioDbNames.SelectedItem = this.DbName;
+                this.BeginInvoke(new Action(EnsureSelectedLineVisible));
+            }
 
             if (this.EnableNotAsk == true)
                 this.checkBox_notAsk.Enabled = true;
 
             if (this.AutoClose == true)
                 API.PostMessage(this.Handle, WM_AUTO_CLOSE, 0, 0);
+        }
+
+        void EnsureSelectedLineVisible()
+        {
+            ListBoxUtil.EnsureVisible(this.listBox_biblioDbNames, this.listBox_biblioDbNames.SelectedIndex);
         }
 
         public string DbName

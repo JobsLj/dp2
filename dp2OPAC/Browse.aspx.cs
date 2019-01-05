@@ -1,31 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Web;
-using System.Web.UI;
-using System.Web.UI.WebControls;
 using System.Threading;
 using System.Xml;
-using System.Globalization;
 using System.IO;
-using System.Diagnostics;
 using System.Web.UI.HtmlControls;
 
-using DigitalPlatform;
 using DigitalPlatform.Text;
 using DigitalPlatform.IO;
 using DigitalPlatform.Xml;
 using DigitalPlatform.OPAC.Server;
 using DigitalPlatform.OPAC.Web;
-// using DigitalPlatform.CirculationClient;
 
 public partial class Browse2 : MyWebPage
 {
-    //OpacApplication app = null;
-    //SessionInfo sessioninfo = null;
-
     string SelectingNodePath = "";
-    // string SelectedNodeCaption = "";
 
 #if NO
     protected override void InitializeCulture()
@@ -110,6 +99,20 @@ ref sessioninfo) == false)
 
         if (String.IsNullOrEmpty(strDataFileName) == true)
             strDataFileName = "browse.xml";
+        else
+        {
+            // 要对这个字符串进行检查，以防被攻击 2016/10/30
+            if (PathUtil.IsPureFileName(strDataFileName) == false)
+            {
+                string strError = "datafile 参数值 '" + strDataFileName + "' 不合法";
+                this.app.WriteErrorLog(strError);
+                this.Response.ContentType = "text/plain";
+                this.Response.StatusCode = 500;
+                this.Response.Write(strError);
+                this.Response.End();
+                return;
+            }
+        }
 
         string strAction = this.Request["action"];
         if (strAction == null)
@@ -119,11 +122,10 @@ ref sessioninfo) == false)
 
         if (strAction.ToLower() == "rss")
         {
-            string strError = "";
             int nRet = BuildRssOutput(
                 strDataFileName,
                 strNode,
-                out strError);
+                out string strError);
             if (nRet == -1)
             {
                 this.app.WriteErrorLog(strError);
@@ -226,7 +228,7 @@ ref sessioninfo) == false)
 
     static bool IsParentPath(string strShortPath, string strLongPath)
     {
-        string[] parts1 = strShortPath.Split(new char[] {'_'});
+        string[] parts1 = strShortPath.Split(new char[] { '_' });
         string[] parts2 = strLongPath.Split(new char[] { '_' });
 
         if (parts1.Length >= parts2.Length)
@@ -261,7 +263,6 @@ ref sessioninfo) == false)
             bCommand = false;
 
         ///
-
         string strSideBarFileName = Path.GetFileName(this.SideBarControl1.CfgFile).ToLower();
         string strDataFile = Path.GetFileName(this.TreeView1.XmlFileName).ToLower();
         string strNodePath = CacheBuilder.MakeNodePath(e.Node);
@@ -295,7 +296,6 @@ ref sessioninfo) == false)
         else
             e.Name = strName;
 
-
         if (strNodePath == this.SelectingNodePath)
         {
             e.Seletected = true;
@@ -313,13 +313,12 @@ ref sessioninfo) == false)
 
         string strFormatParam = "";
 
-            if (string.IsNullOrEmpty(this.BrowseSearchResultControl1.CurrentFormat) == false)
-                strFormatParam = "&format=" + HttpUtility.UrlEncode(this.BrowseSearchResultControl1.CurrentFormat);
-            else if (string.IsNullOrEmpty(this.BrowseSearchResultControl1.FormatName) == false)
-                strFormatParam = "&format=" + HttpUtility.UrlEncode(this.BrowseSearchResultControl1.FormatName);
+        if (string.IsNullOrEmpty(this.BrowseSearchResultControl1.CurrentFormat) == false)
+            strFormatParam = "&format=" + HttpUtility.UrlEncode(this.BrowseSearchResultControl1.CurrentFormat);
+        else if (string.IsNullOrEmpty(this.BrowseSearchResultControl1.FormatName) == false)
+            strFormatParam = "&format=" + HttpUtility.UrlEncode(this.BrowseSearchResultControl1.FormatName);
 
-
-        e.Url = "./browse.aspx?datafile="+HttpUtility.UrlEncode(strDataFile)+ strSideBarParam + "&node=" + strNodePath + strFormatParam;
+        e.Url = "./browse.aspx?datafile=" + HttpUtility.UrlEncode(strDataFile) + strSideBarParam + "&node=" + strNodePath + strFormatParam;
 
         if (e.Node == e.Node.OwnerDocument.DocumentElement
             || IsParentPath(strNodePath, this.SelectingNodePath) == true)
@@ -363,6 +362,7 @@ ref sessioninfo) == false)
         // 2014/12/2
         // 兑现宏
         nRet = CacheBuilder.MacroDom(dom,
+            new List<string> { "name", "command" },
             out strError);
         if (nRet == -1)
             goto ERROR1;
@@ -445,7 +445,7 @@ ref sessioninfo) == false)
         string strPrefix = CacheBuilder.MakeNodePath(node);
         string strCacheDir = app.DataDir + "/browse/cache/" + strDataFile;
 
-        PathUtil.CreateDirIfNeed(strCacheDir);
+        PathUtil.TryCreateDir(strCacheDir);
         string strResultsetFilename = strCacheDir + "/" + strPrefix;
 
         string strRssString = "datafile=" + strDataFile + "&node=" + strPrefix;
@@ -454,7 +454,7 @@ ref sessioninfo) == false)
 
         bool bRedo = false;
 
-    REDO:
+        REDO:
         // 如果文件已经存在，就不要从 dp2library 获取了
         try
         {
@@ -492,7 +492,7 @@ ref sessioninfo) == false)
                     this.BrowseSearchResultControl1.ResultCount = (int)lHitCount;
                     this.BrowseSearchResultControl1.StartIndex = 0;
                     this.CreateRssLink(strPureCaption, strRssNavigateUrl);
-                    this.Page.Title = strPureCaption; 
+                    this.Page.Title = strPureCaption;
                     // this.SelectedNodeCaption = strPureCaption + "(" + lHitCount.ToString() + ")";
                     this.TreeView1.SelectedNodePath = strNodePath;
                     return;
@@ -509,7 +509,7 @@ ref sessioninfo) == false)
             goto END1;
         }
 
-    DO_REBUILD:
+        DO_REBUILD:
 
         if (bRedo == false)
         {
@@ -540,7 +540,7 @@ ref sessioninfo) == false)
             // this.SelectedNodeCaption = strPureCaption;
         }
 
-    END1:
+        END1:
         this.CreateRssLink(strPureCaption, strRssNavigateUrl);
         this.Page.Title = strPureCaption;
 
@@ -552,7 +552,7 @@ ref sessioninfo) == false)
         this.TreeView1.SelectedNodePath = strNodePath;
 
         return;
-    ERROR1:
+        ERROR1:
         Response.Write(HttpUtility.HtmlEncode(strError));
         Response.End();
     }
@@ -564,7 +564,7 @@ ref sessioninfo) == false)
         if (string.IsNullOrEmpty(strRssNavigateUrl) == true)
             return;
 
-        this.BrowseSearchResultControl1.Title = "<div class='resulttitle'><div class='text'>" + strTitle + "</div>" + "<div class='rss'><a class='rss' href='" + strRssNavigateUrl + "' title='RSS订阅'><img src='"+MyWebPage.GetStylePath(app, "rss.gif") + "'></img></a></div><div class='clear'></div>" + "</div>";
+        this.BrowseSearchResultControl1.Title = "<div class='resulttitle'><div class='text'>" + strTitle + "</div>" + "<div class='rss'><a class='rss' href='" + strRssNavigateUrl + "' title='RSS订阅'><img src='" + MyWebPage.GetStylePath(app, "rss.gif") + "'></img></a></div><div class='clear'></div>" + "</div>";
 
         HtmlLink link = new HtmlLink();
         link.Href = strRssNavigateUrl;
@@ -619,6 +619,7 @@ ref sessioninfo) == false)
         // 2014/12/2
         // 兑现宏
         nRet = CacheBuilder.MacroDom(dom,
+            new List<string> { "name", "command" },
             out strError);
         if (nRet == -1)
             goto ERROR1;
@@ -636,7 +637,7 @@ ref sessioninfo) == false)
         this.SetErrorInfo("刷新成功。共创建了" + nRet.ToString() + "  个新队列事项");
 
         // this.SelectedNodeCaption = "";
-        
+
         // app.ClearBrowseNodeCount(strDataFileName, strNodePath);
 
         {
@@ -648,7 +649,7 @@ ref sessioninfo) == false)
         }
 
         return;
-    ERROR1:
+        ERROR1:
         Response.Write(HttpUtility.HtmlEncode(strError));
         Response.End();
     }
@@ -760,6 +761,13 @@ ref sessioninfo) == false)
         int nRet = 0;
         strError = "";
 
+        // 2018/1/27
+        if (strNode == null)
+        {
+            strError = "BuildRssOutput() 失败。strNode 参数值不应为 null";
+            return -1;
+        }
+
         string strDataFilePath = app.DataDir + "/browse/" + strDataFile;
 
         XmlDocument dom = new XmlDocument();
@@ -776,12 +784,20 @@ ref sessioninfo) == false)
         // 2014/12/2
         // 兑现宏
         nRet = CacheBuilder.MacroDom(dom,
+            new List<string> { "name", "command" },
             out strError);
         if (nRet == -1)
             return -1;
 
-        XmlNode node = CacheBuilder.GetDataNode(dom.DocumentElement,
-            strNode);
+        XmlNode node = null;
+        try
+        {
+            node = CacheBuilder.GetDataNode(dom.DocumentElement, strNode);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("CacheBuilder.GetDataNode() 出现异常，strNode=[" + strNode + "]", ex);
+        }
 
         if (node == null)
         {
@@ -826,7 +842,7 @@ ref sessioninfo) == false)
         string strPrefix = strNode;
         string strCacheDir = app.DataDir + "/browse/cache/" + strDataFile;
 
-        PathUtil.CreateDirIfNeed(strCacheDir);
+        PathUtil.TryCreateDir(strCacheDir);
         string strResultsetFilename = strCacheDir + "/" + strPrefix;
 
         // 如果RSS文件已经存在，就不要从 dp2library 获取了

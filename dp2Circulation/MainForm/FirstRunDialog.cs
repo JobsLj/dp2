@@ -1,10 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using System.IO;
 using System.Diagnostics;
@@ -19,7 +14,7 @@ namespace dp2Circulation
 {
     public partial class FirstRunDialog : Form
     {
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
 
         public FirstRunDialog()
         {
@@ -106,6 +101,12 @@ MessageBoxDefaultButton.Button1);
         {
             string strError = "";
 
+            if (this.comboBox_server_serverType.Text == "[暂时不使用任何服务器]")
+            {
+                this.textBox_server_dp2LibraryServerUrl.Text = "[None]";
+                goto END1;
+            }
+
             if (string.IsNullOrEmpty(this.textBox_server_dp2LibraryServerUrl.Text) == true)
             {
                 strError = "请输入 dp2library 服务器 URL 地址";
@@ -122,40 +123,41 @@ MessageBoxDefaultButton.Button1);
             if (nRet == -1)
                 goto ERROR1;
 
-            this.MainForm.AppInfo.SetString("config",
+            END1:
+            Program.MainForm.AppInfo.SetString("config",
     "circulation_server_url",
     this.textBox_server_dp2LibraryServerUrl.Text);
 
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
     "default_account",
     "username",
     this.textBox_server_userName.Text);
 
-            string strPassword = this.MainForm.EncryptPassword(this.textBox_server_password.Text);
-            this.MainForm.AppInfo.SetString(
+            string strPassword = Program.MainForm.EncryptPassword(this.textBox_server_password.Text);
+            Program.MainForm.AppInfo.SetString(
                 "default_account",
                 "password",
                 strPassword);
 
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
     "default_account",
     "savepassword_short",
     true);
 
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
     "default_account",
     "savepassword_long",
     true);
 
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
     "default_account",
     "isreader",
     false);
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "default_account",
                 "location",
                 "");
-            this.MainForm.AppInfo.SetBoolean(
+            Program.MainForm.AppInfo.SetBoolean(
                 "default_account",
                 "occur_per_start",
                 true);
@@ -163,7 +165,7 @@ MessageBoxDefaultButton.Button1);
             this.DialogResult = System.Windows.Forms.DialogResult.OK;
             this.Close();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -176,7 +178,7 @@ MessageBoxDefaultButton.Button1);
             if (string.Compare(this.textBox_server_dp2LibraryServerUrl.Text,
                 CirculationLoginDlg.dp2LibraryXEServerUrl, true) == 0)
             {
-                string strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V2/dp2Library XE");
+                string strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V3/dp2Library XE V3");
                 if (File.Exists(strShortcutFilePath) == false)
                 {
                     // 安装和启动
@@ -252,7 +254,7 @@ MessageBoxDefaultButton.Button1);
             messageBar.BackColor = SystemColors.Info;
             messageBar.ForeColor = SystemColors.InfoText;
             messageBar.Text = "dp2 内务";
-            messageBar.MessageText = "正在启动 dp2Library XE，请等待 ...";
+            messageBar.MessageText = "正在启动 dp2Library XE V3，请等待 ...";
             messageBar.StartPosition = FormStartPosition.CenterScreen;
             messageBar.Show(owner);
             messageBar.Update();
@@ -264,16 +266,16 @@ MessageBoxDefaultButton.Button1);
 
                 string strShortcutFilePath = "";
                 if (bLocal == true)
-                    strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V2/dp2Library XE");
+                    strShortcutFilePath = PathUtil.GetShortcutFilePath("DigitalPlatform/dp2 V3/dp2Library XE V3");
                 else
                 {
-                    strShortcutFilePath = "http://dp2003.com/dp2libraryxe/v1/dp2libraryxe.application";
+                    strShortcutFilePath = "http://dp2003.com/dp2libraryxe/v3/dp2libraryxe.application";
                     waitTime = new TimeSpan(0, 5, 0);  // 安装需要的等待时间更长
                 }
 
                 // TODO: detect if already started
                 using (EventWaitHandle eventWaitHandle = new EventWaitHandle(false, EventResetMode.ManualReset,
-                    "dp2libraryXE V1 library host started"))
+                    "dp2libraryXE V3 library host started"))
                 {
                     Application.DoEvents();
 
@@ -292,7 +294,7 @@ MessageBoxDefaultButton.Button1);
                         if (DateTime.Now - start > waitTime)
                         {
                             DialogResult result = MessageBox.Show(owner,
-    "dp2libraryXE 暂时没有响应。\r\n\r\n是否继续等待其响应?",
+    "dp2libraryXE V3 暂时没有响应。\r\n\r\n是否继续等待其响应?",
     strDialogTitle,
     MessageBoxButtons.YesNo,
     MessageBoxIcon.Question,
@@ -316,7 +318,7 @@ MessageBoxDefaultButton.Button1);
         {
             bool createdNew = true;
             // mutex name need contains windows account name. or us programes file path, hashed
-            using (Mutex mutex = new Mutex(true, "dp2libraryXE V1", out createdNew))
+            using (Mutex mutex = new Mutex(true, "dp2libraryXE V3", out createdNew))
             {
                 if (createdNew)
                 {
@@ -370,7 +372,7 @@ MessageBoxDefaultButton.Button1);
             this.Channel.AfterLogin += new AfterLoginEventHandle(Channel_AfterLogin);
 
             Stop = new DigitalPlatform.Stop();
-            Stop.Register(this.MainForm.stopManager, true);	// 和容器关联
+            Stop.Register(Program.MainForm.stopManager, true);	// 和容器关联
 
             return 1;
         }
@@ -488,7 +490,7 @@ MessageBoxDefaultButton.Button1);
 
         void LoadEula()
         {
-            string strFileName = Path.Combine(this.MainForm.DataDir, "eula.txt");
+            string strFileName = Path.Combine(Program.MainForm.DataDir, "eula.txt");
             using (StreamReader sr = new StreamReader(strFileName, true))
             {
                 this.textBox_license.Text = sr.ReadToEnd().Replace("\r\n", "\n").Replace("\n", "\r\n");   // 两个 Replace() 会将只有 LF 结尾的行处理为 CR LF
@@ -502,6 +504,10 @@ MessageBoxDefaultButton.Button1);
          * * */
         private void comboBox_server_serverType_SelectedIndexChanged(object sender, EventArgs e)
         {
+            this.textBox_server_userName.Enabled = true;
+            this.textBox_server_password.Enabled = true;
+            this.textBox_server_dp2LibraryServerUrl.Enabled = true;
+
             if (this.comboBox_server_serverType.Text == "单机版 (dp2Library XE)")
             {
                 this.textBox_server_dp2LibraryServerUrl.Text = "net.pipe://localhost/dp2library/XE";
@@ -525,6 +531,16 @@ MessageBoxDefaultButton.Button1);
 
                 this.textBox_server_userName.Text = "";
                 this.textBox_server_password.Text = "";
+            }
+            else if (this.comboBox_server_serverType.Text == "[暂时不使用任何服务器]")
+            {
+                this.textBox_server_dp2LibraryServerUrl.Text = "[None]";
+                this.textBox_server_dp2LibraryServerUrl.Enabled = false;
+
+                this.textBox_server_userName.Text = "";
+                this.textBox_server_userName.Enabled = false;
+                this.textBox_server_password.Text = "";
+                this.textBox_server_password.Enabled = false;
             }
             else
             {

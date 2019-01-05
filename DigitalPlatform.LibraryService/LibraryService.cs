@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.Serialization;
 using System.ServiceModel;
 using System.ServiceModel.Web;
@@ -12,7 +11,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Globalization;
 using System.ServiceModel.Channels;
-using System.Net;
 
 using DigitalPlatform;
 using DigitalPlatform.LibraryServer;
@@ -20,7 +18,9 @@ using DigitalPlatform.IO;
 using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
 using DigitalPlatform.Message;
+using DigitalPlatform.LibraryServer.Common;
 
+using DigitalPlatform.rms;
 using DigitalPlatform.rms.Client;
 using DigitalPlatform.rms.Client.rmsws_localhost;
 
@@ -46,6 +46,13 @@ namespace dp2Library
                 this.sessioninfo.CloseSession();
             }
 #endif
+            // 2017/5/7
+            if (this.sessioninfo != null)
+            {
+                if (this.RestMode)
+                    this.sessioninfo.Used--;
+            }
+
             if (this.RestMode == false)
             {
                 if (this.sessioninfo != null)
@@ -60,6 +67,7 @@ namespace dp2Library
                     this._ip = null;
                 }
             }
+
         }
 
         #region 基础函数
@@ -108,10 +116,16 @@ namespace dp2Library
                 strDataDir = DomUtil.GetAttr(dom.DocumentElement, "datadir");
             }
 
-        START:
+            START:
             lock (info.LockObject)
             {
                 info.App = new LibraryApplication();
+
+                info.App.TestMode = info.TestMode;
+                info.App.MaxClients = info.MaxClients;
+                info.App.LicenseType = info.LicenseType;
+                info.App.Function = info.Function;
+
                 // parameter:
                 //		strDataDir	data目录
                 //		strError	out参数，返回出错信息
@@ -129,38 +143,84 @@ namespace dp2Library
                 nRet = info.App.Verify(out strError);
                 if (nRet == -1)
                     return -1;
-                info.App.TestMode = info.TestMode;
-                info.App.MaxClients = info.MaxClients;
-                info.App.LicenseType = info.LicenseType;
-                info.App.Function = info.Function;
             }
 
             this.app = info.App;
             return 0;
         }
 
-        public static void GetClientAddress(out string strIP, out string strVia)
+        public List<RemoteAddress> GetClientAddress()
         {
-            strIP = "";
+            List<RemoteAddress> results = new List<RemoteAddress>();
+
+            if (OperationContext.Current.IncomingMessageProperties.ContainsKey("httpRequest"))
+            {
+                var headers = OperationContext.Current.IncomingMessageProperties["httpRequest"];
+                {
+                    var ip = ((HttpRequestMessageProperty)headers).Headers["_dp2router_clientip"];
+                    if (string.IsNullOrEmpty(ip) == false)
+                        results.Add(new RemoteAddress(ip, "", "dp2Router"));
+                }
+
+                // 2018/3/30
+                var clientIpList = ((HttpRequestMessageProperty)headers).Headers["_clientip"];
+                if (string.IsNullOrEmpty(clientIpList) == false)
+                {
+                    string[] list = clientIpList.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string s in list)
+                    {
+                        var entry = s.Trim();
+                        if (string.IsNullOrEmpty(entry))
+                            continue;
+                        List<string> parts = StringUtil.ParseTwoPart(entry, ":");
+                        results.Add(new RemoteAddress(parts[1], "", parts[0]));
+                    }
+                }
+
+            }
+
+            results.Add(GetNearestClientAddress());
+            return results;
+        }
+
+        public RemoteAddress GetNearestClientAddress()
+        {
+            string strIP = "";
             MessageProperties prop = OperationContext.Current.IncomingMessageProperties;
 
-            strVia = prop.Via.ToString();
+            string strVia = prop.Via.ToString();
 
             if (prop.Via.Scheme == "net.pipe")
             {
                 // 没有 IP
                 strIP = "::1";  // "localhost";
-                return;
+                return new RemoteAddress(strIP, strVia, "");
             }
             try
             {
                 RemoteEndpointMessageProperty endpoint = prop[RemoteEndpointMessageProperty.Name] as RemoteEndpointMessageProperty;
                 strIP = endpoint.Address;
+                if (string.IsNullOrEmpty(strIP))
+                    throw new Exception("endpoint.Address 为空");
             }
-            catch
+            catch (Exception ex)
             {
+                strIP = "";
+                // 2016/11/2
+                this.app.WriteErrorLog("GetNearestClientAddress() 中出现异常(strVia='" + strVia + "'): " + ExceptionUtil.GetDebugText(ex));
             }
-            strVia = prop.Via.ToString();
+            // strVia = prop.Via.ToString();
+
+            // 如果是 rest.http 协议类型，其 Via 的字符串要多出一截。多出来 API Name。需要截掉。
+            if (prop.Encoder != null
+                && prop.Encoder.MediaType == "application/json")
+            {
+                int nRet = strVia.LastIndexOf("/");
+                if (nRet != -1)
+                    strVia = strVia.Substring(0, nRet);
+            }
+
+            return new RemoteAddress(strIP, strVia, "");
         }
 
         // return:
@@ -171,23 +231,23 @@ namespace dp2Library
         {
             strError = "";
 
-            string strIP = "";
-            string strVia = "";
-            GetClientAddress(out strIP, out strVia);
+            List<RemoteAddress> address_list = GetClientAddress();
             try
             {
-
                 // sessioninfo = new SessionInfo(app, GetClientAddress());
                 this.sessioninfo = this.app.SessionTable.PrepareSession(this.app,
     OperationContext.Current.SessionId,
-    strIP,
-    strVia);
+    address_list);
             }
             catch (OutofSessionException ex)
             {
+                RemoteAddress address = RemoteAddress.FindClientAddress(address_list, "");
+
                 // TODO: 注意防止错误日志文件耗费太多空间
                 // TODO: 这里适合对现有通道做一些清理。由于 IP 相同并不意味着就是来自同一台电脑，因此需要 MAC 地址、账户名等其他信息辅助判断
-                this.WriteDebugInfo("*** 前端 '" + strIP + "@" + strVia + "' 新分配通道的请求被拒绝:" + ex.Message);
+                this.WriteDebugInfo("*** 前端 '"
+                    + (address == null ? "" : address.ClientIP + "@" + address.Via)
+                    + "' 新分配通道的请求被拒绝:" + ex.Message);
                 // OperationContext.Current.InstanceContext.ReleaseServiceInstance();
 
                 // 为了防止攻击，需要立即切断通道。否则 1000 个通道很快会被耗尽
@@ -282,15 +342,25 @@ namespace dp2Library
 
                     // TODO: 需要按照前端 IP 地址对 sessionid 个数进行管理。如果超过一定数目则限制这个 IP 创建新的 sessionid，但不影响到其他 IP 创建新的 sessionid
 
-                    string strIP = "";
-                    string strVia = "";
-                    GetClientAddress(out strIP, out strVia);
+                    List<RemoteAddress> address_list = GetClientAddress();
                     try
                     {
                         this.sessioninfo = this.app.SessionTable.PrepareSession(this.app,
                             strSessionID,
-                            strIP,
-                            strVia);
+                            address_list,
+                            strApiName == "Logout" ? false : true);
+                        // 2008/8/17
+                        if (this.sessioninfo == null && strApiName == "Logout")
+                        {
+                            // Logout 时发现 session 并不存在
+                            this._ip = "";
+                            this.sessioninfo = null;
+                            OperationContext.Current.InstanceContext.ReleaseServiceInstance();
+                            result.Value = -1;
+                            result.ErrorInfo = "通道先前已经被释放，本次 Logout 操作失败";
+                            result.ErrorCode = ErrorCode.ChannelReleased;
+                            return result;
+                        }
                     }
 #if NO
                     catch (OutofSessionException ex)
@@ -308,9 +378,13 @@ namespace dp2Library
                         result.ErrorInfo = "dp2Library 初始化通道失败: " + ex.Message;
                         if (ex is OutofSessionException)
                         {
+                            RemoteAddress address = RemoteAddress.FindClientAddress(address_list, "");
+
                             // TODO: 注意防止错误日志文件耗费太多空间
                             // TODO: 这里适合对现有通道做一些清理。由于 IP 相同并不意味着就是来自同一台电脑，因此需要 MAC 地址、账户名等其他信息辅助判断
-                            this.WriteDebugInfo("*** 前端 '" + strIP + "@" + strVia + "' 新分配通道的请求被拒绝:" + ex.Message);
+                            this.WriteDebugInfo("*** 前端 '"
+                                + (address == null ? "" : address.ClientIP + "@" + address.Via)
+                                + "' 新分配通道的请求被拒绝:" + ex.Message);
 
                             result.ErrorCode = ErrorCode.OutofSession;
                             // OperationContext.Current.InstanceContext.ReleaseServiceInstance();
@@ -364,17 +438,19 @@ namespace dp2Library
 #endif
 
                 SetLang(sessioninfo.Lang);
+
+                // 2017/5/7
+                if (this.RestMode)
+                    this.sessioninfo.Used++;
             }
 
             if (bPrepareSessionInfo == false && this.sessioninfo == null)
             {
                 // 增量 NullIpTable，以便管理配额
 
-                string strIP = "";
-                string strVia = "";
-                GetClientAddress(out strIP, out strVia);
-                this._ip = strIP;
-                this.app.SessionTable.IncNullIpCount(strIP, 1);
+                RemoteAddress address = GetNearestClientAddress();
+                this._ip = address.ClientIP;
+                this.app.SessionTable.IncNullIpCount(address.ClientIP, 1);
             }
 
             if (bCheckHangup == true)
@@ -384,7 +460,7 @@ namespace dp2Library
                     result.Value = -1;
                     result.ErrorCode = ErrorCode.Hangup;
                     if (app.ContainsHangup("Expire"))
-                        result.ErrorInfo = "系统当前处于维护状态，本功能暂时不能使用。原因: dp2library 版本太旧，请立即升级到最新版本";
+                        result.ErrorInfo = "系统当前处于维护状态，本功能暂时不能使用。原因: dp2library(又名图书馆应用服务器)(注意这是服务器模块) 版本太旧，请立即升级到最新版本";
                     else
                         result.ErrorInfo = "因系统处于维护状态 " + StringUtil.MakePathList(app.HangupList) + "，本功能暂时不能使用";
                     return result;
@@ -479,19 +555,25 @@ namespace dp2Library
                     goto ERROR1;
                 }
 
-                nRet = app.UserNameTable.BeforeLogin(strUserName,
-                    sessioninfo.ClientIP,
-                    out strError);
-                if (nRet == -1)
+                if (String.IsNullOrEmpty(strParameters) == false
+    && strParameters.IndexOf("=") == -1)
                 {
-                    // app.WriteErrorLog("前端 ["+sessioninfo.ClientIP+"] 对用户名 ["+strUserName+"] 进行了密码试探攻击，被惩罚延时: " + strError);
+                    strError = "strParameters参数应该采用新的用法： location=???,index=???";
                     goto ERROR1;
                 }
 
-                if (String.IsNullOrEmpty(strParameters) == false
-                    && strParameters.IndexOf("=") == -1)
+                Hashtable parameters = StringUtil.ParseParameters(strParameters, ',', '=');
+
+                // 2018/7/11
+                // 使用可信的前端提供的 clientip 参数
+                string strClientIP = parameters.ContainsKey("clientip") == true ? parameters["clientip"] as string : sessioninfo.ClientIP;
+
+                nRet = app.UserNameTable.BeforeLogin(strUserName,
+                strClientIP,
+                out strError);
+                if (nRet == -1)
                 {
-                    strError = "strParameters参数应该采用新的用法： location=???,index=???";
+                    // app.WriteErrorLog("前端 ["+sessioninfo.ClientIP+"] 对用户名 ["+strUserName+"] 进行了密码试探攻击，被惩罚延时: " + strError);
                     goto ERROR1;
                 }
 
@@ -506,8 +588,6 @@ namespace dp2Library
                     strError = "不允许用 token 登录";
                     goto ERROR1;
                 }
-
-                Hashtable parameters = StringUtil.ParseParameters(strParameters, ',', '=');
 
                 // 评估模式
                 if (parameters.ContainsKey("testmode") == true)
@@ -549,6 +629,8 @@ namespace dp2Library
                 }
 
                 string strLocation = (string)parameters["location"];
+                if (strLocation == null)
+                    strLocation = "";   // 2016/10/25 添加。防范 library.xml 中脚本函数 ItemCanBorrow() 或者 ItemCanReturn() 中使用 account.Location.IndexOf() 时抛出异常
                 string strLibraryCodeList = (string)parameters["libraryCode"];
                 if (string.IsNullOrEmpty(strLibraryCodeList) == false)
                     strLibraryCodeList = strLibraryCodeList.Replace("|", ",");
@@ -570,6 +652,9 @@ namespace dp2Library
                 if (strType.ToLower() == "reader")
                     bReader = true;
 
+                List<string> alter_type_list = null;
+
+#if NO
                 bool bSimulateLogin = false;
                 string strSimulate = (string)parameters["simulate"];
                 if (strSimulate == null)
@@ -578,7 +663,9 @@ namespace dp2Library
                 if (strSimulate == "yes" || strSimulate == "on"
                 || strSimulate == "1" || strSimulate == "true")
                     bSimulateLogin = true;
-
+#endif
+                bool bSimulateLogin = StringUtil.GetBooleanValue((string)parameters["simulate"], false);
+                string strLimitRights = ""; // 代理者的权限。用于限定(代理登录方式下)被代理者的危险权限
                 if (bReader == false)
                 {
                     if (bSimulateLogin == true)
@@ -599,8 +686,13 @@ namespace dp2Library
 
                         if (string.IsNullOrEmpty(info.UserToken) == true)
                         {
+#if NO
                             strError = "simulate 状态下登录(模拟工作人员帐户)时，strPassword 参数内必须提供被模拟帐户的 token 参数";
                             goto ERROR1;
+#endif
+                            // 2016/10/21
+                            // 令第二阶段不要进行密码判断
+                            strPassword = null;
                         }
                         else
                         {
@@ -615,13 +707,16 @@ namespace dp2Library
                         try
                         {
                             string strTemp = "";
+                            List<string> temp_list = null;
                             // 工作人员登录(代理者登录)
                             nRet = sessioninfo.Login(info.ManagerUserName,
                                  info.ManagerPassword,
                                  "#simulate",
                                  false,
                                  null,
+                                 "*",
                                  null,
+                                 out temp_list,
                                  out strRights,
                                  out strTemp,
                                  out strError);
@@ -631,13 +726,17 @@ namespace dp2Library
                                 if (nRet == 0 || nRet == 1)
                                 {
                                     string strLogText = app.UserNameTable.AfterLogin(info.ManagerUserName,
-                                        sessioninfo.ClientIP,
+                                        strClientIP,
                                         nRet);
                                     if (string.IsNullOrEmpty(strLogText) == false)
                                         app.WriteErrorLog("!!!(simulate 1) " + strLogText);
                                 }
                                 goto ERROR1;
                             }
+
+                            // 这种情况下使用代理者的权限
+                            if (strPassword == null)
+                                strLimitRights = sessioninfo.Rights;
 
                             // 检查工作人员帐户是否具备 simulateworker 权限
                             if (StringUtil.IsInList("simulateworker", strRights) == false)
@@ -663,11 +762,31 @@ namespace dp2Library
                          strLocation,
                          StringUtil.HasHead(strLocation, "#opac") == true || strLocation == "@web" ? true : false,  // todo: 判断 #opac 或者 #opac_xxxx
                          sessioninfo.ClientIP,
+                         sessioninfo.RouterClientIP,
                          strGetToken,
+                         out alter_type_list,
                          out strRights,
                          out strLibraryCode,
                          out strError);
                     strOutputUserName = strUserName;
+
+                    // 2016/10/21
+                    if (string.IsNullOrEmpty(strLimitRights) == false)
+                    {
+#if NO
+                        if (sessioninfo.Account != null)
+                        {
+                            strRights = strLimitRights;
+                            sessioninfo.Account.Rights = strLimitRights;
+                        }
+#endif
+                        // 2017/1/17
+                        if (sessioninfo.Account != null)
+                        {
+                            string removed = "";
+                            sessioninfo.Account.Rights = LibraryApplication.LimitRights(strRights, strLimitRights, out removed);
+                        }
+                    }
                 }
                 else
                 {
@@ -709,13 +828,17 @@ namespace dp2Library
                         try
                         {
                             string strTemp = "";
+                            List<string> temp_list = null;
+
                             // 工作人员登录
                             nRet = sessioninfo.Login(info.ManagerUserName,
                                  info.ManagerPassword,
                                  "#simulate",
                                  false,
                                  null,
+                                 "*",
                                  null,
+                                 out temp_list,
                                  out strRights,
                                  out strTemp,
                                  out strError);
@@ -725,7 +848,7 @@ namespace dp2Library
                                 if (nRet == 0 || nRet == 1)
                                 {
                                     string strLogText = app.UserNameTable.AfterLogin(info.ManagerUserName,
-                                        sessioninfo.ClientIP,
+                                        strClientIP,
                                         nRet);
                                     if (string.IsNullOrEmpty(strLogText) == false)
                                         app.WriteErrorLog("!!!(simulate 2) " + strLogText);
@@ -775,6 +898,7 @@ namespace dp2Library
                         strLibraryCodeList,
                         nIndex, // -1,
                         strGetToken,
+                        out alter_type_list,
                         out strOutputUserName,
                         out strRights,
                         out strLibraryCode,
@@ -800,7 +924,7 @@ namespace dp2Library
                 if (nRet == 0 || nRet == 1)
                 {
                     string strLogText = app.UserNameTable.AfterLogin(strUserName,
-                        sessioninfo.ClientIP,
+                        strClientIP,
                         nRet);
                     if (string.IsNullOrEmpty(strLogText) == false)
                         app.WriteErrorLog("!!! " + strLogText);
@@ -833,6 +957,19 @@ namespace dp2Library
                     }
                 }
 
+                /// 处理短信验证码登录有关的流程
+                if (nRet == 1)
+                {
+                    if (DoSmsCheck(sessioninfo,
+                parameters,
+                alter_type_list,
+                result) == true)
+                    {
+                        sessioninfo.Account = null; // 2017/5/5 堵住漏洞
+                        return result;
+                    }
+                }
+
                 // END1:
                 result.Value = nRet;
                 result.ErrorInfo = strError;
@@ -842,7 +979,7 @@ namespace dp2Library
                     result.ErrorCode = ErrorCode.SystemError;
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -858,6 +995,219 @@ namespace dp2Library
                 result.ErrorInfo = strErrorText;
                 return result;
             }
+        }
+
+        // return:
+        //      true    本函数返回后立即结束
+        //      false   继续
+        bool DoSmsCheck(SessionInfo sessioninfo,
+            Hashtable parameters,
+            List<string> alter_type_list,
+            LibraryServerResult result)
+        {
+            string strError = "";
+            int nRet = 0;
+
+            // 用于构造验证码名称的 IP 地址
+            string strClientIP = sessioninfo.ClientIP;
+            if (string.IsNullOrEmpty(sessioninfo.RouterClientIP) == false)
+                strClientIP = "r:" + sessioninfo.RouterClientIP;
+
+            List<string> rest_list = null;
+            string strPhoneNumber = (string)parameters["phoneNumber"];
+            string strTempCode = (string)parameters["tempCode"];
+            if (string.IsNullOrEmpty(strTempCode) == false)
+            {
+                // 准备手机短信验证登录的第二阶段：匹配验证码
+                if (sessioninfo.Account == null)
+                {
+                    strError = "手机短信验证方式登录时，sessioninfo.Account 不应为 null";
+                    goto ERROR1;
+                }
+
+                if (string.IsNullOrEmpty(strPhoneNumber))
+                {
+                    strError = "当包含 tempCode 参数时，也要包含 phoneNumber 参数";
+                    goto ERROR1;
+                }
+
+                if (sessioninfo.Account.MatchTempPassword(app.TempCodeTable,
+                    strPhoneNumber,
+                    strClientIP,
+                    strTempCode,
+                    out strError) == false)
+                {
+                    sessioninfo.Account = null; // 2017/5/5 堵住漏洞
+
+                    result.Value = -1;
+                    result.ErrorInfo = strError;
+                    result.ErrorCode = ErrorCode.TempCodeMismatch;
+                    return true;
+                }
+
+                alter_type_list.Add("sms"); // 表示验证过了
+
+                // 未处理的、和需要补做的类型
+                rest_list = GetRest(sessioninfo, alter_type_list);
+
+            }
+            else
+            {
+#if NO
+                bool bAlterSms = false;
+                if (alter_type_list != null && alter_type_list.IndexOf("sms") != -1)
+                    bAlterSms = true;
+#endif
+
+                // 未处理的、和需要补做的类型
+                rest_list = GetRest(sessioninfo, alter_type_list);
+
+#if NO
+                // 竖线间隔的手机号码列表
+                // return:
+                //      null    没有找到前缀
+                //      ""      找到了前缀，并且值部分为空
+                //      其他     返回值部分
+                string strSmsBinding = sessioninfo.Account == null ? "" : sessioninfo.Account.GetPhoneNumberBindingString();
+
+                // TODO: 如果 strSmsBinding 里面包含了 *ip，而 IP 检查已经进行过了，就可以不用要求验证码了
+
+                if ((bAlterSms == true || string.IsNullOrEmpty(strSmsBinding) == false)
+                    && string.IsNullOrEmpty(strPhoneNumber) == true)
+
+#endif
+
+                if (rest_list.Count == 1 && rest_list.IndexOf("sms") != -1
+                    && string.IsNullOrEmpty(strPhoneNumber) == true)
+                {
+                    sessioninfo.Account = null;
+                    result.Value = 0;
+                    result.ErrorInfo = "此账户当前无法用传统方式登录。可改用手机号+验证码方式登录";
+                    result.ErrorCode = ErrorCode.NeedSmsLogin;
+                    return true;
+                }
+
+                // TODO: 走到这里。如果有多种类型没有验证，只要里面有 ip 和 router_ip 就不必提示 sms 没有通过验证了。因为确实没有给 sms 验证的机会(这样也不必要，因为即便通过 sms 验证也无法通过全部验证)
+
+                if (string.IsNullOrEmpty(strPhoneNumber) == false)
+                {
+                    // 准备手机短信验证登录的第一阶段：产生验证码
+
+                    if (sessioninfo.Account == null)
+                    {
+                        strError = "手机短信验证方式登录时，sessioninfo.Account 不应为 null";
+                        goto ERROR1;
+                    }
+
+                    // 
+                    TempCode code = null;
+
+                    // return:
+                    //      -1  出错
+                    //      0   沿用以前的验证码
+                    //      1   用新的验证码
+                    int nPasswordRet = sessioninfo.Account.PrepareTempPassword(
+                        app.TempCodeTable,
+                        strClientIP,
+                        strPhoneNumber,
+                        out code,
+                        out strError);
+                    if (nPasswordRet == -1)
+                        goto ERROR1;
+
+                    if (nPasswordRet == 1)
+                    {
+                        string strMessage = "登录验证码为 " + code.Code + "。(用户 " + sessioninfo.Account.UserID + ") " + Account.TempCodeExpireLength.TotalMinutes + "分钟以后失效";
+                        string strLibraryName = app.LibraryName;
+                        if (string.IsNullOrEmpty(strLibraryName) == false)
+                        {
+                            strMessage = "登录验证码为 " + code.Code + "。(用户 " + sessioninfo.Account.UserID + " " + strLibraryName + ") " + Account.TempCodeExpireLength.TotalMinutes + "分钟以后失效";
+                        }
+
+                        // 通过 MSMQ 发送手机短信
+                        // parameters:
+                        //      strUserName 账户名，或者读者证件条码号，或者 "@refID:xxxx"
+                        nRet = app.SendSms(
+                            sessioninfo.Account.UserID,
+                            strPhoneNumber,
+                            strMessage,
+                            out strError);
+                        if (nRet == -1)
+                        {
+                            // 出错后，清除已经存储的验证码
+                            app.TempCodeTable.Remove(code.Key);
+                            goto ERROR1;
+                        }
+                    }
+
+                    // 返回 0 并且 ErrorCode 为 RetryLogin，表示已经发出短信，需要再次登录(携带刚收到的验证码)
+                    sessioninfo.Account = null;
+                    result.Value = 0;
+                    if (nPasswordRet == 0)
+                        result.ErrorInfo = "请使用手机 " + strPhoneNumber + " 早先收到过的短信验证码再次提交登录";
+                    else
+                        result.ErrorInfo = "验证短信已经发送给手机 " + strPhoneNumber + "。请使用收到的短信验证码再次提交登录";
+
+#if NO
+                    if (nPasswordRet == 0)
+                        result.ErrorInfo = "请使用手机号 " + strPhoneNumber + "(" + code.Code + ") 早先收到过的验证码再次提交登录";
+                    else
+                        result.ErrorInfo = "验证短信已经发送给手机号 " + strPhoneNumber + "(" + code.Code + ")。请使用收到的验证码再次提交登录";
+#endif
+
+                    result.ErrorCode = ErrorCode.RetryLogin;
+                    return true;
+                }
+            }
+
+            // 最后看看是否还有剩余的未能验证的
+            {
+                if (rest_list.Count > 0)
+                {
+                    sessioninfo.Account = null;
+                    result.Value = 0;
+                    result.ErrorInfo = "登录失败。方式 " + StringUtil.MakePathList(rest_list) + " 未通过验证";
+                    result.ErrorCode = ErrorCode.NotFound;  // TODO: 需要一个新的错误码 VerifyFail
+                    return true;
+                }
+            }
+
+            return false;
+            ERROR1:
+            sessioninfo.Account = null; // 2017/5/5 堵住漏洞
+            result.Value = -1;
+            result.ErrorInfo = strError;
+            result.ErrorCode = ErrorCode.SystemError;
+            return true;
+        }
+
+        static List<string> GetRest(SessionInfo sessioninfo, List<string> alter_type_list)
+        {
+            // 所有绑定类型
+            List<string> types = Account.GetBindingTypes(sessioninfo.Account.Binding);
+            if (sessioninfo.RouterClientIP == null)
+                types.Remove("router_ip");
+
+            // 没有处理过的类型
+            List<string> not_process = Account.Sub(types, Account.GetProcessed(alter_type_list));
+
+            // 需要补做的类型
+            List<string> rest_list = Account.MergeBindingType(alter_type_list);
+
+            // 合并两个数组
+            rest_list.AddRange(not_process);
+            StringUtil.RemoveDupNoSort(ref rest_list);
+
+            // 对于剩下的类型，要检查是否有已经验证过的类型可以替代
+            // 从 types 列表中移走那些验证过的可以替代的类型
+            // parameters:
+            //      types   需要检查的类型
+            //      processed   已经验证过的类型
+            Account.RemoveAlterTypes(ref rest_list,
+                Account.GetMatched(alter_type_list),
+                sessioninfo.Account.Binding);
+
+            return rest_list;
         }
 
         static string CheckClientVersion(string strText)
@@ -1235,7 +1585,7 @@ namespace dp2Library
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -1947,7 +2297,7 @@ namespace dp2Library
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -2057,11 +2407,13 @@ namespace dp2Library
                 results = infos.ToArray();
                 result.Value = totalCount;
                 return result;
+#if NO
             ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
                 return result;
+#endif
             }
             catch (Exception ex)
             {
@@ -2090,7 +2442,7 @@ namespace dp2Library
             string strComment,
             string strStyle)
         {
-            LibraryServerResult result = this.PrepareEnvironment("SetFriends", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("SetFriends", true, true, true);
             if (result.Value == -1)
                 return result;
 
@@ -2159,7 +2511,7 @@ namespace dp2Library
                 }
 
                 string strBack = DomUtil.GetElementText(readerdom.DocumentElement, "friends");
-                string strTo = DomUtil.GetElementText(sessioninfo.Account.ReaderDom.DocumentElement, "friends");
+                string strTo = DomUtil.GetElementText(sessioninfo.Account?.PatronDom?.DocumentElement, "friends");
 
                 if (StringUtil.IsInList(strReaderBarcode, strTo) == true
                     && StringUtil.IsInList(sessioninfo.UserID, strBack) == true)
@@ -2217,7 +2569,7 @@ namespace dp2Library
 
                 result.Value = 0;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -2526,7 +2878,7 @@ namespace dp2Library
                     EndSearch();
                 }
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -2555,8 +2907,7 @@ namespace dp2Library
         //      searchresults   返回包含记录信息的SearchResult对象数组
         // rights:
         //      没有限制
-        // return:
-        //      result.Value    -1 出错；>=0 结果集内记录的总数(注意，并不是本批返回的记录数)
+        // result.Value    -1 出错；>=0 结果集内记录的总数(注意，并不是本批返回的记录数)
         public LibraryServerResult GetSearchResult(
             string strResultSetName,
             long lStart,
@@ -2600,13 +2951,14 @@ namespace dp2Library
                 {
                     result.Value = -1;
                     result.ErrorInfo = strError;
-                    result.ErrorCode = ErrorCode.SystemError;
+                    // 2018/7/1
+                    result.ErrorCode = LibraryServerResult.FromErrorValue(channel.OriginErrorCode); // localhost.ErrorCodeValue --> LibraryServer.ErrorCode
+                    // result.ErrorCode = ErrorCode.SystemError;
                     return result;
                 }
 
                 result.Value = lRet;
                 result.ErrorInfo = strError;
-
                 return result;
             }
             catch (Exception ex)
@@ -2751,7 +3103,7 @@ namespace dp2Library
                 return result;
             }
 
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorInfo = strError;
             result.ErrorCode = ErrorCode.SystemError;
@@ -2908,9 +3260,7 @@ namespace dp2Library
                 // 权限判断
 
                 // 权限字符串
-                if (StringUtil.IsInList("listbibliodbfroms", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("listdbfroms", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("listbibliodbfroms,listdbfroms,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "列出书目库检索途径 被拒绝。不具备order或listbibliodbfroms或listdbfroms权限。";
@@ -2951,11 +3301,13 @@ namespace dp2Library
                 result.ErrorInfo = strErrorText;
                 return result;
             }
+#if NO
         ERROR1:
             result.Value = -1;
             result.ErrorInfo = strError;
             result.ErrorCode = ErrorCode.SystemError;
             return result;
+#endif
         }
 
         void WriteDebugInfo(string strTitle)
@@ -3010,11 +3362,10 @@ namespace dp2Library
                 // 权限判断
 
                 // 权限字符串
-                if (StringUtil.IsInList("searchbiblio", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("searchbiblio,order,searchauthority", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
-                    result.ErrorInfo = "检索书目信息被拒绝。不具备order或searchbiblio权限。";
+                    result.ErrorInfo = "检索书目或规范信息被拒绝。不具备order、searchbiblio或searchauthority权限。";
                     result.ErrorCode = ErrorCode.AccessDenied;
                     return result;
                 }
@@ -3203,6 +3554,7 @@ namespace dp2Library
             strMatchStyle,
             strLang,
             strSearchStyle,
+            out List<string> dbTypes,
             out strQueryXml,
                     out strError);
                 if (nRet == -1 || nRet == 0)
@@ -3215,11 +3567,42 @@ namespace dp2Library
                     return result;
                 }
 
+                // 再次检查权限。分为书目和规范两种细致检查
+                foreach (string type in dbTypes)
+                {
+                    if (type == "biblio")
+                    {
+                        if (StringUtil.IsInList("searchbiblio,order", sessioninfo.RightsOrigin) == false)
+                        {
+                            result.Value = -1;
+                            result.ErrorInfo = "检索书目信息被拒绝。不具备 order 或 searchbiblio权限。";
+                            result.ErrorCode = ErrorCode.AccessDenied;
+                            return result;
+                        }
+                    }
+                    else if (type == "authority")
+                    {
+                        if (StringUtil.IsInList("searchauthority", sessioninfo.RightsOrigin) == false)
+                        {
+                            result.Value = -1;
+                            result.ErrorInfo = "检索规范信息被拒绝。不具备 searchauthority 权限。";
+                            result.ErrorCode = ErrorCode.AccessDenied;
+                            return result;
+                        }
+                    }
+                }
+
                 // strLocationFilter = "海淀分馆"; // testing
                 if (string.IsNullOrEmpty(strLocationFilter) == false)
                 {
+                    string strOperator = "AND";
+                    if (strLocationFilter.StartsWith("-"))
+                    {
+                        strLocationFilter = strLocationFilter.Substring(1);
+                        strOperator = "SUB";
+                    }
                     string strLocationQueryXml = "<item resultset='#" + strLocationFilter + "' />";
-                    strQueryXml = "<group>" + strQueryXml + "<operator value='AND'/>" + strLocationQueryXml + "</group>";    // !!!
+                    strQueryXml = $"<group>{strQueryXml}<operator value='{strOperator}'/>{strLocationQueryXml}</group>";    // !!!
                 }
 
                 RmsChannel channel = sessioninfo.Channels.GetChannel(app.WsUrl);
@@ -3269,7 +3652,7 @@ namespace dp2Library
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -3287,15 +3670,17 @@ namespace dp2Library
             }
         }
 
-        // 设置书目信息(目前只能xml一种格式)
+        // TODO: 需要增加返回保存后记录 XML 的参数。因为保存过程中，可能会略微修改前端提交的记录，比如增加一些字段
+        // 设置书目信息或者规范信息(目前只能xml一种格式)
         // 权限:   需要具有setbiblioinfo权限
         // parameters:
         //      strAction   动作。为"new" "change" "delete" "onlydeletebiblio" "onlydeletesubrecord"之一。"delete"在删除书目记录的同时，会自动删除下属的实体记录。不过要求实体均未被借出才能删除。
-        //      strBiblioType   目前只允许xml一种
+        //      strBiblioType   xml 或 iso2709。iso2709 格式可以包含编码方式，例如 iso2709:utf-8
         //      baTimestamp 时间戳。如果为新创建记录，可以为null 
         //      strOutputBiblioRecPath 输出的书目记录路径。当strBiblioRecPath中末级为问号，表示追加保存书目记录的时候，本参数返回实际保存的书目记录路径
+        //                      此参数也用于，当保存前查重时发现了重复的书目记录，这里返回这些书目记录的路径
         //      baOutputTimestamp   操作完成后，新的时间戳
-        // Result.Value -1出错 0成功
+        // Result.Value -1出错 0成功 >0 表示查重发现了重复的书目记录，保存被拒绝
         public LibraryServerResult SetBiblioInfo(
             string strAction,
             string strBiblioRecPath,
@@ -3303,13 +3688,14 @@ namespace dp2Library
             string strBiblio,
             byte[] baTimestamp,
             string strComment,
+            string strStyle,    // 2016/12/22
             out string strOutputBiblioRecPath,
             out byte[] baOutputTimestamp)
         {
             strOutputBiblioRecPath = "";
             baOutputTimestamp = null;
 
-            LibraryServerResult result = this.PrepareEnvironment("SetBiblioInfo", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("SetBiblioInfo", true, true, true);
             if (result.Value == -1)
                 return result;
 
@@ -3318,8 +3704,7 @@ namespace dp2Library
                 if (strAction == "notifynewbook")
                 {
                     // 权限字符串
-                    if (StringUtil.IsInList("setbiblioinfo", sessioninfo.RightsOrigin) == false
-                        && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                    if (StringUtil.IsInList("setbiblioinfo,order", sessioninfo.RightsOrigin) == false)
                     {
                         result.Value = -1;
                         result.ErrorInfo = "通知读者新书到达被拒绝。不具备order或setbiblioinfo权限。";
@@ -3333,18 +3718,6 @@ namespace dp2Library
                        strBiblioType);
                 }
 
-                /*
-                // 权限字符串
-                if (StringUtil.IsInList("setbiblioinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
-                {
-                    result.Value = -1;
-                    result.ErrorInfo = "设置书目信息被拒绝。不具备order或setbiblioinfo权限。";
-                    result.ErrorCode = ErrorCode.AccessDenied;
-                    return result;
-                }
-                 * */
-
                 return app.SetBiblioInfo(
                     sessioninfo,
                     strAction,
@@ -3353,6 +3726,7 @@ namespace dp2Library
                     strBiblio,
                     baTimestamp,
                     strComment,
+                    strStyle,
                     out strOutputBiblioRecPath,
                     out baOutputTimestamp);
             }
@@ -3400,15 +3774,14 @@ namespace dp2Library
             baOutputTimestamp = null;
             strOutputBiblio = "";
 
-            LibraryServerResult result = this.PrepareEnvironment("CopyBiblioInfo", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("CopyBiblioInfo", true, true, true);
             if (result.Value == -1)
                 return result;
 
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("setbiblioinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("setbiblioinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "复制书目信息被拒绝。不具备 order 或 setbiblioinfo 权限。";
@@ -3878,11 +4251,13 @@ namespace dp2Library
 
             try
             {
+                // testing
+                // Thread.Sleep(1000*60*5);
+
                 // 权限判断
 
                 // 权限字符串
-                if (StringUtil.IsInList("searchitem", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("searchitem,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "检索实体信息被拒绝。不具备order、searchitem权限。";
@@ -4136,7 +4511,7 @@ namespace dp2Library
 
                 return result;
 
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -4202,12 +4577,10 @@ namespace dp2Library
                 if (strItemDbType == "item")
                 {
                     // 权限字符串
-                    if (StringUtil.IsInList("getiteminfo", sessioninfo.RightsOrigin) == false
-                        && StringUtil.IsInList("getentities", sessioninfo.RightsOrigin) == false   // 2009/10/18 
-                        && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                    if (StringUtil.IsInList("getiteminfo,getentities,order", sessioninfo.RightsOrigin) == false)
                     {
                         result.Value = -1;
-                        result.ErrorInfo = "用户 '"+sessioninfo.UserID+"' 获取实体信息被拒绝。不具备order、getiteminfo或getentities权限。";
+                        result.ErrorInfo = "用户 '" + sessioninfo.UserID + "' 获取实体信息被拒绝。不具备order、getiteminfo或getentities权限。";
                         result.ErrorCode = ErrorCode.AccessDenied;
                         return result;
                     }
@@ -4215,8 +4588,7 @@ namespace dp2Library
                 else if (strItemDbType == "order")
                 {
                     // 权限字符串
-                    if (StringUtil.IsInList("getorderinfo", sessioninfo.RightsOrigin) == false
-                        && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                    if (StringUtil.IsInList("getorderinfo,order", sessioninfo.RightsOrigin) == false)
                     {
                         result.Value = -1;
                         result.ErrorInfo = "用户 '" + sessioninfo.UserID + "' 获取订购信息被拒绝。不具备order或getorderinfo权限。";
@@ -4227,8 +4599,7 @@ namespace dp2Library
                 else if (strItemDbType == "issue")
                 {
                     // 权限字符串
-                    if (StringUtil.IsInList("getissueinfo", sessioninfo.RightsOrigin) == false
-                        && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                    if (StringUtil.IsInList("getissueinfo,order", sessioninfo.RightsOrigin) == false)
                     {
                         result.Value = -1;
                         result.ErrorInfo = "用户 '" + sessioninfo.UserID + "' 获取期信息被拒绝。不具备order或getissueinfo权限。";
@@ -4239,11 +4610,10 @@ namespace dp2Library
                 else if (strItemDbType == "comment")
                 {
                     // 权限字符串
-                    if (StringUtil.IsInList("getcommentinfo", sessioninfo.RightsOrigin) == false
-                        && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                    if (StringUtil.IsInList("getcommentinfo,order", sessioninfo.RightsOrigin) == false)
                     {
                         result.Value = -1;
-                        result.ErrorInfo = "用户 '" + sessioninfo.UserID + "' 获取评注信息被拒绝。不具备 getcommentinfo 或 order 权限。";
+                        result.ErrorInfo = "用户 '" + sessioninfo.UserID + "' 获取评注信息(GetItemInfo()被拒绝。不具备 getcommentinfo 或 order 权限。";
                         result.ErrorCode = ErrorCode.AccessDenied;
                         return result;
                     }
@@ -4266,7 +4636,6 @@ namespace dp2Library
                 }
 
                 string strBiblioDbName1 = "";
-                XmlDocument item_dom = null;
 
                 // 特殊用法 @barcode-list: 获得册记录路径列表
                 if (StringUtil.HasHead(strBarcode, "@barcode-list:") == true
@@ -4366,6 +4735,9 @@ namespace dp2Library
                 }
 
                 // 获得一条册、期、订购、评注记录
+                // parameters:
+                //      strRefID    当 strDbType 为 item 时，strRefID 中是册条码号。其他情况，是 refid 字符串
+                //      item_dom    [out] 返回记录的 XmlDocument 形态。注意有时候可能为 null (当 strXml 为空时)
                 // return:
                 //      -1  出错
                 //      0   没有找到
@@ -4380,7 +4752,7 @@ namespace dp2Library
                     ref strBiblioRecPath,
                     ref result,
                     out strXml,
-                    out item_dom,
+                    out XmlDocument item_dom,
                     out strError);
                 if (nRet == 0)
                     return result;
@@ -4548,15 +4920,15 @@ namespace dp2Library
 
 #endif
 
-            GET_OTHERINFO:
+                // GET_OTHERINFO:
 
                 // 过滤<borrower>元素
-                // XmlDocument itemdom = null;
-                Debug.Assert(string.IsNullOrEmpty(strBiblioRecPath) == false, "");
-                Debug.Assert(item_dom != null, "");
+                // Debug.Assert(string.IsNullOrEmpty(strBiblioRecPath) == false, "string.IsNullOrEmpty(strBiblioRecPath) == false 未满足");
+                // Debug.Assert(item_dom != null, "item_dom != null 未满足");
 
                 // 修改<borrower>
-                if (strItemDbType == "item" && sessioninfo.GlobalUser == false) // 分馆用户必须要过滤，因为要修改<borrower>
+                if (item_dom != null && item_dom.DocumentElement != null
+                    && strItemDbType == "item" && sessioninfo.GlobalUser == false) // 分馆用户必须要过滤，因为要修改<borrower>
                 {
 #if NO
                     nRet = LibraryApplication.LoadToDom(strXml,
@@ -4567,7 +4939,6 @@ namespace dp2Library
 #endif
 
                     {
-                        string strLibraryCode = "";
                         // 检查一个册记录的馆藏地点是否符合当前用户管辖的馆代码列表要求
                         // return:
                         //      -1  检查过程出错
@@ -4575,7 +4946,7 @@ namespace dp2Library
                         //      1   不符合要求
                         nRet = app.CheckItemLibraryCode(item_dom,
                                     sessioninfo.LibraryCodeList,
-                                    out strLibraryCode,
+                                    out string strLibraryCode,
                                     out strError);
                         if (nRet == -1)
                             goto ERROR1;
@@ -4647,9 +5018,10 @@ namespace dp2Library
                 }
 
                 // 若需要同时取得种记录
-                if (String.IsNullOrEmpty(strBiblioType) == false)
+                if (String.IsNullOrEmpty(strBiblioType) == false
+                    && string.IsNullOrEmpty(strBiblioRecPath) == false)
                 {
-                    Debug.Assert(string.IsNullOrEmpty(strBiblioRecPath) == false, "");
+                    // Debug.Assert(string.IsNullOrEmpty(strBiblioRecPath) == false, "string.IsNullOrEmpty(strBiblioRecPath) == false 未满足");
 
 #if NO
                     if (string.IsNullOrEmpty(strBiblioRecPath) == true)
@@ -4712,16 +5084,12 @@ namespace dp2Library
                         strError = "channel == null";
                         goto ERROR1;
                     }
-                    string strMetaData = "";
-                    byte[] timestamp = null;
-                    string strTempOutputPath = "";
-                    string strBiblioXml = "";
 
                     lRet = channel.GetRes(strBiblioRecPath,
-                        out strBiblioXml,
-                        out strMetaData,
-                        out timestamp,
-                        out strTempOutputPath,
+                        out string strBiblioXml,
+                        out string strMetaData,
+                        out byte[] timestamp,
+                        out string strTempOutputPath,
                         out strError);
                     if (lRet == -1)
                     {
@@ -4741,7 +5109,6 @@ namespace dp2Library
                         strBiblio = strBiblioXml;
                         goto END1;
                     }
-
 
                     // 需要从内核映射过来文件
                     string strLocalPath = "";
@@ -4780,7 +5147,7 @@ namespace dp2Library
                         nRet = app.ConvertBiblioXmlToHtml(
                                 strFilterFileName,
                                 strBiblioXml,
-                                    null,
+                                null,
                                 strBiblioRecPath,
                                 out strBiblio,
                                 out strError);
@@ -4791,9 +5158,9 @@ namespace dp2Library
                         strBiblio = "";
                 }
 
-            END1:
+                END1:
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -4829,8 +5196,7 @@ namespace dp2Library
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("searchitem", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("searchitem,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "册条码号查重被拒绝。不具备order或searchitem权限。";
@@ -4864,6 +5230,7 @@ namespace dp2Library
                         // sessioninfo.Channels,
                         channel,
                         strBarcode,
+                        "册条码",
                         nMax,
                         out aPath,
                         out strError);
@@ -4895,7 +5262,7 @@ namespace dp2Library
 
                 result.Value = paths.Length;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -4977,7 +5344,7 @@ namespace dp2Library
                 channel.Idle -= new IdleEventHandler(channel_IdleEvent);
                 EndSearch();
             }
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorInfo = strError;
             result.ErrorCode = ErrorCode.SystemError;
@@ -4991,11 +5358,13 @@ namespace dp2Library
         //      strItemBarcode  册条码号
         //      strConfirmItemRecPath  册记录路径。在册条码号重复的情况下，才需要使用这个参数，平时为null即可
         //      saBorrowedItemBarcode   同一读者先前已经借阅成功的册条码号集合。用于在返回的读者html中显示出特定的颜色而已。
-        //      strStyle    操作风格。"item"表示将返回册记录；"reader"表示将返回读者记录
-        //      strItemFormat   规定strItemRecord参数所返回的数据格式
-        //      strItemRecord   返回册记录
-        //      strReaderFormat 规定strReaderRecord参数所返回的数据格式
-        //      strReaderRecord 返回读者记录
+        //      strStyle    操作风格。
+        //                  "item"表示将返回册记录；"reader"表示将返回读者记录
+        //                  "auto_renew"  表示如果当前处在已经借出状态，并且发起借书的又是同一人，自动当作续借请求进行操作
+        //      strItemFormatList   规定strItemRecord参数所返回的数据格式
+        //      item_records   返回册记录
+        //      strReaderFormatList 规定strReaderRecord参数所返回的数据格式
+        //      reader_records 返回读者记录
         //      aDupPath    如果发生条码号重复，这里返回了相关册记录的路径
         // 权限：无论工作人员还是读者，首先应具备borrow或renew权限。
         //      对于读者，还需要他进行的借阅(续借)操作是针对自己的，即strReaderBarcode必须和账户信息中的证条码号一致。
@@ -5242,14 +5611,15 @@ namespace dp2Library
         //      lCount  总共返回几个。0和-1都表示全部返回(0是为了兼容旧API)
         //      strStyle    "onlygetpath"   仅返回每个路径(OldRecPath)
         //                  "getfirstxml"   是对onlygetpath的补充，仅获得第一个元素的XML记录，其余的依然只返回路径
+        //                  "query:父记录+期号|..." 使用特定的检索途径和检索词。...部分表示检索词，例如 1|2005|1|，默认前方一致
         //      issueinfos 返回的期信息数组
         // 权限：需要有getissueinfo权限(兼容getissues权限)
         public LibraryServerResult GetIssues(
             string strBiblioRecPath,
-                   long lStart,
-                   long lCount,
-                   string strStyle,
-                   string strLang,
+            long lStart,
+            long lCount,
+            string strStyle,
+            string strLang,
             out EntityInfo[] issueinfos)
         {
             issueinfos = null;
@@ -5261,9 +5631,7 @@ namespace dp2Library
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("getissues", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("getissueinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getissues,getissueinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获得期信息 操作被拒绝。不具备order、getissueinfo或getissues权限。";
@@ -5321,8 +5689,7 @@ namespace dp2Library
                 }
 
                 // 权限字符串
-                if (StringUtil.IsInList("setissues", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("setissueinfo", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("setissues,setissueinfo", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "保存期信息 操作被拒绝。不具备setissueinfo或setissues权限。";
@@ -5348,9 +5715,11 @@ namespace dp2Library
             }
         }
 
+        // TODO: 改造，实体库，如果必要可以检索登录号字段
         // 获得一条册、期、订购、评注记录
         // parameters:
         //      strRefID    当 strDbType 为 item 时，strRefID 中是册条码号。其他情况，是 refid 字符串
+        //      item_dom    [out] 返回记录的 XmlDocument 形态。注意有时候可能为 null (当 strXml 为空时)
         // return:
         //      -1  出错
         //      0   没有找到
@@ -5409,7 +5778,7 @@ namespace dp2Library
                 }
                 catch (Exception ex)
                 {
-                    strError = "评注记录XML装载到DOM出错:" + ex.Message;
+                    strError = "评注记录 XML 装载到 DOM 时出错:" + ex.Message;
                     goto ERROR1;
                 }
 
@@ -5615,6 +5984,8 @@ namespace dp2Library
 
                 if (itemDatabase == null)
                 {
+                    // *** 针对册条码号或者 @xxx: 途径进行检索
+
                     // 获得册记录
                     // 本函数可获得超过1条以上的路径
                     // return:
@@ -5623,9 +5994,9 @@ namespace dp2Library
                     //      1   命中1条
                     //      >1  命中多于1条
                     nRet = app.GetItemRecXml(
-                        // sessioninfo.Channels,
+                            // sessioninfo.Channels,
                             channel,
-                        // strDbType == "item" ? strRefID : "@refid:" + strRefID,
+                            // strDbType == "item" ? strRefID : "@refid:" + strRefID,
                             strRefID,
                             "withresmetadata",
                             out strXml,
@@ -5633,21 +6004,62 @@ namespace dp2Library
                             out PathList,
                             out issue_timestamp,
                             out strError);
+                    // 2018/10/15
+                    // 如果需要，从登录号等辅助途径进行检索
+                    if (nRet == 0 && strRefID.StartsWith("@") == false)
+                    {
+                        foreach (string strFrom in app.ItemAdditionalFroms)
+                        {
+                            // return:
+                            //      -1  error
+                            //      0   not found
+                            //      1   命中1条
+                            //      >1  命中多于1条
+                            nRet = app.GetOneItemRec(
+                                channel,
+                                "item",
+                                strRefID,
+                                strFrom,
+                                "xml,timestamp,withresmetadata",
+                                out strXml,
+                                100,
+                                out PathList,
+                                out issue_timestamp,
+                                out strError);
+                            if (nRet == -1)
+                            {
+                                // text-level: 内部错误
+                                strError = "用" + strFrom + " '" + strRefID + "' 从途径 '" + strFrom + "' 读入册记录时发生错误: " + strError;
+                                break;
+                            }
+                            if (nRet == 0)
+                                continue;
+                            if (nRet > 1)
+                            {
+                                //result.Value = -1;
+                                //result.ErrorInfo = "用" + strFrom + " '" + strItemBarcode + "' 检索册记录命中 " + nRet.ToString() + " 条，因此无法用" + strFrom + "来进行借还操作。请改用册条码号来进行借还操作。";
+                                //result.ErrorCode = ErrorCode.ItemBarcodeDup;
+                                break;
+                            }
+
+                            // strItemFrom = strFrom;
+                            break;
+                        }
+                    }
                 }
                 else
                 {
-                    List<string> locateParam = null;
 
                     nRet = itemDatabase.BuildLocateParam(
                         // strBiblioRecPath,
                         strRefID,
-                        out locateParam,
+                        out List<string> locateParam,
                         out strError);
                     if (nRet == -1)
                         goto ERROR1;
 
                     nRet = itemDatabase.GetItemRecXml(
-                        // sessioninfo.Channels,
+                            // sessioninfo.Channels,
                             channel,
                             locateParam,
                             "withresmetadata",
@@ -5676,11 +6088,11 @@ namespace dp2Library
                 result.Value = nRet;    // 可能会多于1条
             }
 
-        GET_DOM_AND_BIBLIORECPATH:
+            GET_DOM_AND_BIBLIORECPATH:
 
             if (string.IsNullOrEmpty(strXml) == false)   // 是否有节省运算的办法?
             {
-                Debug.Assert(item_dom == null, "");
+                Debug.Assert(item_dom == null, "item_dom == null 未满足");
 
                 // 从期记录<parent>元素中取得书目记录的id，然后拼装成书目记录路径放入strOutputBiblioRecPath
                 item_dom = new XmlDocument();
@@ -5733,7 +6145,7 @@ namespace dp2Library
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5775,8 +6187,7 @@ namespace dp2Library
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("getissueinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getissueinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获取期信息被拒绝。不具备order或getissueinfo权限。";
@@ -6218,7 +6629,7 @@ namespace dp2Library
                         strBiblio = "";
                 }
 
-            DOISSUE:
+                DOISSUE:
                 // 取得期信息
                 if (String.IsNullOrEmpty(strResultType) == true
                     || String.Compare(strResultType, "recpath", true) == 0)
@@ -6273,7 +6684,7 @@ namespace dp2Library
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -6313,8 +6724,7 @@ namespace dp2Library
             {
 
                 // 权限字符串
-                if (StringUtil.IsInList("searchissue", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("searchissue,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "对期记录的参考ID查重被拒绝。不具备order或searchissue权限。";
@@ -6357,7 +6767,7 @@ namespace dp2Library
                     channel.Idle -= new IdleEventHandler(channel_IdleEvent);
                     EndSearch();
                 }
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -6552,7 +6962,7 @@ namespace dp2Library
 
                 return result;
 
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -6686,9 +7096,7 @@ namespace dp2Library
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("getorders", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("getorderinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getorders,getorderinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获得订购信息 操作被拒绝。不具备order、getorderinfo或getorders权限。";
@@ -6746,9 +7154,7 @@ namespace dp2Library
                 }
 
                 // 权限字符串
-                if (StringUtil.IsInList("setorders", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("setorderinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("setorders,setorderinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "保存订购信息 操作被拒绝。不具备order、setorderinfo或setorders权限。";
@@ -6812,8 +7218,7 @@ namespace dp2Library
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("getorderinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getorderinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获取订购信息被拒绝。不具备order或getorderinfo权限。";
@@ -7232,7 +7637,7 @@ namespace dp2Library
                         strBiblio = "";
                 }
 
-            DOORDER:
+                DOORDER:
                 // 取得订购信息
                 if (String.IsNullOrEmpty(strResultType) == true
                     || String.Compare(strResultType, "recpath", true) == 0)
@@ -7287,7 +7692,7 @@ namespace dp2Library
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -7368,7 +7773,7 @@ namespace dp2Library
                     channel.Idle -= new IdleEventHandler(channel_IdleEvent);
                     EndSearch();
                 }
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -7417,8 +7822,7 @@ namespace dp2Library
                 // 权限判断
 
                 // 权限字符串
-                if (StringUtil.IsInList("searchorder", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("searchorder,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "检索订购信息被拒绝。不具备order、searchorder权限。";
@@ -7630,7 +8034,7 @@ namespace dp2Library
 
                 return result;
 
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -7751,7 +8155,7 @@ namespace dp2Library
             string strStyle = (string)parameters["style"];
             bool bReturnMessage = StringUtil.IsInList("returnMessage", strStyle);
 
-            LibraryServerResult result = this.PrepareEnvironment("ResetPassword", bReturnMessage, bReturnMessage);
+            LibraryServerResult result = this.PrepareEnvironment("ResetPassword", bReturnMessage, bReturnMessage, true);
             if (result.Value == -1)
                 return result;
 
@@ -7927,6 +8331,10 @@ namespace dp2Library
         // 成批获得日志记录
         // parameters:
         //      nCount  本次希望获取的记录数。如果==-1，表示希望尽可能多地获取
+        //      strStyle    level-0/level-1/level-2 表示详略级别
+        //                  level-0   全部
+        //                  level-1   删除 读者记录和册记录
+        //                  level-2   删除 读者记录和册记录中的 <borrowHistory>
         // return:
         //      result.Value
         //      -1  error
@@ -7961,12 +8369,12 @@ namespace dp2Library
                     return result;
                 }
 
-
                 // 权限字符串
-                if (sessioninfo.RightsOriginList.IsInList("getoperlog") == false)
+                if (sessioninfo.RightsOriginList.IsInList("getoperlog") == false
+                    && sessioninfo.RightsOriginList.IsInList("replication") == false)
                 {
                     result.Value = -1;
-                    result.ErrorInfo = "获得日志记录被拒绝。不具备getoperlog权限。";
+                    result.ErrorInfo = "获得日志记录被拒绝。不具备 getoperlog 权限。";
                     result.ErrorCode = ErrorCode.AccessDenied;
                     return result;
                 }
@@ -7998,7 +8406,15 @@ namespace dp2Library
                 else
                 {
                     // 从 strStyle 里移走 supervisor，避免前端通过本 API 看到日志记录中读者记录的 password 元素
-                    StringUtil.RemoveFromInList("supervisor", true, ref strStyle);
+                    // if (sessioninfo.RightsOriginList.IsInList("replication") == false)
+                    //    StringUtil.RemoveFromInList("supervisor", true, ref strStyle);
+                    if (StringUtil.IsInList("supervisor", strStyle) && sessioninfo.RightsOriginList.IsInList("replication") == false)
+                    {
+                        result.Value = -1;
+                        result.ErrorInfo = "以敏感信息方式获得日志记录被拒绝。不具备 replication 权限。";
+                        result.ErrorCode = ErrorCode.AccessDenied;
+                        return result;
+                    }
 
                     // return:
                     //      -1  error
@@ -8022,7 +8438,7 @@ namespace dp2Library
                 result.Value = nRet;
                 result.ErrorInfo = strError;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8043,9 +8459,18 @@ namespace dp2Library
         // 获得日志记录
         // parameters:
         //      strFileName 纯文件名,不含路径部分。但要包括".log"部分。
-        //      lIndex  记录序号。从0开始计数。lIndex为-1时调用本函数，表示希望获得整个文件尺寸值，将返回在lHintNext中。
+        //      lIndex  记录序号。从0开始计数。
+        //              lIndex 为 -1 调用本函数：
+        //              1) 若 strStyle 中不包含 "getcount" 时，表示希望获得整个文件尺寸值，将返回在 lHintNext 中；
+        //              2) 若 strStyle 中包含 "getcount"，表示希望获得整个文件中包含的日志记录数，将返回在 lHintNext 中。
         //      lHint   记录位置暗示性参数。这是一个只有服务器才能明白含义的值，对于前端来说是不透明的。
         //              目前的含义是记录起始位置。
+        //      strStyle    level-0/level-1/level-2 表示详略级别
+        //                  level-0   全部
+        //                  level-1   删除 读者记录和册记录
+        //                  level-2   删除 读者记录和册记录中的 <borrowHistory>
+        //                  getcount    表示希望获得指定日志文件中的记录总数。返回在 lHintNext 参数中
+        //                  如果包含 dont_return_xml 表示在 strXml 不返回内容
         // 权限：需要getoperlog权限
         // return:
         // result.Value
@@ -8090,7 +8515,8 @@ namespace dp2Library
                 }
 
                 // 权限字符串
-                if (sessioninfo.RightsOriginList.IsInList("getoperlog") == false)
+                if (sessioninfo.RightsOriginList.IsInList("getoperlog") == false
+                    && sessioninfo.RightsOriginList.IsInList("replication") == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获得日志记录被拒绝。不具备getoperlog权限。";
@@ -8124,7 +8550,14 @@ namespace dp2Library
                     }
 
                     // 从 strStyle 里移走 supervisor，避免前端通过本 API 看到日志记录中读者记录的 password 元素
-                    StringUtil.RemoveFromInList("supervisor", true, ref strStyle);
+                    // StringUtil.RemoveFromInList("supervisor", true, ref strStyle);
+                    if (StringUtil.IsInList("supervisor", strStyle) && sessioninfo.RightsOriginList.IsInList("replication") == false)
+                    {
+                        result.Value = -1;
+                        result.ErrorInfo = "以敏感信息方式获得日志记录被拒绝。不具备 replication 权限。";
+                        result.ErrorCode = ErrorCode.AccessDenied;
+                        return result;
+                    }
 
                     OperLogInfo[] records = null;
                     nRet = app.AccessLogDatabase.GetOperLogs(
@@ -8140,7 +8573,11 @@ namespace dp2Library
                     if (nRet == 1)
                     {
                         OperLogInfo info = records[0];
-                        strXml = info.Xml;
+                        // 2017/12/5
+                        if (StringUtil.IsInList("dont_return_xml", strStyle) == true)
+                            strXml = "";
+                        else
+                            strXml = info.Xml;
                         lAttachmentTotalLength = info.AttachmentLength;
                         lHintNext = info.HintNext;
                     }
@@ -8171,7 +8608,8 @@ namespace dp2Library
                 result.Value = nRet;
                 result.ErrorInfo = strError;
 
-                if (nRet == 1 && lAttachmentTotalLength > 0 && nAttachmentFragmentLength > 0)
+                if (nRet == 1 && lAttachmentTotalLength > 0
+                    && (nAttachmentFragmentLength > 0 || nAttachmentFragmentLength == -1))  // -1 是 2017/5/16 增加的
                 {
                     // 读出attachment片断
                     // attachment.Seek(0, SeekOrigin.Begin);    // 不必要了
@@ -8183,6 +8621,8 @@ namespace dp2Library
                     }
 
                     long lTemp = 0;
+                    // parameters:
+                    //      nAttachmentFragmentLength   要读出的附件内容字节数。如果为 -1，表示尽可能多读出内容
                     // return:
                     //      -1  error
                     //      0   file not found
@@ -8203,7 +8643,7 @@ namespace dp2Library
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8271,7 +8711,7 @@ namespace dp2Library
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8376,7 +8816,7 @@ namespace dp2Library
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8394,6 +8834,13 @@ namespace dp2Library
             }
         }
 
+        /*
+2016/11/6 9:16:39 dp2Library BatchTask() API出现异常: Type: System.NullReferenceException
+Message: 未将对象引用设置到对象的实例。
+Stack:
+   在 DigitalPlatform.LibraryServer.LibraryApplication.GetBatchTaskInfo(String strName, BatchTaskInfo param, BatchTaskInfo& info, String& strError)
+   在 dp2Library.LibraryService.BatchTask(String strName, String strAction, BatchTaskInfo info, BatchTaskInfo& resultInfo)
+         * */
         // 操作一个批处理任务
         public LibraryServerResult BatchTask(
             string strName,
@@ -8404,7 +8851,7 @@ namespace dp2Library
             string strError = "";
             resultInfo = null;
 
-            LibraryServerResult result = this.PrepareEnvironment("BatchTask", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("BatchTask", true, true, true);
             if (result.Value == -1)
                 return result;
 
@@ -8452,6 +8899,14 @@ namespace dp2Library
                         out resultInfo,
                         out strError);
                 }
+                else if (strAction == "abort")
+                {
+                    // 2017/8/27
+                    nRet = app.AbortBatchTask(strName,
+                        info,
+                        out resultInfo,
+                        out strError);
+                }
                 else if (strAction == "continue")
                 {
                     nRet = app.StartBatchTask("!continue",
@@ -8485,7 +8940,7 @@ namespace dp2Library
                 result.Value = nRet;
                 result.ErrorInfo = strError;    // 2014/11/26
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8493,7 +8948,12 @@ namespace dp2Library
             }
             catch (Exception ex)
             {
-                string strErrorText = "dp2Library BatchTask() API出现异常: " + ExceptionUtil.GetDebugText(ex);
+                string strErrorText = "dp2Library BatchTask() API出现异常: "
+                    + ExceptionUtil.GetDebugText(ex)
+                    + string.Format("\r\nstrName='{0}', strAction='{1}', info='{2}'",
+                    strName,
+                    strAction,
+                    info == null ? "(null)" : info.Dump().Replace("\r\n", ";"));
                 app.WriteErrorLog(strErrorText);
 
                 result.Value = -1;
@@ -8541,7 +9001,7 @@ namespace dp2Library
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8563,10 +9023,11 @@ namespace dp2Library
         // parameters:
         //      strAction   动作。create delete initialize backup getinfo
         // return:
-        //      result.Value    -1 错误
+        //      result.Value    -1 错误。如果数据库不存在，同时还要返回 ErrorCode 为 NotFound
         public LibraryServerResult ManageDatabase(string strAction,
             string strDatabaseName,
             string strDatabaseInfo,
+            string strStyle,
             out string strOutputInfo)
         {
             string strError = "";
@@ -8581,9 +9042,7 @@ namespace dp2Library
                 // getinfo 动作 权限单独判断 2013/1/27
                 if (strAction == "getinfo")
                 {
-                    if (StringUtil.IsInList("managedatabase", sessioninfo.RightsOrigin) == false
-                        && StringUtil.IsInList("getsystemparameter", sessioninfo.RightsOrigin) == false
-                        && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false) // 2013/10/13
+                    if (StringUtil.IsInList("managedatabase,getsystemparameter,order", sessioninfo.RightsOrigin) == false)
                     {
                         result.Value = -1;
                         result.ErrorInfo = "管理数据库的操作 '" + strAction + "' 被拒绝。不具备 getsystemparameter 或 order 或 managedatabase 权限。";
@@ -8612,21 +9071,35 @@ namespace dp2Library
                     }
                 }
 
-                int nRet = app.ManageDatabase(sessioninfo.Channels,
+                // return:
+                //      -1  出错
+                //      0   没有找到
+                //      1   成功
+                int nRet = app.ManageDatabase(
+                    sessioninfo,
+                    sessioninfo.Channels,
                     sessioninfo.LibraryCodeList,
                     strAction,
                     strDatabaseName,
                     strDatabaseInfo,
+                    strStyle,
                     out strOutputInfo,
                     out strError);
                 if (nRet == -1)
+                {
+                    result.ErrorCode = ErrorCode.SystemError;
                     goto ERROR1;
+                }
+                if (nRet == 0)
+                {
+                    result.ErrorCode = ErrorCode.NotFound;
+                    goto ERROR1;
+                }
 
-                result.Value = nRet;
+                result.Value = nRet;    // 原来这里返回 0
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
-                result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
                 return result;
             }
@@ -8695,7 +9168,7 @@ namespace dp2Library
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8741,6 +9214,20 @@ namespace dp2Library
                     return result;
                 }
 
+                if (strAction == "closechannel")
+                {
+                    if (StringUtil.IsInList("changeuser", sessioninfo.RightsOrigin) == false)
+                    {
+                        result.Value = -1;
+                        result.ErrorInfo = "关闭用户账户相关通道的操作被拒绝。不具备changeuser权限。";
+                        result.ErrorCode = ErrorCode.AccessDenied;
+                        return result;
+                    }
+
+                    result.Value = app.SessionTable.CloseSessionByUserID(info.UserName);
+                    return result;
+                }
+
                 // 权限字符串
                 if (strAction == "new")
                 {
@@ -8762,7 +9249,7 @@ namespace dp2Library
                         return result;
                     }
                 }
-                if (strAction == "change")
+                if (strAction == "change" || strAction == "changeandclose")
                 {
                     if (StringUtil.IsInList("changeuser", sessioninfo.RightsOrigin) == false)
                     {
@@ -8797,6 +9284,10 @@ namespace dp2Library
                     }
                 }
 
+                bool bClose = strAction == "changeandclose";
+                if (strAction == "changeandclose")
+                    strAction = "change";
+
                 int nRet = app.SetUser(
                     sessioninfo.LibraryCodeList,
                     strAction,
@@ -8812,9 +9303,12 @@ namespace dp2Library
                 if (app.Changed == true)
                     app.ActivateManagerThread();
 
+                if (bClose)
+                    app.SessionTable.CloseSessionByUserID(info.UserName);
+
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8882,7 +9376,7 @@ namespace dp2Library
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -8948,7 +9442,7 @@ namespace dp2Library
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -9037,7 +9531,6 @@ namespace dp2Library
                     return result;
                 }
 
-
                 // 权限判断
 
                 // 只能自己修改自己的密码
@@ -9073,7 +9566,7 @@ namespace dp2Library
 
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -9098,9 +9591,13 @@ namespace dp2Library
         //      result.Value 0: 不是合法的条码号 1:合法的读者证条码号 2:合法的册条码号
         // 权限：暂时不需要任何权限
         public LibraryServerResult VerifyBarcode(
+            string strAction,
             string strLibraryCode,
-            string strBarcode)
+            string strBarcode,
+            out string strOutputBarcode)
         {
+            strOutputBarcode = "";
+
             // LibraryServerResult result = this.PrepareEnvironment(false);
             LibraryServerResult result = this.PrepareEnvironment("VerifyBarcode", true, true);
             if (result.Value == -1)
@@ -9120,6 +9617,7 @@ namespace dp2Library
                     return result;
                 }
 
+#if NO
                 if (app.m_assemblyLibraryHost == null)
                 {
                     result.Value = -1;
@@ -9127,16 +9625,57 @@ namespace dp2Library
                     result.ErrorCode = ErrorCode.NotFound;
                     return result;
                 }
+#endif
+                // 当前是否定义了脚本?
                 // return:
-                //      -2  not found script
-                //      -1  出错
-                //      0   成功
-                int nRet = app.DoVerifyBarcodeScriptFunction(
-                    null,
-                    strLibraryCode, // sessioninfo.LibraryCodeList,
-                    strBarcode,
-                    out nResultValue,
-                    out strError);
+                //      -1  定义了，但编译有错
+                //      0   没有定义
+                //      1   定义了
+                int nRet = app.HasScript(out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+                if (nRet == 0)
+                {
+                    result.Value = -1;
+                    result.ErrorInfo = "没有配置<script>，无法校验条码号";
+                    result.ErrorCode = ErrorCode.NotFound;
+                    return result;
+                }
+
+                if (string.IsNullOrEmpty(strAction)
+                    || strAction == "verify" || strAction == "VerifyBarcode")
+                {
+                    // return:
+                    //      -2  not found script
+                    //      -1  出错
+                    //      0   成功
+                    nRet = app.DoVerifyBarcodeScriptFunction(
+                        null,
+                        strLibraryCode, // sessioninfo.LibraryCodeList,
+                        strBarcode,
+                        out nResultValue,
+                        out strError);
+                }
+                else if (strAction == "transform" || strAction == "TransformBarcode")
+                {
+                    // return:
+                    //      -2  not found script
+                    //      -1  出错
+                    //      0   成功
+                    nRet = app.DoTransformBarcodeScriptFunction(
+                        null,
+                        strLibraryCode, // sessioninfo.LibraryCodeList,
+                        ref strBarcode,
+                        out nResultValue,
+                        out strError);
+                    strOutputBarcode = strBarcode;
+                }
+                else
+                {
+                    strError = "无法识别的 strAction 参数值 '" + strAction + "'";
+                    goto ERROR1;
+                }
+
                 if (nRet == -1)
                     goto ERROR1;
                 if (nRet == -2)
@@ -9147,19 +9686,10 @@ namespace dp2Library
                     return result;
                 }
 
-                /*
-                // 脚本内可以使用出错字符串
-                if (nResultValue == -1)
-                {
-                    goto ERROR1;
-                }*/
-                // 2009/2/23 
                 result.ErrorInfo = strError;
-
                 result.Value = nResultValue;
-
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -9175,40 +9705,6 @@ namespace dp2Library
                 result.ErrorInfo = strErrorText;
                 return result;
             }
-        }
-
-        // TODO: 可以尝试用通用版本的 GetFileNames() 加上回调函数定制出本函数
-        // 获得一个子目录内的所有文件名和所有下级子目录内的文件名
-        // parameters:
-        //      bLastWriteTime  是否在文件名后面附加此文件的最后修改时间
-        static List<string> GetFilenames(string strDir,
-            bool bLastWriteTime = false,
-            bool bExcludeBackupFile = true)
-        {
-            List<string> results = new List<string>();
-
-            DirectoryInfo di = new DirectoryInfo(strDir);
-            FileSystemInfo[] subs = di.GetFileSystemInfos();
-
-            for (int i = 0; i < subs.Length; i++)
-            {
-                FileSystemInfo sub = subs[i];
-                if ((sub.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
-                {
-                    results.AddRange(GetFilenames(sub.FullName, bLastWriteTime, bExcludeBackupFile));
-                    continue;
-                }
-
-                if (bExcludeBackupFile == true && FileUtil.IsBackupFile(sub.FullName) == true)
-                    continue;
-
-                if (bLastWriteTime == true)
-                    results.Add(sub.FullName + "|" + DateTimeUtil.Rfc1123DateTimeStringEx(sub.LastWriteTime));
-                else
-                    results.Add(sub.FullName);
-            }
-
-            return results;
         }
 
         // 列出文件目录，转移当前目录，删除文件和目录
@@ -9280,18 +9776,45 @@ namespace dp2Library
 
                 if (string.IsNullOrEmpty(strCategory) == false && strCategory[0] == '!')
                 {
+                    // TODO: 根据不同的权限限定不同的 root 起点
                     string strRoot = Path.Combine(app.DataDir, "upload");
+                    if (StringUtil.IsInList("managedatabase", sessioninfo.RightsOrigin) == true)
+                    {
+                        strRoot = app.DataDir.Replace("/", "\\");  // 权力很大，能看到数据目录下的全部文件和目录了
+                        if (strRoot.EndsWith("\\") == false)
+                            strRoot += "\\";
+                    }
 
                     string strCurrentDirectory = Path.Combine(app.DataDir, strCategory.Substring(1));
 
                     if (strAction == "delete")
                     {
+                        List<string> root_paths = new List<string>();
+                        // 根据不同的权限限定不同的 root 起点
+                        if (StringUtil.IsInList("backup,managedatabase", sessioninfo.RightsOrigin))
+                        {
+                            root_paths.Add(EnsureRootPath(Path.Combine(app.DataDir, "backup")));
+                        }
+                        if (StringUtil.IsInList("upload,managedatabase", sessioninfo.RightsOrigin))
+                        {
+                            root_paths.Add(EnsureRootPath(Path.Combine(app.DataDir, "upload")));
+                        }
+#if NO
+                        if (StringUtil.IsInList("managedatabase", sessioninfo.RightsOrigin) == true)
+                        {
+                            string strTemp = app.DataDir.Replace("/", "\\");  // 权力很大，能看到数据目录下的全部文件和目录了
+                            if (strTemp.EndsWith("\\") == false)
+                                strTemp += "\\";
+                            root_paths.Add(strTemp);
+                        }
+#endif
+
                         // 删除文件或者目录
                         // return:
                         //      -1  出错
-                        //      其他  实际删除的文件和目录个数
-                        nRet = LibraryApplication.DeleteFile(
-                            strRoot,
+                        //      其他  实际删除的文件和目录个数。若 strError 中返回了值，也表示出错
+                        nRet = app.DeleteFile(
+                            root_paths,
                             strCurrentDirectory,
                             strFileName,
                             out strError);
@@ -9408,11 +9931,19 @@ namespace dp2Library
                 result.ErrorInfo = strErrorText;
                 return result;
             }
-        ERROR1:
+            ERROR1:
             result.ErrorInfo = strError;
             result.Value = -1;
             result.ErrorCode = ErrorCode.SystemError;
             return result;
+        }
+
+        static string EnsureRootPath(string strTemp)
+        {
+            strTemp = strTemp.Replace("/", "\\");
+            if (strTemp.EndsWith("\\") == false)
+                strTemp += "\\";
+            return strTemp;
         }
 
         // 获得系统配置文件
@@ -9420,6 +9951,7 @@ namespace dp2Library
         //      strCategory 文件分类。目前只能使用 cfgs
         //      lStart  需要获得文件内容的起点。如果为-1，表示(baContent中)不返回文件内容
         //      lLength 需要获得的从lStart开始算起的byte数。如果为-1，表示希望尽可能多地取得(但是不能保证一定到尾)
+        //      strStyle    风格。gzip 表示希望获得压缩后的结果。如果确实返回了压缩后的结果，LibraryServerResult 中 ErrorCode 会返回 Compressed
         // rights:
         //      需要 getsystemparameter 权限
         // return:
@@ -9429,6 +9961,7 @@ namespace dp2Library
             string strFileName,
             long lStart,
             long lLength,
+            string strStyle,    // 2017/10/7
             out byte[] baContent,
             out string strFileTime)
         {
@@ -9443,8 +9976,7 @@ namespace dp2Library
             try
             {
                 // 权限判断
-                if (StringUtil.IsInList("getsystemparameter", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getsystemparameter,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获得系统文件的操作被拒绝。不具备order或getsystemparameter权限。";
@@ -9494,6 +10026,15 @@ namespace dp2Library
                                 stream.Seek(lStart, SeekOrigin.Begin);
                                 stream.Read(baContent, 0, (int)lLength);
                                 result.Value = stream.Length;
+
+                                // 压缩内容
+                                // 2017/10/7
+                                if (StringUtil.IsInList("gzip", strStyle)
+                                    && baContent != null && baContent.Length > 0)
+                                {
+                                    baContent = ByteArray.CompressGzip(baContent);
+                                    result.ErrorCode = ErrorCode.Compressed;
+                                }
                             }
                         }
                         catch (FileNotFoundException)
@@ -9531,7 +10072,7 @@ namespace dp2Library
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -9547,16 +10088,6 @@ namespace dp2Library
                 result.ErrorInfo = strErrorText;
                 return result;
             }
-        }
-
-        static string MakeFileName(DirectoryInfo info)
-        {
-            return info.Name + "|" + info.LastWriteTime.ToString("u") + "|dir";
-        }
-
-        static string MakeFileName(FileInfo info)
-        {
-            return info.Name + "|" + info.LastWriteTime.ToString("u") + "|" + info.Length.ToString();
         }
 
         // 获得系统参数
@@ -9586,12 +10117,10 @@ namespace dp2Library
                 && string.IsNullOrEmpty(strName) == true)
                 return result;
 
-            app.LockForRead();
             try
             {
                 // 权限判断
-                if (StringUtil.IsInList("getsystemparameter", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getsystemparameter,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获得系统参数的操作被拒绝。不具备 order 或 getsystemparameter 权限。";
@@ -9601,1097 +10130,32 @@ namespace dp2Library
 
                 int nRet = 1;
 
-                if (strCategory == "listUploadFileNames")
+                nRet = app.GetSystemParameter(
+                    sessioninfo,
+                    strCategory,
+                    strName,
+                    out strValue,
+                    out strError);
+
+                if (nRet == -1)
                 {
-                    try
-                    {
-                        string strDirectory = Path.Combine(app.DataDir, "upload/" + strName);
-
-                        strDirectory = strDirectory.Replace("\\", "/");
-                        if (strDirectory[strDirectory.Length - 1] != '/')
-                            strDirectory += "/";
-
-                        // 文件名之间的分隔符为 ||，文件名中，和最后修改时间用 | 间隔
-                        List<string> filenames = new List<string>();
-                        DirectoryInfo di = new DirectoryInfo(strDirectory);
-
-                        // 列出所有目录名
-                        DirectoryInfo[] subs = di.GetDirectories();
-                        for (int i = 0; i < subs.Length; i++)
-                        {
-                            DirectoryInfo sub = subs[i];
-                            filenames.Add(MakeFileName(sub));
-                            // filenames.AddRange(GetFilenames(sub.FullName, true, true));
-                        }
-
-                        // 列出所有文件名
-                        FileInfo[] fis = di.GetFiles();
-                        foreach (FileInfo fi in fis)
-                        {
-                            filenames.Add(MakeFileName(fi));
-                        }
-
-                        StringBuilder text = new StringBuilder(4096);
-                        string strHead = strDirectory;
-                        foreach (string strFilename in filenames)
-                        {
-                            if (text.Length > 0)
-                                text.Append("||");
-
-                            text.Append(strFilename);
-
-                            // 只取出相对部分
-                            // text.Append(strFilename.Substring(strHead.Length));
-                        }
-
-                        strValue = text.ToString();
-                        goto END1;
-                    }
-                    catch (DirectoryNotFoundException ex)
-                    {
-                        strError = "目录 '" + strName + "' 不存在";
-                        goto ERROR1;
-                    }
-                }
-
-                if (strCategory == "cfgs")
-                {
-                    // 2015/4/30
-                    if (strName == "getDataDir")
-                    {
-                        strValue = app.DataDir;
-                        goto END1;
-                    }
-                    if (strName == "listFileNames")
-                    {
-                        List<string> filenames = new List<string>();
-                        DirectoryInfo di = new DirectoryInfo(app.DataDir + "/cfgs");
-                        DirectoryInfo[] subs = di.GetDirectories();
-                        for (int i = 0; i < subs.Length; i++)
-                        {
-                            DirectoryInfo sub = subs[i];
-                            filenames.AddRange(GetFilenames(sub.FullName, false, true));
-                        }
-
-                        string strHead = app.DataDir + "/cfgs/";
-                        foreach (string strFilename in filenames)
-                        {
-                            if (string.IsNullOrEmpty(strValue) == false)
-                                strValue += ",";
-                            // 只取出相对部分
-                            strValue += strFilename.Substring(strHead.Length);
-                        }
-
-                        goto END1;
-                    }
-                    if (strName == "listFileNamesEx")
-                    {
-                        // 文件名之间的分隔符为 ||，文件名中，和最后修改时间用 | 间隔
-                        List<string> filenames = new List<string>();
-                        DirectoryInfo di = new DirectoryInfo(Path.Combine(app.DataDir, "cfgs"));
-                        DirectoryInfo[] subs = di.GetDirectories();
-                        for (int i = 0; i < subs.Length; i++)
-                        {
-                            DirectoryInfo sub = subs[i];
-                            filenames.AddRange(GetFilenames(sub.FullName, true, true));
-                        }
-
-                        StringBuilder text = new StringBuilder(4096);
-                        string strHead = Path.Combine(app.DataDir, "cfgs/");
-                        foreach (string strFilename in filenames)
-                        {
-                            if (text.Length > 0)
-                                text.Append("||");
-                            // 只取出相对部分
-                            text.Append(strFilename.Substring(strHead.Length));
-                        }
-
-                        strValue = text.ToString();
-                        goto END1;
-                    }
-#if NO
-                    // 取得文件内容
-                    if (StringUtil.HasHead(strName, "getfile:") == true)
-                    {
-                        string strFileName = strName.Substring("getfile:".Length);
-
-                        string strFilePath = app.DataDir + "/cfgs/" + strFileName;
-
-                        Encoding encoding = null;
-                        // return:
-                        //      -1  出错
-                        //      0   文件不存在
-                        //      1   文件存在
-                        //      2   读入的内容不是全部
-                        nRet = FileUtil.ReadTextFileContent(strFilePath,
-                            1024 * 1024,    // 1M
-                            out strValue,
-                            out encoding,
-                            out strError);
-                        if (nRet == -1)
-                            goto ERROR1;
-                        if (nRet == 0)
-                        {
-                            strError = "文件 '" + strFileName + "' 不存在";
-                            goto ERROR1;
-                        }
-                        if (nRet == 2)
-                        {
-                            strError = "文件 '" + strFileName + "' 尺寸太大";
-                            goto ERROR1;
-                        }
-
-                        nRet = 1;
-                    }
-#endif
-                }
-
-                // 获得内核配置文件的时间戳?
-                if (strCategory == "cfgs/get_res_timestamps")
-                {
-                    string[] filenames = strName.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries); // RemoveEmptyEntries 2013/12/12
-                    // TODO: 
-                    RmsChannel channel = sessioninfo.Channels.GetChannel(app.WsUrl);
-                    if (channel == null)
-                    {
-                        strError = "get channel error";
-                        goto ERROR1;
-                    }
-                    StringBuilder text = new StringBuilder(4096);
-                    foreach (string filename in filenames)
-                    {
-                        string strXml = "";
-                        string strMetaData = "";
-                        byte[] timestamp = null;
-                        string strOutputPath = "";
-                        long lRet = channel.GetRes(filename,
-        "timestamp",
-        out strXml,
-        out strMetaData,
-        out timestamp,
-        out strOutputPath,
-        out strError);
-                        if (lRet == -1)
-                        {
-                            if (channel.ErrorCode == ChannelErrorCode.NotFound)
-                                continue;
-                            goto ERROR1;
-                        }
-                        if (text.Length > 0)
-                            text.Append(",");
-                        text.Append(filename + "|" + ByteArray.GetHexTimeStampString(timestamp));
-                    }
-                    strValue = text.ToString();
-                    goto END1;
-                }
-
-                if (strCategory == "center")
-                {
-                    if (strName == "def")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("center");
-                        if (root == null)
-                        {
-                            strValue = "";
-                            nRet = 0;
-                        }
-                        else
-                        {
-                            // 将密码变成明文
-                            strValue = root.OuterXml;
-                            if (string.IsNullOrEmpty(strValue) == false)
-                            {
-                                XmlDocument temp = new XmlDocument();
-                                temp.LoadXml(strValue);
-                                XmlNodeList nodes = temp.DocumentElement.SelectNodes("//server");
-                                foreach (XmlNode node in nodes)
-                                {
-                                    string strPassword = DomUtil.GetAttr(node, "password");
-                                    strPassword = LibraryApplication.DecryptPassword(strPassword);
-                                    DomUtil.SetAttr(node, "password", strPassword);
-                                }
-                                strValue = temp.DocumentElement.OuterXml;
-                            }
-                        }
-
-                        goto END1;
-                    }
-
-                    strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                    goto NOTFOUND;
-                }
-
-                if (strCategory == "system")
-                {
-                    // 2016/6/25
-                    // MSMQ 队列名
-                    if (strName == "outgoingQueue")
-                    {
-                        strValue = app.OutgoingQueue;
-                        goto END1;
-                    }
-
-                    // 2016/4/6
-                    // 获得系统的临时文件目录
-                    if (strName == "systemTempDir")
-                    {
-                        string strTempFileName = Path.GetTempFileName();
-                        File.Delete(strTempFileName);
-                        strValue = Path.GetDirectoryName(strTempFileName);
-                        goto END1;
-                    }
-
-                    if (strName == "libraryCodes")
-                    {
-                        List<string> librarycodes = new List<string>();
-                        XmlNodeList nodes = app.LibraryCfgDom.DocumentElement.SelectNodes("readerdbgroup/database");
-                        foreach (XmlNode node in nodes)
-                        {
-                            string strLibraryCode = DomUtil.GetAttr(node, "libraryCode");
-                            if (string.IsNullOrEmpty(strLibraryCode) == true)
-                                continue;
-                            librarycodes.Add(strLibraryCode);
-                        }
-
-                        nodes = app.LibraryCfgDom.DocumentElement.SelectNodes("rightsTable/library");
-                        foreach (XmlNode node in nodes)
-                        {
-                            string strLibraryCode = DomUtil.GetAttr(node, "code");
-                            if (string.IsNullOrEmpty(strLibraryCode) == true)
-                                continue;
-                            librarycodes.Add(strLibraryCode);
-                        }
-
-                        StringUtil.RemoveDupNoSort(ref librarycodes);
-                        strValue = StringUtil.MakePathList(librarycodes);
-                        goto END1;
-                    }
-
-                    if (strName == "arrived")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("arrived");
-                        if (root == null)
-                        {
-                            strValue = "";
-                            nRet = 0;
-                        }
-                        else
-                            strValue = root.OuterXml;
-
-                        goto END1;
-                    }
-
-                    // 2009/10/23 
-                    // 获得<itemdbgroup>元素下级XML
-                    if (strName == "biblioDbGroup")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("itemdbgroup");
-                        if (root == null)
-                        {
-                            strValue = "";
-                            nRet = 0;
-                            // 注: 返回值为0，字符串为空，错误码不是NotFound，表示想关节点找到了，但值为空
-                        }
-                        else
-                        {
-                            XmlDocument dom = new XmlDocument();
-                            try
-                            {
-                                dom.LoadXml(root.OuterXml);
-                            }
-                            catch (Exception ex)
-                            {
-                                strError = "<itemdbgroup>元素XML片段装入DOM时出错: " + ex.Message;
-                                goto ERROR1;
-                            }
-
-                            strError = EnsureKdbs(false);
-                            if (strError != null)
-                                goto ERROR1;
-
-                            // 将name属性名修改为itemDbName属性
-                            // TODO: 将来library.xml格式修改后，这部分可以免去了
-                            XmlNodeList nodes = dom.DocumentElement.SelectNodes("database");
-                            for (int i = 0; i < nodes.Count; i++)
-                            {
-                                XmlNode node = nodes[i];
-                                string strItemDbName = DomUtil.GetAttr(node, "name");
-                                DomUtil.SetAttr(node, "name", null);
-                                DomUtil.SetAttr(node, "itemDbName", strItemDbName);
-
-                                // 2012/7/2
-                                // 加入各个数据库的多语种名字
-
-                                // 实体库
-                                AppendCaptions(node, "itemDbName");
-
-                                // 订购库
-                                AppendCaptions(node, "orderDbName");
-
-                                // 期库
-                                AppendCaptions(node, "issueDbName");
-
-                                // 评注库
-                                AppendCaptions(node, "commentDbName");
-
-                                // 书目库
-                                AppendCaptions(node, "biblioDbName");
-                            }
-
-                            strValue = dom.DocumentElement.InnerXml;
-                        }
-
-                        goto END1;
-                    }
-
-                    // 2012/9/12
-                    // 获得<readerdbgroup>元素下级XML
-                    if (strName == "readerDbGroup")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("readerdbgroup");
-                        if (root == null)
-                        {
-                            strValue = "";
-                            nRet = 0;
-                            // 注: 返回值为0，字符串为空，错误码不是NotFound，表示相关节点找到了，但值为空
-                            goto END1;
-                        }
-
-                        if (sessioninfo.GlobalUser == true)
-                            strValue = root.InnerXml;
-                        else
-                        {
-                            // 过滤掉当前用户不能管辖的读者库名
-                            XmlDocument dom = new XmlDocument();
-                            try
-                            {
-                                dom.LoadXml(root.OuterXml);
-                            }
-                            catch (Exception ex)
-                            {
-                                strError = "<readerdbgroup>元素XML片段装入DOM时出错: " + ex.Message;
-                                goto ERROR1;
-                            }
-
-                            XmlNodeList nodes = dom.DocumentElement.SelectNodes("database");
-                            for (int i = 0; i < nodes.Count; i++)
-                            {
-                                XmlNode node = nodes[i];
-                                string strLibraryCode = DomUtil.GetAttr(node, "libraryCode");
-
-                                if (StringUtil.IsInList(strLibraryCode, sessioninfo.LibraryCodeList) == false)
-                                {
-                                    node.ParentNode.RemoveChild(node);
-                                }
-                            }
-
-                            strValue = dom.DocumentElement.InnerXml;
-                        }
-
-                        goto END1;
-                    }
-
-                    strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                    goto NOTFOUND;
-                }
-
-                // OPAC检索
-                if (strCategory == "opac")
-                {
-                    // TODO: 和def重复了，需要合并
-                    // 获得<virtualDatabases>元素下级XML
-                    if (strName == "databases")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("virtualDatabases");
-                        if (root == null)
-                        {
-                            strValue = "";
-                            nRet = 0;
-                        }
-                        else
-                            strValue = root.InnerXml;
-
-                        goto END1;
-                    }
-
-                    // 获得<browseformats>元素下级XML
-                    if (strName == "browseformats")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("browseformats");
-                        if (root == null)
-                        {
-                            strValue = "";
-                            nRet = 0;
-                        }
-                        else
-                            strValue = root.InnerXml;
-
-                        goto END1;
-                    }
-
-                    // 2011/2/15
-                    if (strName == "serverDirectory")
-                    {
-                        /*
-                        XmlNode node = app.LibraryCfgDom.SelectSingleNode("//opacServer");
-                        if (node == null)
-                        {
-                            strValue = "";
-                            nRet = 0;
-                        }
-                        else
-                            strValue = DomUtil.GetAttr(node, "url");
-                        */
-                        strValue = app.OpacServerUrl;
-                        goto END1;
-                    }
-
-                    strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                    goto NOTFOUND;
-                }
-
-                if (strCategory == "circulation")
-                {
-                    // 2016/1/1
-                    if (strName == "chargingOperDatabase")
-                    {
-                        if (app.ChargingOperDatabase.Enabled == true)
-                            strValue = "enabled";
-                        else
-                            strValue = "";
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // <clientFineInterface>元素内容
-                    // strValue中是OuterXml定义。
-                    if (strName == "clientFineInterface")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("clientFineInterface");
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.OuterXml;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // <valueTables>元素内容
-                    // strValue中是下级片断定义，没有<valueTables>元素作为根。
-                    if (strName == "valueTables")
-                    {
-                        // 按照馆代码列表，返回<valueTables>内的适当片断
-                        nRet = app.GetValueTablesXml(
-                                sessioninfo.LibraryCodeList,
-                                out strValue,
-                                out strError);
-                        if (nRet == -1)
-                            goto ERROR1;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // <rightsTable>元素内容
-                    // strValue中是下级片断定义，没有<rightsTable>元素作为根。
-                    if (strName == "rightsTable")
-                    {
-#if NO
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("rightsTable");   // 0.02前为rightstable
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-#endif
-                        // 按照馆代码列表，返回<rightsTable>内的适当片断
-                        nRet = app.GetRightsTableXml(
-                                sessioninfo.LibraryCodeList,
-                                out strValue,
-                                out strError);
-                        if (nRet == -1)
-                            goto ERROR1;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // (当前<rightsTable>)权限表的HTML形态
-                    if (strName == "rightsTableHtml")
-                    {
-                        nRet = app.GetRightTableHtml(
-                            "",
-                            sessioninfo.LibraryCodeList,
-                            out strValue,
-                            out strError);
-                        if (nRet == -1)
-                            goto ERROR1;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    /*
-                    // 2008/10/10 
-                    // <readertypes>元素内容
-                    // strValue中是下级片断定义，没有<readertypes>元素作为根。
-                    if (strName == "readerTypes")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("rightsTable/readerTypes");   // 0.02前为readertypes
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // 2008/10/10 
-                    // <booktypes>元素内容
-                    // strValue中是下级片断定义，没有<booktypes>元素作为根。
-                    if (strName == "bookTypes")
-                    {
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("rightsTable/bookTypes"); // 0.02前为booktypes
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-                    }*/
-
-                    // 2008/10/10 
-                    // <locationtypes>元素内容
-                    // strValue中是下级片断定义，没有<locationTypes>元素作为根。
-                    if (strName == "locationTypes")
-                    {
-#if NO
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("locationTypes"); // 0.02前为locationtypes
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-#endif
-                        // 按照馆代码列表，返回<locationTypes>内的适当片断
-                        nRet = app.GetLocationTypesXml(
-                                sessioninfo.LibraryCodeList,
-                                out strValue,
-                                out strError);
-                        if (nRet == -1)
-                            goto ERROR1;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // 2008/10/12 
-                    // <zhongcihao>元素内容
-                    // strValue中是下级片断定义，没有<zhongcihao>元素作为根。
-                    if (strName == "zhongcihao")
-                    {
-                        // 分馆用户也能看到全部<zhongcihao>定义
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("zhongcihao");
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // 2009/2/18 
-                    // <callNumber>元素内容
-                    // strValue中是下级片断定义，没有<callNumber>元素作为根。
-                    if (strName == "callNumber")
-                    {
-                        // 分馆用户可以看到全部定义
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("callNumber");
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // 2009/3/9 
-                    // <dup>元素内容
-                    // strValue中是下级片断定义，没有<dup>元素作为根。
-                    if (strName == "dup")
-                    {
-                        // 分馆用户也能看到全部<dup>定义
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("dup");
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    // 2008/10/13 
-                    // <script>元素内容
-                    // strValue中是下级片断定义，没有<script>元素作为根。
-                    if (strName == "script")
-                    {
-                        // 分馆用户也能看到全部<script>定义
-                        XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode("script");
-                        if (root == null)
-                        {
-                            nRet = 0;
-                            goto END1;
-                        }
-
-                        strValue = root.InnerXml;
-                        nRet = 1;
-                        goto END1;
-                    }
-
-                    strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                    goto NOTFOUND;
-                    /*
-                    strError = "(strCategory为 '" + strCategory + "' 时)未知的strName值 '" + strName + "' ";
-                    goto ERROR1;
-                     * */
-                }
-
-                // 根据前端在strName参数中提供的rightstable xml字符串，立即创建rightsTableHtml字符串
-                if (strCategory == "instance_rightstable_html")
-                {
-                    nRet = app.GetRightTableHtml(
-                        strName,
-                        sessioninfo.LibraryCodeList,
-                        out strValue,
-                        out strError);
-                    if (nRet == -1)
-                        goto ERROR1;
-                    nRet = 1;
-                    goto END1;
-                }
-
-                // 获得内核数据库原始定义
-                if (strCategory == "database_def")
-                {
-                    // strName参数不能为空。本功能只能得到一个数据库的定义，如果要得到全部数据库的定义，请使用ManageDatabase API的getinfo子功能
-                    nRet = app.vdbs.GetDatabaseDef(
-                        strName,
-                        out strValue,
-                        out strError);
-                    if (nRet == -1)
-                        goto ERROR1;
-                    goto END1;
-                }
-
-                // 实用库
-                if (strCategory == "utilDb")
-                {
-                    switch (strName)
-                    {
-                        case "dbnames":
-                            {
-                                XmlNodeList nodes = app.LibraryCfgDom.DocumentElement.SelectNodes("//utilDb/database");
-                                for (int i = 0; i < nodes.Count; i++)
-                                {
-                                    string strDbName = DomUtil.GetAttr(nodes[i], "name");
-                                    if (i != 0)
-                                        strValue += ",";
-                                    strValue += strDbName;
-                                }
-                            }
-                            break;
-                        case "types":
-                            {
-                                XmlNodeList nodes = app.LibraryCfgDom.DocumentElement.SelectNodes("//utilDb/database");
-                                for (int i = 0; i < nodes.Count; i++)
-                                {
-                                    string strType = DomUtil.GetAttr(nodes[i], "type");
-                                    if (i != 0)
-                                        strValue += ",";
-                                    strValue += strType;
-                                }
-                            }
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-                if (strCategory == "amerce")
-                {
-                    switch (strName)
-                    {
-                        case "dbname":
-                            strValue = app.AmerceDbName;
-                            break;
-                        case "overduestyle":
-                            strValue = app.OverdueStyle;
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-                // 2015/6/13
-                if (strCategory == "arrived")
-                {
-                    switch (strName)
-                    {
-                        case "dbname":
-                            strValue = app.ArrivedDbName;
-                            break;
-                        default:
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    goto END1;
-                }
-
-                if (strCategory == "biblio")
-                {
-                    switch (strName)
-                    {
-                        case "dbnames":
-                            {
-                                for (int i = 0; i < app.ItemDbs.Count; i++)
-                                {
-                                    string strDbName = app.ItemDbs[i].BiblioDbName;
-
-                                    // 即便数据库名为空，逗号也不能省略。主要是为了准确对位
-
-                                    if (i != 0)
-                                        strValue += ",";
-                                    strValue += strDbName;
-                                }
-                            }
-                            break;
-                        case "syntaxs":
-                            {
-                                for (int i = 0; i < app.ItemDbs.Count; i++)
-                                {
-                                    string strSyntax = app.ItemDbs[i].BiblioDbSyntax;
-
-                                    // 即便strSyntax为空，逗号也不能省略。主要是为了准确对位
-
-
-                                    if (i != 0)
-                                        strValue += ",";
-                                    strValue += strSyntax;
-                                }
-                            }
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-                if (strCategory == "virtual")
-                {
-                    switch (strName)
-                    {
-                        // 2011/1/21
-                        case "def":
-                            {
-                                /*
-                                // TODO: 把这个初始化放在正规的初始化中？
-                                nRet = app.InitialVdbs(sessioninfo.Channels,
-                                    out strError);
-                                if (nRet == -1)
-                                {
-                                    strError = "InitialVdbs error : " + strError;
-                                    goto ERROR1;
-                                }
-                                 * */
-
-
-                                XmlNode root = app.LibraryCfgDom.DocumentElement.SelectSingleNode(
-                                    "virtualDatabases");
-                                if (root == null)
-                                {
-                                    strError = "尚未配置<virtualDatabases>元素";
-                                    goto ERROR1;
-                                }
-                                strValue = root.OuterXml;
-                            }
-                            break;
-                        case "dbnames":
-                            {
-                                /*
-                                // TODO: 把这个初始化放在正规的初始化中？
-                                nRet = app.InitialVdbs(sessioninfo.Channels,
-                                    out strError);
-                                if (nRet == -1)
-                                {
-                                    strError = "InitialVdbs error : " + strError;
-                                    goto ERROR1;
-                                }
-                                 * */
-
-                                if (app.vdbs != null)
-                                {
-                                    for (int i = 0; i < app.vdbs.Count; i++)
-                                    {
-                                        VirtualDatabase vdb = app.vdbs[i];
-                                        if (vdb.IsVirtual == false)
-                                            continue;
-
-                                        if (String.IsNullOrEmpty(strValue) == false)
-                                            strValue += ",";
-                                        strValue += vdb.GetName("zh");
-                                    }
-                                }
-                            }
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-
-                if (strCategory == "item")
-                {
-                    switch (strName)
-                    {
-                        case "dbnames":
-                            {
-                                for (int i = 0; i < app.ItemDbs.Count; i++)
-                                {
-                                    string strDbName = app.ItemDbs[i].DbName;
-
-                                    // 即便strDbName为空，逗号也不能省略。主要是为了准确对位
-
-                                    if (i != 0)
-                                        strValue += ",";
-                                    strValue += strDbName;
-                                }
-                            }
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-                // 2007/10/19 
-                if (strCategory == "issue")
-                {
-                    switch (strName)
-                    {
-                        case "dbnames":
-                            {
-                                for (int i = 0; i < app.ItemDbs.Count; i++)
-                                {
-                                    string strDbName = app.ItemDbs[i].IssueDbName;
-
-                                    // 即便strDbName为空，逗号也不能省略。主要是为了准确对位
-
-                                    if (i != 0)
-                                        strValue += ",";
-                                    strValue += strDbName;
-                                }
-                            }
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-                // 2007/11/30 
-                if (strCategory == "order")
-                {
-                    switch (strName)
-                    {
-                        case "dbnames":
-                            {
-                                for (int i = 0; i < app.ItemDbs.Count; i++)
-                                {
-                                    string strDbName = app.ItemDbs[i].OrderDbName;
-
-                                    // 即便strDbName为空，逗号也不能省略。主要是为了准确对位
-
-                                    if (i != 0)
-                                        strValue += ",";
-                                    strValue += strDbName;
-                                }
-                            }
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-                if (strCategory == "reader")
-                {
-                    switch (strName)
-                    {
-                        case "dbnames":
-                            {
-#if NO
-                                for (int i = 0; i < app.ReaderDbs.Count; i++)
-                                {
-                                    string strDbName = app.ReaderDbs[i].DbName;
-                                    if (String.IsNullOrEmpty(strDbName) == true)
-                                        continue;
-
-                                    // 2012/9/7
-                                    if (string.IsNullOrEmpty(sessioninfo.LibraryCode) == false)
-                                    {
-                                        string strLibraryCode = app.ReaderDbs[i].LibraryCode;
-                                        // 匹配图书馆代码
-                                        // parameters:
-                                        //      strSingle   单个图书馆代码。空的总是不能匹配
-                                        //      strList     图书馆代码列表，例如"第一个,第二个"，或者"*"。空表示都匹配
-                                        // return:
-                                        //      false   没有匹配上
-                                        //      true    匹配上
-                                        if (LibraryApplication.MatchLibraryCode(strLibraryCode, sessioninfo.LibraryCode) == false)
-                                            continue;
-                                    }
-
-                                    if (String.IsNullOrEmpty(strValue) == false)
-                                        strValue += ",";
-                                    strValue += strDbName;
-                                }
-#endif
-                                List<string> dbnames = app.GetCurrentReaderDbNameList(sessioninfo.LibraryCodeList);
-                                strValue = StringUtil.MakePathList(dbnames);
-                            }
-                            break;
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-                if (strCategory == "library")
-                {
-                    switch (strName)
-                    {
-                        case "name":
-                            {
-                                XmlNode node = app.LibraryCfgDom.SelectSingleNode("//libraryName");
-                                if (node == null)
-                                    strValue = "";
-                                else
-                                    strValue = node.InnerText;
-                            }
-                            break;
-                        /*
-                    case "serverDirectory":
-                        {
-                            XmlNode node = app.LibraryCfgDom.SelectSingleNode("//libraryserver");
-                            if (node == null)
-                                strValue = "";
-                            else
-                                strValue = DomUtil.GetAttr(node, "url");
-                        }
-                        break;
-                         * */
-                        default:
-                            /*
-                            nRet = 0;
-                            break;
-                             * */
-                            strError = "category '" + strCategory + "' 中未知的 name '" + strName + "'";
-                            goto NOTFOUND;
-                    }
-                    // 2009/10/23 
-                    goto END1;
-                }
-
-            NOTFOUND:
-                result.Value = 0;
-                result.ErrorCode = ErrorCode.NotFound;  // 表示配置节点没有找到
-                if (String.IsNullOrEmpty(strError) == true)
-                    result.ErrorInfo = "未知的 category '" + strCategory + "' 和 name '" + strName + "'";
-                else
+                    result.Value = -1;
+                    result.ErrorCode = ErrorCode.SystemError;
                     result.ErrorInfo = strError;
-                return result;
+                    return result;
+                }
+                if (nRet == 0)
+                {
+                    result.Value = 0;
+                    result.ErrorCode = ErrorCode.NotFound;  // 表示配置节点没有找到
+                    if (String.IsNullOrEmpty(strError) == true)
+                        result.ErrorInfo = "未知的 category '" + strCategory + "' 和 name '" + strName + "'";
+                    else
+                        result.ErrorInfo = strError;
+                    return result;
+                }
 
-            END1:
                 result.Value = nRet;
-                return result;
-            ERROR1:
-                result.Value = -1;
-                result.ErrorCode = ErrorCode.SystemError;
-                result.ErrorInfo = strError;
                 return result;
             }
             catch (Exception ex)
@@ -10704,60 +10168,11 @@ namespace dp2Library
                 result.ErrorInfo = strErrorText;
                 return result;
             }
-            finally
-            {
-                app.UnlockForRead();
-            }
         }
 
-#if NO
-        // 2013/2/26
-        // 检查确保 kdbs != null
-        string EnsureKdbs(bool bThrowException = true)
-        {
-            if (app.kdbs == null)
-            {
-                app.ActivateManagerThreadForLoad();
-                string strError = "app.kdbs == null。故障原因请检查dp2Library日志，或稍后重试操作";
-                if (bThrowException == true)
-                    throw new Exception(strError);
-
-                return strError;
-            }
-
-            return null;    // 没有出错
-        }
-#endif
         string EnsureKdbs(bool bThrowException = true)
         {
             return this.app.EnsureKdbs(bThrowException);
-        }
-
-        void AppendCaptions(XmlNode node,
-            string strAttrName)
-        {
-            string strDbName = DomUtil.GetAttr(node, strAttrName);
-            if (string.IsNullOrEmpty(strDbName) == true)
-                return;
-
-            // 2013/2/26
-            EnsureKdbs();
-
-            KernelDbInfo db = app.kdbs.FindDb(strDbName);
-            if (db != null)
-            {
-                XmlNode node_container = node.OwnerDocument.CreateElement(strAttrName);
-                node.AppendChild(node_container);
-
-                foreach (Caption caption in db.Captions)
-                {
-                    XmlNode node_caption = node.OwnerDocument.CreateElement("caption");
-                    node_container.AppendChild(node_caption);
-
-                    DomUtil.SetAttr(node_caption, "lang", caption.Lang);
-                    node_caption.InnerText = caption.Value;
-                }
-            }
         }
 
         // 设置系统参数
@@ -10776,7 +10191,7 @@ namespace dp2Library
         {
             string strError = "";
 
-            LibraryServerResult result = this.PrepareEnvironment("SetSystemParameter", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("SetSystemParameter", true, true, true);
             if (result.Value == -1)
                 return result;
 
@@ -11172,7 +10587,8 @@ namespace dp2Library
                         // 必须在ReadersMonitor以前启动。否则其中用到脚本代码时会出错。2007/10/10 changed
                         // return:
                         //		-1	出错
-                        //		0	成功
+                        //		0	脚本代码没有找到
+                        //      1   成功
                         nRet = app.InitialLibraryHostAssembly(out strError);
                         if (nRet == -1)
                         {
@@ -11286,10 +10702,10 @@ namespace dp2Library
                     goto ERROR1;
                 }
 
-            END1:
+                END1:
                 result.Value = nRet;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -11401,7 +10817,7 @@ namespace dp2Library
                 result.Value = nRet;
                 result.ErrorInfo = strError;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
                 result.ErrorInfo = strError;
@@ -11609,7 +11025,7 @@ namespace dp2Library
                 if (StringUtil.IsInList("passgate", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
-                    result.ErrorInfo = "入馆登记的操作被拒绝。不具备passgate权限。";
+                    result.ErrorInfo = "入馆登记的操作被拒绝。不具备 passgate 权限。";
                     result.ErrorCode = ErrorCode.AccessDenied;
                     return result;
                 }
@@ -11909,7 +11325,7 @@ namespace dp2Library
         {
             strOutputNumber = "";
 
-            LibraryServerResult result = this.PrepareEnvironment("SetOneClassTailNumber", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("SetOneClassTailNumber", true, true, true);
             if (result.Value == -1)
                 return result;
 
@@ -12081,7 +11497,7 @@ namespace dp2Library
         {
             strOutputNumber = "";
 
-            LibraryServerResult result = this.PrepareEnvironment("SetZhongcihaoTailNumber", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("SetZhongcihaoTailNumber", true, true, true);
             if (result.Value == -1)
                 return result;
 
@@ -12171,7 +11587,7 @@ namespace dp2Library
                     channel.Idle -= new IdleEventHandler(channel_IdleEvent);
                     EndSearch();
                 }
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -12359,6 +11775,120 @@ namespace dp2Library
             }
         }
 
+        // 列出内核资源目录，或列出 dp2library 本地文件和目录
+        public LibraryServerResult Dir(string strResPath,
+            long lStart,
+            long lLength,
+            string strLang,
+            string strStyle,
+            out ResInfoItem[] items,
+            out DigitalPlatform.rms.Client.rmsws_localhost.ErrorCodeValue kernel_errorcode)
+        {
+            items = null;
+            kernel_errorcode = DigitalPlatform.rms.Client.rmsws_localhost.ErrorCodeValue.NoError;
+
+            LibraryServerResult result = this.PrepareEnvironment("Dir", true, true, true);
+            if (result.Value == -1)
+                return result;
+
+            try
+            {
+                RmsChannel channel = sessioninfo.Channels.GetChannel(app.WsUrl);
+                if (channel == null)
+                {
+                    result.Value = -1;
+                    result.ErrorInfo = "get channel error";
+                    result.ErrorCode = ErrorCode.SystemError;
+                    return result;
+                }
+
+                string strError = "";
+
+                if (string.IsNullOrEmpty(strResPath) == false
+                    && strResPath.StartsWith("!"))
+                {
+                    // 2016/11/6
+                    // 列出本地文件目录
+                    List<FileItemInfo> infos = null;
+                    result = ListFile("list",
+                        strResPath,
+                        "", // pattern
+                        lStart,
+                        lLength,
+                        out infos);
+                    if (result.Value == -1)
+                    {
+                        return result;
+                    }
+                    List<ResInfoItem> item_list = new List<ResInfoItem>();
+                    foreach (FileItemInfo info in infos)
+                    {
+                        ResInfoItem item = new ResInfoItem();
+                        string name = info.Name.Substring(strResPath.Length - 1);
+                        // 去掉第一个字符的 \ 或者 /
+                        if (string.IsNullOrEmpty(name) == false
+                            && (name[0] == '\\' || name[0] == '/'))
+                            name = name.Substring(1);
+
+                        item.Name = name;
+                        /*
+        public int Type;	// 类型：0 库 / 1 途径 / 4 cfgs / 5 file
+                        // TODO: 将此定义移动到 DigitalPlatform.rms 中
+                         * */
+                        if (info.Size == -1)
+                        {
+                            item.Type = 4;
+                            item.HasChildren = true;
+                        }
+                        else
+                        {
+                            item.Type = 5;
+                            item.HasChildren = false;
+                            item.TypeString = "size:" + info.Size.ToString();
+                        }
+
+                        item_list.Add(item);
+                    }
+                    items = item_list.ToArray();
+                    return result;
+                }
+                else
+                {
+                    if (strResPath.StartsWith(KernelServerUtil.LOCAL_PREFIX) == true
+                        && StringUtil.IsInList("managedatabase", sessioninfo.RightsOrigin) == false)
+                    {
+                        result.Value = -1;
+                        result.ErrorInfo = "不具备 managedatabase 权限，无法列出内核数据目录和文件";
+                        result.ErrorCode = ErrorCode.AccessDenied;
+                        return result;
+                    }
+
+                    long lRet = channel.DoDir(
+                        strResPath,
+                        (int)lStart,
+                        (int)lLength,
+                        strLang,
+                        strStyle,
+                        out items,
+                        out strError);
+                    kernel_errorcode = channel.OriginErrorCode;
+                    result.ErrorInfo = strError;
+                    result.Value = lRet;
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                string strErrorText = "dp2Library Dir() API出现异常: " + ExceptionUtil.GetDebugText(ex);
+                app.WriteErrorLog(strErrorText);
+
+                result.Value = -1;
+                result.ErrorCode = ErrorCode.SystemError;
+                result.ErrorInfo = strErrorText;
+                return result;
+            }
+        }
+
         // 获取资源
         // parameters:
         //      strResPath  资源的路径。一般数据库记录为"数据库名/1"形态；而数据库记录所属的对象资源，则为"数据库名/object/0"形态
@@ -12397,16 +11927,31 @@ namespace dp2Library
             if (result.Value == -1)
                 return result;
 
+            // Thread.Sleep(2000); // testing
+
             try
             {
                 string strError = "";
                 long lRet = 0;
 
+                /*
+2016/11/7 13:35:12 dp2Library GetRes() API出现异常: Type: System.NullReferenceException
+Message: 未将对象引用设置到对象的实例。
+Stack:
+   在 DigitalPlatform.rms.Client.ResPath.GetDbName(String strLongPath)
+   在 dp2Library.LibraryService.GetRes(String strResPath, Int64 nStart, Int32 nLength, String strStyle, Byte[]& baContent, String& strMetadata, String& strOutputResPath, Byte[]& baOutputTimestamp)
+                 * */
+                // 2016/11/7
+                if (string.IsNullOrEmpty(strResPath))
+                {
+                    strError = "strResPath 参数值不应为空";
+                    goto ERROR1;
+                }
+
+                // '!' 前缀表示获取 dp2library 管辖的本地文件。
                 if (string.IsNullOrEmpty(strResPath) == false
     && strResPath[0] == '!')
                 {
-                    string strFilePath = "";
-                    string strLibraryCode = "";
 
                     // 检查用户使用 GetRes API 的权限
                     // return:
@@ -12418,10 +11963,9 @@ namespace dp2Library
                         sessioninfo.LibraryCodeList,
                         sessioninfo.RightsOrigin,
                         strResPath,
-                        out strLibraryCode,
-                        out strFilePath,
+                        out string strLibraryCode,
+                        out string strFilePath,
                         out strError);
-
                     if (nRet == 0)
                     {
                         result.Value = -1;
@@ -12430,12 +11974,7 @@ namespace dp2Library
                         return result;
                     }
                     if (nRet == -1)
-                    {
-                        result.Value = -1;
-                        result.ErrorInfo = strError;
-                        result.ErrorCode = ErrorCode.SystemError;
-                        return result;
-                    }
+                        goto ERROR1;
 #if NO
                     if (StringUtil.IsInList("download", sessioninfo.RightsOrigin) == false)
                     {
@@ -12452,7 +11991,7 @@ namespace dp2Library
                     //      -2      文件不存在
                     //		-1      出错
                     //		>= 0	成功，返回最大长度
-                    lRet = LibraryApplication.GetFile(
+                    lRet = app.GetFile(
                         strFilePath,
                         nStart,
                         nLength,
@@ -12474,6 +12013,15 @@ namespace dp2Library
                     else
                         result.Value = lRet;
 
+                    // 压缩内容
+                    // 2017/10/6
+                    if (StringUtil.IsInList("gzip", strStyle)
+                        && baContent != null && baContent.Length > 0)
+                    {
+                        baContent = ByteArray.CompressGzip(baContent);
+                        result.ErrorCode = ErrorCode.Compressed;
+                    }
+
                     result.ErrorInfo = strError;
                     strOutputResPath = strResPath;
                     return result;
@@ -12485,7 +12033,7 @@ namespace dp2Library
                 if (StringUtil.IsInList("getres", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
-                    result.ErrorInfo = "用户 "+sessioninfo.UserID+" 获取资源被拒绝。不具备 getres 权限。";
+                    result.ErrorInfo = "用户 " + sessioninfo.UserID + " 获取资源被拒绝。不具备 getres 权限。";
                     result.ErrorCode = ErrorCode.AccessDenied;
                     return result;
                 }
@@ -12516,21 +12064,14 @@ namespace dp2Library
                         return result;
                     }
                     if (nRet == -1)
-                    {
-                        result.Value = -1;
-                        result.ErrorInfo = strError;
-                        result.ErrorCode = ErrorCode.SystemError;
-                        return result;
-                    }
+                        goto ERROR1;
                 }
 
                 RmsChannel channel = sessioninfo.Channels.GetChannel(app.WsUrl);
                 if (channel == null)
                 {
-                    result.Value = -1;
-                    result.ErrorInfo = "get channel error";
-                    result.ErrorCode = ErrorCode.SystemError;
-                    return result;
+                    strError = "get channel error";
+                    goto ERROR1;
                 }
 
                 bool bIsReaderDb = false;
@@ -12554,10 +12095,8 @@ namespace dp2Library
                             DigitalPlatform.LibraryServer.LibraryApplication.ResPathType type = LibraryApplication.GetResPathType(strResPath);
                             if (type == DigitalPlatform.LibraryServer.LibraryApplication.ResPathType.Record || type == DigitalPlatform.LibraryServer.LibraryApplication.ResPathType.CfgFile)
                             {
-                                result.Value = -1;
-                                result.ErrorInfo = "读者身份不被允许用GetRes()来获得读者记录或数据库配置文件";
-                                result.ErrorCode = ErrorCode.SystemError;
-                                return result;
+                                strError = "读者身份不被允许用 GetRes() 来获得读者记录或数据库配置文件";
+                                goto ERROR1;
                             }
 
                             // TODO: 对于获取对象的请求，要看读者是否具有管辖的其他读者，或者好友。否则只能获取自己的读者记录的对象
@@ -12568,9 +12107,10 @@ namespace dp2Library
                         if (app.IsCurrentChangeableReaderPath(strDbName + "/?",
                 sessioninfo.LibraryCodeList) == false)
                         {
+                            strError = "读者库 '" + strDbName + "' 不在当前用户管辖范围内";
                             result.Value = -1;
-                            result.ErrorInfo = "读者库 '" + strDbName + "' 不在当前用户管辖范围内";
-                            result.ErrorCode = ErrorCode.SystemError;
+                            result.ErrorInfo = strError;
+                            result.ErrorCode = ErrorCode.AccessDenied;
                             return result;
                         }
                     }
@@ -12586,15 +12126,11 @@ namespace dp2Library
                         {
                             if (bIsReader == true)
                             {
-                                result.Value = -1;
-                                result.ErrorInfo = "读者身份不被允许用GetRes()来获得违约金记录";
-                                result.ErrorCode = ErrorCode.SystemError;
-                                return result;
+                                strError = "读者身份不被允许用GetRes()来获得违约金记录";
+                                goto ERROR1;
                             }
-                            result.Value = -1;
-                            result.ErrorInfo = "不被允许用GetRes()来获得违约金记录";
-                            result.ErrorCode = ErrorCode.SystemError;
-                            return result;
+                            strError = "不被允许用GetRes()来获得违约金记录";
+                            goto ERROR1;
                         }
                     }
                 }
@@ -12614,18 +12150,32 @@ namespace dp2Library
                 StringUtil.ParseObjectPath(strResPath,
                     out strXmlRecPath,
                     out strObjectID);
-                if (app.GetObjectWriteToOperLog == true
-                    && StringUtil.IsInList("skipLog", strStyle) == false
+                if (// app.GetObjectWriteToOperLog == true &&
+                    StringUtil.IsInList("skipLog", strStyle) == false
                     && nStart == 0 // 获取全部二进制信息的循环中，只记载第一次 API 访问
                     && string.IsNullOrEmpty(strObjectID) == false
                     && StringUtil.IsInList("data", strStyle) == true)
                 {
-                    bWriteLog = true;
-                    // 为了获得对象的大小信息，需要得到 metadata
-                    if (StringUtil.IsInList("metadata", strStyle) == false)
+                    if (app.GetObjectWriteToOperLog == true)
                     {
-                        StringUtil.SetInList(ref strStyle, "metadata", true);
-                        bClearMetadata = true;
+                        bWriteLog = true;
+                        // 为了获得对象的大小信息，需要得到 metadata
+                        if (StringUtil.IsInList("metadata", strStyle) == false)
+                        {
+                            StringUtil.SetInList(ref strStyle, "metadata", true);
+                            bClearMetadata = true;
+                        }
+                    }
+                    else
+                    {
+                        // 限制最大事项数
+                        string date = DateTimeUtil.DateTimeToString8(DateTime.Now);
+                        long newValue = app.DailyItemCountTable.GetValue("warning_getres", date, 1);
+                        if (newValue <= 1)
+                        {
+                            // 希望写入存取日志，但 library.xml 中的 object/@writeGetResOperLog 属性值为 false，此时需要记入错误日志表示警告
+                            app.WriteErrorLog("警告：有前端请求 GetRes()，希望连带写入存取日志，但 library.xml 中的 object/@writeGetResOperLog 属性值为 false，导致写入存取日志动作被忽略");
+                        }
                     }
                 }
 
@@ -12654,7 +12204,7 @@ namespace dp2Library
                 {
                     string strClientAddress = StringUtil.GetStyleParam(strStyle, "clientAddress");
 
-                    Hashtable table = StringUtil.ParseMedaDataXml(strMetadata,
+                    Hashtable table = StringUtil.ParseMetaDataXml(strMetadata,
                         out strError);
                     if (table != null)
                     {
@@ -12722,10 +12272,7 @@ namespace dp2Library
                             if (bClearMetadata == true)
                                 strMetadata = "";
                             strError = "GetRes() API 写入日志时发生错误: " + strError;
-                            result.Value = -1;
-                            result.ErrorCode = ErrorCode.SystemError;
-                            result.ErrorInfo = strError;
-                            return result;
+                            goto ERROR1;
                         }
                     }
                 }
@@ -12733,6 +12280,11 @@ namespace dp2Library
                 if (bClearMetadata == true)
                     strMetadata = "";
 
+                return result;
+                ERROR1:
+                result.Value = -1;
+                result.ErrorInfo = strError;
+                result.ErrorCode = ErrorCode.SystemError;
                 return result;
             }
             catch (Exception ex)
@@ -12827,6 +12379,13 @@ namespace dp2Library
                 return;
             }
 
+            // TODO: 其实可以用 Parse() 来翻译值
+            if (origin == ChannelErrorCode.Compressed)
+            {
+                result.ErrorCode = ErrorCode.Compressed;
+                return;
+            }
+
             if (origin == ChannelErrorCode.NotLogin)
             {
                 result.ErrorCode = ErrorCode.SystemError;
@@ -12880,6 +12439,14 @@ namespace dp2Library
          * */
 
         // 写入资源
+        // 注：写入 backup 或 cfgs 目录要求具备 backup 或者 managedatabase 权限；
+        //      写入 upload 目录需要 upload 或者 managedatabase 权限
+        //      写入 library.xml 需要 managedatabase 权限
+        //      写入 cfgs/template 文件需要 writetemplate 权限
+        //      写入数据库记录，需要 writerecord 权限
+        //      写入数据库记录下的对象，需要 writeobject 权限
+        //      写入其他(比如 库名/cfgs/配置文件名 )资源，需要 writeres 权限
+        //      writeres 权限
         public LibraryServerResult WriteRes(
             string strResPath,
             string strRanges,
@@ -12894,6 +12461,7 @@ namespace dp2Library
             strOutputResPath = "";
             baOutputTimestamp = null;
 
+            // TODO: 这里不检查 hangup。但具体功能细节里面可以检查。在 hangup 情况下，可以专门放行修改 library.xml 的请求，而其他请求此时不允许操作
             LibraryServerResult result = this.PrepareEnvironment("WriteRes", true, true);
             if (result.Value == -1)
                 return result;
@@ -12945,7 +12513,7 @@ namespace dp2Library
                     //      0   成功
                     //      其他  成功删除的文件和目录个数
                     int nRet = app.WriteFile(
-                        Path.Combine(app.DataDir, "upload"),
+                        Path.Combine(app.DataDir, "upload"),    // TODO: ?? 这里要测试一下，可能请求意图写入 backup 子目录呢
                         strFilePath,
                         strRanges,
                         lTotalLength,
@@ -12990,7 +12558,7 @@ namespace dp2Library
                     if (StringUtil.IsInList("delete", strStyle) == true)
                     {
                         string strDbName = ResPath.GetDbName(strResPath);
-                        if (app.IsUtilDbName(strDbName, "inventory") == true)
+                        if (ServerDatabaseUtility.IsUtilDbName(app.LibraryCfgDom, strDbName, "inventory") == true)
                         {
                             if (StringUtil.IsInList("inventorydelete", sessioninfo.RightsOrigin) == false)
                             {
@@ -13001,6 +12569,7 @@ namespace dp2Library
                             }
                             lRet = channel.DoDeleteRes(strResPath,
                                 baInputTimestamp,
+                                strStyle,   // 2017/9/16 增加
                                 out baOutputTimestamp,
                                 out strError);
                         }
@@ -13028,12 +12597,19 @@ namespace dp2Library
                     result.Value = lRet;
                     result.ErrorInfo = strError;
 
+                    // 2016/10/12
+                    app.ClearCacheCfgs(strResPath);
+
                     // 做错误码的翻译工作
                     // 2008/7/28
                     // result.ErrorCode = ConvertKernelErrorCode(channel.ErrorCode);
                     ConvertKernelErrorCode(channel.ErrorCode,
         ref result);
                 }
+
+                // 2017/6/7
+                if (StringUtil.IsInList("simulate", strStyle))
+                    bWriteOperLog = false;
 
                 if (bWriteOperLog == true
                     && result.Value != -1)  // 2014/4/21 调用出错的情况就不要写入日志了
@@ -13148,8 +12724,7 @@ namespace dp2Library
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("getcommentinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getcommentinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
                     result.ErrorInfo = "获得评注信息 操作被拒绝。不具备 getcommentinfo 或 order 权限。";
@@ -13315,11 +12890,11 @@ namespace dp2Library
             try
             {
                 // 权限字符串
-                if (StringUtil.IsInList("getcommentinfo", sessioninfo.RightsOrigin) == false
-                    && StringUtil.IsInList("order", sessioninfo.RightsOrigin) == false)
+                if (StringUtil.IsInList("getcommentinfo,order", sessioninfo.RightsOrigin) == false)
                 {
                     result.Value = -1;
-                    result.ErrorInfo = "获取评注信息被拒绝。不具备 getcommentinfo 或 order 权限。";
+                    // result.ErrorInfo = "获取评注信息被拒绝。不具备 getcommentinfo 或 order 权限。";
+                    result.ErrorInfo = "用户 '" + sessioninfo.UserID + "' 获取评注信息被拒绝。不具备 getcommentinfo 或 order 权限。";
                     result.ErrorCode = ErrorCode.AccessDenied;
                     return result;
                 }
@@ -13760,7 +13335,7 @@ out strError);
                         strBiblio = "";
                 }
 
-            DO_COMMENT:
+                DO_COMMENT:
                 // 取得评注信息
                 if (String.IsNullOrEmpty(strResultType) == true
                     || String.Compare(strResultType, "recpath", true) == 0)
@@ -13815,7 +13390,7 @@ out strError);
                 }
 
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -13886,7 +13461,7 @@ out strError);
                 try
                 {
                     return app.CommentItemDatabase.SearchItemDup(
-                        // sessioninfo.Channels,
+                    // sessioninfo.Channels,
                     channel,
                     locateParam,
                     nMax,
@@ -13897,7 +13472,7 @@ out strError);
                     channel.Idle -= new IdleEventHandler(channel_IdleEvent);
                     EndSearch();
                 }
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14160,7 +13735,7 @@ out strError);
 
                 return result;
 
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14217,7 +13792,7 @@ out strError);
                     int nCount = 0;
                     if (Int32.TryParse(strCount, out nCount) == false)
                     {
-                        strError = "count 子参数 '"+strCount+"' 格式不正确。应该为纯数字";
+                        strError = "count 子参数 '" + strCount + "' 格式不正确。应该为纯数字";
                         goto ERROR1;
                     }
 
@@ -14253,7 +13828,7 @@ out strError);
                 result.Value = nRet;
                 result.ErrorInfo = strError;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14314,7 +13889,7 @@ out strError);
                 result.ErrorInfo = strError;
                 return result;
 
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14388,7 +13963,7 @@ out strError);
             string strError = "";
             output_messages = null;
 
-            LibraryServerResult result = this.PrepareEnvironment("SetMessage", true, true);
+            LibraryServerResult result = this.PrepareEnvironment("SetMessage", true, true, true);
             if (result.Value == -1)
                 return result;
 
@@ -14515,7 +14090,7 @@ out strError);
                 result.Value = nRet;
                 result.ErrorInfo = strError;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14567,7 +14142,7 @@ out strError);
                 result.Value = nRet;
                 result.ErrorInfo = strError;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14643,7 +14218,7 @@ out strError);
                 result.Value = nRet;
                 result.ErrorInfo = strError;
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14673,7 +14248,7 @@ out strError);
             Value = 0;
 
             LibraryServerResult result = this.PrepareEnvironment("HitCounter", true,
-                true);
+                true, true);
             if (result.Value == -1)
                 return result;
 
@@ -14771,7 +14346,7 @@ out strError);
                     goto ERROR1;
                 }
                 return result;
-            ERROR1:
+                ERROR1:
                 result.Value = -1;
                 result.ErrorInfo = strError;
                 result.ErrorCode = ErrorCode.SystemError;
@@ -14780,6 +14355,222 @@ out strError);
             catch (Exception ex)
             {
                 string strErrorText = "dp2Library HitCounter() API出现异常: " + ExceptionUtil.GetDebugText(ex);
+                app.WriteErrorLog(strErrorText);
+
+                result.Value = -1;
+                result.ErrorCode = ErrorCode.SystemError;
+                result.ErrorInfo = strErrorText;
+                return result;
+            }
+        }
+
+        // TODO: questions 要限制尺寸
+        // parameters:
+        //		strAuthor	著者字符串
+        //		strNumber	返回号码
+        //		strError	出错信息
+        // return:
+        // result.Value:
+        //      -4  "著者 'xxx' 的整体或局部均未检索命中" 2017/3/1
+        //		-3	需要回答问题
+        //      -2  strID验证失败
+        //      -1  出错
+        //      0   成功
+        public LibraryServerResult GetAuthorNumber(
+            string strAuthor,
+            bool bSelectPinyin,
+            bool bSelectEntry,
+            bool bOutputDebugInfo,
+            ref List<Question> questions,
+            out string strNumber,
+            out string strDebugInfo)
+        {
+            string strError = "";
+            strNumber = "";
+            strDebugInfo = "";
+
+            LibraryServerResult result = this.PrepareEnvironment("GetAuthorNumber", true,
+    true);
+            if (result.Value == -1)
+                return result;
+
+            try
+            {
+
+                int nStep = 0;
+
+                if (questions == null)
+                {
+                    questions = new List<Question>();
+                }
+
+                // TODO: 验证身份
+                // return:
+                //      -4  "著者 'xxx' 的整体或局部均未检索命中" 2017/3/1
+                //		-3	需要回答问题
+                //      -1  出错
+                //      0   成功
+                int nRet = app.GetNumberInternal(
+                    sessioninfo,
+                    ref nStep,
+                    strAuthor,
+                    bSelectPinyin,
+                    bSelectEntry,
+                    bOutputDebugInfo,
+                    ref questions,
+                    out strNumber,
+                    out StringBuilder debug_info,
+                    out strError);
+                if (debug_info != null)
+                    strDebugInfo = debug_info.ToString();
+                result.Value = nRet;
+                result.ErrorInfo = strError;
+                return result;
+            }
+            catch (Exception ex)
+            {
+                string strErrorText = "dp2Library GetAuthorNumber() API出现异常: " + ExceptionUtil.GetDebugText(ex);
+                app.WriteErrorLog(strErrorText);
+
+                result.Value = -1;
+                result.ErrorCode = ErrorCode.SystemError;
+                result.ErrorInfo = strErrorText;
+                return result;
+            }
+        }
+
+        // parameters:
+        //      strType 类型。如果为空或者 pinyin，表示希望获得拼音。如果为 sjhm，表示希望获得四角号码
+        // return:
+        //      -2  strID 验证失败
+        //      -1  出错
+        //      0   成功
+        public LibraryServerResult GetPinyin(
+            string strType, // 2018/10/25 增加此参数
+            string strText,
+            out string strPinyinXml)
+        {
+            string strError = "";
+            strPinyinXml = "";
+
+            LibraryServerResult result = this.PrepareEnvironment("GetPinyin", true,
+    true);
+            if (result.Value == -1)
+                return result;
+
+            try
+            {
+                // return:
+                //		-3	需要回答问题
+                //      -1  出错
+                //      0   成功
+                int nRet = 0;
+
+                if (string.IsNullOrEmpty(strType) || strType == "pinyin")
+                    nRet = app.GetPinyinInternal(
+                        sessioninfo,
+                        strText,
+                        out strPinyinXml,
+                        out strError);
+                else if (strType == "sjhm")
+                    nRet = app.GetSjhmInternal(
+    sessioninfo,
+    strText,
+    out strPinyinXml,
+    out strError);
+                else
+                {
+                    nRet = -1;
+                    strError = "未知的 strType '" + strType + "'";
+                }
+
+                result.Value = nRet;
+                result.ErrorInfo = strError;
+                return result;
+            }
+            catch (Exception ex)
+            {
+                string strErrorText = "dp2Library GetPinyin() API出现异常: " + ExceptionUtil.GetDebugText(ex);
+                app.WriteErrorLog(strErrorText);
+
+                result.Value = -1;
+                result.ErrorCode = ErrorCode.SystemError;
+                result.ErrorInfo = strErrorText;
+                return result;
+            }
+        }
+
+        // return:
+        //      -2  strID验证失败
+        //      -1  出错
+        //      0   成功
+        public LibraryServerResult SetPinyin(
+string strPinyinXml)
+        {
+            string strError = "";
+
+            LibraryServerResult result = this.PrepareEnvironment("SetPinyin", true,
+true, true);
+            if (result.Value == -1)
+                return result;
+
+            try
+            {
+                // return:
+                //		-3	需要回答问题
+                //      -1  出错
+                //      0   成功
+                int nRet = app.SetPinyinInternal(
+                    sessioninfo,
+                    strPinyinXml,
+                    out strError);
+                result.Value = nRet;
+                result.ErrorInfo = strError;
+                return result;
+            }
+            catch (Exception ex)
+            {
+                string strErrorText = "dp2Library SetPinyin() API出现异常: " + ExceptionUtil.GetDebugText(ex);
+                app.WriteErrorLog(strErrorText);
+
+                result.Value = -1;
+                result.ErrorCode = ErrorCode.SystemError;
+                result.ErrorInfo = strErrorText;
+                return result;
+            }
+        }
+
+        // 分词
+        // return:
+        //      -2  strID验证失败
+        //      -1  出错
+        //      0   成功
+        public LibraryServerResult SplitHanzi(
+            string strID,
+            string strText,
+            out List<string> tokens)
+        {
+            string strError = "";
+            // int nRet = 0;
+
+            tokens = null;
+
+            LibraryServerResult result = this.PrepareEnvironment("SplitHanzi", true,
+true);
+            if (result.Value == -1)
+                return result;
+
+            try
+            {
+                tokens = LibraryApplication.SplitText(strText);
+
+                result.Value = 0;
+                result.ErrorInfo = strError;
+                return result;
+            }
+            catch (Exception ex)
+            {
+                string strErrorText = "dp2Library SplitHanzi() API出现异常: " + ExceptionUtil.GetDebugText(ex);
                 app.WriteErrorLog(strErrorText);
 
                 result.Value = -1;
@@ -14827,6 +14618,10 @@ out strError);
         [DataMember]
         public string No { get; set; }  // 续借次，序号
 
+        // 2017/5/22
+        [DataMember]
+        public string Volume { get; set; }  // 卷册
+
         [DataMember]
         public string ClientAddress { get; set; }  // 访问者的IP地址
 
@@ -14845,6 +14640,7 @@ out strError);
             this.PatronBarcode = item.PatronBarcode;
             this.BiblioRecPath = item.BiblioRecPath;
             this.Period = item.Period;
+            this.Volume = item.Volume;
             this.No = item.No;
             this.ClientAddress = item.ClientAddress;
             this.Operator = item.Operator;
@@ -14864,6 +14660,10 @@ out strError);
         public string LicenseType = ""; // 许可类型 server 表示服务器授权模式
         public string Function = "";    // 许可的功能列表
         public string Protocol = "";    // 所绑定的协议。例如 http net.tcp 等
+
+        // 2017/8/30
+        // 实例名
+        public string InstanceName { get; set; }
 
         void IExtension<ServiceHostBase>.Attach(ServiceHostBase owner)
         {

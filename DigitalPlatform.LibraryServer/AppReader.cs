@@ -22,6 +22,7 @@ using DigitalPlatform.Range;
 
 using DigitalPlatform.Message;
 using DigitalPlatform.rms.Client.rmsws_localhost;
+using System.Text.RegularExpressions;
 
 namespace DigitalPlatform.LibraryServer
 {
@@ -40,7 +41,7 @@ namespace DigitalPlatform.LibraryServer
                 "name",
                 "namePinyin",   // 2013/12/20
                 "gender",
-                "birthday",
+                "birthday",     // 注：逐步废止这个元素，用 dateOfBirth 替代
                 "dateOfBirth",
                 "idCardNumber",
                 "department",
@@ -63,6 +64,7 @@ namespace DigitalPlatform.LibraryServer
                 "friends", // 2014/9/9
                 "access",   // 2014/9/10
                 "refID", // 2015/9/12
+                "face", // 2018/12/16
             };
 
         // 读者记录中 读者自己能修改的元素名列表
@@ -295,7 +297,8 @@ namespace DigitalPlatform.LibraryServer
                         strElementName);
 
                     // 2013/1/15 <fingerprint>元素单独处理
-                    if (strElementName == "fingerprint")
+                    if (strElementName == "fingerprint"
+                        || strElementName == "face")
                     {
                         string strTextOld = DomUtil.GetElementOuterXml(domExist.DocumentElement,
                             strElementName);
@@ -458,19 +461,31 @@ namespace DigitalPlatform.LibraryServer
                     bChanged = true;
             }
 
-            // 如果有已经有了<fingerprint>元素，则修正其timestamp属性
-            // 刷新timestamp属性
-            XmlNode node = dom.DocumentElement.SelectSingleNode("fingerprint");
-            if (node != null)
-                DomUtil.SetAttr(node, "timestamp", DateTime.Now.ToString("u"));
+            {
+                // 如果有已经有了<fingerprint>元素，则修正其timestamp属性
+                // 刷新timestamp属性
+                XmlNode node = dom.DocumentElement.SelectSingleNode("fingerprint");
+                if (node != null)
+                    DomUtil.SetAttr(node, "timestamp", DateTime.Now.ToString("u"));
+            }
 
-            // TODO: 设置首次密码
+            {
+                // 如果有已经有了<face>元素，则修正其timestamp属性
+                // 刷新timestamp属性
+                XmlNode node = dom.DocumentElement.SelectSingleNode("face");
+                if (node != null)
+                    DomUtil.SetAttr(node, "timestamp", DateTime.Now.ToString("u"));
+            }
+
+            // 设置首次密码
             string strBirthDate = DomUtil.GetElementText(dom.DocumentElement, "dateOfBirth");
             string strNewPassword = "";
             try
             {
                 if (string.IsNullOrEmpty(strBirthDate) == false)
                     strNewPassword = DateTimeUtil.DateTimeToString8(DateTimeUtil.FromRfc1123DateTimeString(strBirthDate).ToLocalTime());    // 2015/10/27 修改 bug。原来缺 ToLocalTime()，造成产生的字符串是前一天的日期
+                else
+                    strNewPassword = Guid.NewGuid().ToString(); // 2017/10/29 如果前端发来的读者记录中没有 dateOfBirth 元素内容，则自动发生一个随机的字符串作为密码，这样读者就无法登录成功，只能去图书馆柜台重设密码，或者用微信公众号的找回密码功能来得到密码(假如创建读者记录时候提供了手机号码)
             }
             catch (Exception ex)
             {
@@ -728,6 +743,27 @@ namespace DigitalPlatform.LibraryServer
                 }
             }
 
+            // 2017/3/2
+            if (strAction == "change"
+                    || strAction == "changestate"
+                    || strAction == "changeforegift"
+                    || strAction == "changereaderbarcode")
+            {
+                if (string.IsNullOrEmpty(strRecPath))
+                {
+                    strError = "修改读者记录的操作 '" + strAction + "' 不允许记录路径参数 strRecPath 值为空";
+                    goto ERROR1;
+                }
+
+                // 检查宜于早一点进行。如果这里不检查，则查重证条码号以后，命中了一条读者记录，但因为 strRecPath 中提交的不是合法的路径形态，那么判断的结果就是“证条码号已经在别的记录中存在了”，这种报错会误导用户或开发者
+                string strTargetRecId = ResPath.GetRecordId(strRecPath);
+                if (strTargetRecId == "?" || String.IsNullOrEmpty(strTargetRecId) == true)
+                {
+                    strError = "修改读者记录的操作 '" + strAction + "' 不允许使用追加形态的记录路径 '" + strRecPath + "'";
+                    goto ERROR1;
+                }
+            }
+
             // 把旧记录装载到DOM
             XmlDocument domOldRec = new XmlDocument();
             try
@@ -926,7 +962,6 @@ namespace DigitalPlatform.LibraryServer
                     }
 #endif
 
-                    List<string> aPath = null;
 
                     // 本函数只负责查重, 并不获得记录体
                     // return:
@@ -937,7 +972,7 @@ namespace DigitalPlatform.LibraryServer
                         channel,
                         strNewBarcode,
                         100,
-                        out aPath,
+                        out List<string> aPath,
                         out strError);
                     if (nRet == -1)
                         goto ERROR1;
@@ -1375,6 +1410,12 @@ strLibraryCode);    // 读者所在的馆代码
 
                     this.SessionTable.CloseSessionByReaderBarcode(strNewBarcode);
 
+                    // 2016/9/9
+                    if (bBarcodeChanged
+                        && this.ChargingOperDatabase != null
+                        && this.ChargingOperDatabase.Enabled)
+                        this.ChargingOperDatabase.ChangePatronBarcode(strOldBarcode, strNewBarcode);
+
                     strSavedRecPath = strRecPath;   // 保存过程不会改变记录路径
                 }
                 else if (strAction == "delete")
@@ -1451,9 +1492,12 @@ strLibraryCode);    // 读者所在的馆代码
             }
             catch (Exception ex)
             {
+                string strErrorText = "SetReaderInfo() 抛出异常:" + ExceptionUtil.GetDebugText(ex);
+                this.WriteErrorLog(strErrorText);
+
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
-                result.ErrorInfo = "抛出异常:" + ex.Message;
+                result.ErrorInfo = strErrorText;
                 return result;
             }
             finally
@@ -1490,7 +1534,7 @@ strLibraryCode);    // 读者所在的馆代码
             out string strError)
         {
             strError = "";
-            int nRet = 0;
+            // int nRet = 0;
 
             List<string> values = null;
 
@@ -1687,7 +1731,6 @@ strLibraryCode);    // 读者所在的馆代码
             // 如果记录路径为空, 则先获得记录路径
             if (String.IsNullOrEmpty(strRecPath) == true)
             {
-                List<string> aPath = null;
 
                 if (String.IsNullOrEmpty(strOldBarcode) == true)
                 {
@@ -1704,7 +1747,7 @@ strLibraryCode);    // 读者所在的馆代码
                     channel,
                     strOldBarcode,
                     100,
-                    out aPath,
+                    out List<string> aPath,
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;
@@ -2576,7 +2619,6 @@ strLibraryCode);    // 读者所在的馆代码
                 {
                     // 从册条码号获得册记录
 
-                    List<string> aPath = null;
                     // 获得册记录
                     // return:
                     //      -1  error
@@ -2588,7 +2630,7 @@ strLibraryCode);    // 读者所在的馆代码
                         strItemBarcode,
                         out strItemXml,
                         100,
-                        out aPath,
+                        out List<string> aPath,
                         out item_timestamp,
                         out strError);
                     if (nRet == 0)
@@ -3233,6 +3275,445 @@ strLibraryCode);    // 读者所在的馆代码
             return dom.DocumentElement.OuterXml;
         }
 
+        // 检索，定位一条读者记录
+        // return:
+        //      -1  出错
+        //      0   没有找到。strError 返回了(提示)报错信息, error_code 中有错误码
+        //      1   找到
+        public int SearchReaderRecord(
+    SessionInfo sessioninfo,
+    string strBarcode,
+    out string strXml,
+    out string strOutputPath,
+    out byte[] baTimestamp,
+    out ErrorCode error_code,
+    out string strError)
+        {
+            strError = "";
+            baTimestamp = null;
+            strOutputPath = "";
+            strXml = "";
+            error_code = ErrorCode.NoError;
+
+            List<string> recpaths = null;
+
+#if NO
+            // 个人书斋名
+            string strPersonalLibrary = "";
+            if (sessioninfo.UserType == "reader"
+                && sessioninfo.Account != null)
+                strPersonalLibrary = sessioninfo.Account.PersonalLibrary;
+#endif
+
+            if (String.IsNullOrEmpty(strBarcode) == true)
+            {
+                strError = "strBarcode 参数值不能为空";
+                return -1;
+            }
+
+            RmsChannel channel = sessioninfo.Channels.GetChannel(this.WsUrl);
+            if (channel == null)
+            {
+                strError = "get channel error";
+                return -1;
+            }
+
+            string strIdcardNumber = "";
+
+            int nRet = 0;
+            long lRet = 0;
+
+            // 前端提供临时记录
+            if (strBarcode[0] == '<')
+            {
+                strXml = strBarcode;
+                strOutputPath = "?";
+                // TODO: 数据库名需要从前端发来的XML记录中获取，或者要知道当前用户的馆代码?
+                goto SKIP1;
+            }
+
+            bool bOnlyBarcode = false;   // 是否仅仅在 证条码号中寻找
+
+            bool bRecordGetted = false; // 记录释放后已经获取到
+
+            // 命令状态
+            if (strBarcode[0] == '@'
+                && strBarcode.StartsWith("@refID:") == false)
+            {
+                // 获得册记录，通过册记录路径
+                string strLeadPath = "@path:";
+                string strLeadDisplayName = "@displayName:";
+                string strLeadBarcode = "@barcode:";
+
+                if (StringUtil.HasHead(strBarcode, strLeadPath) == true)
+                {
+                    string strReaderRecPath = strBarcode.Substring(strLeadPath.Length);
+
+                    // 2008/6/20 
+                    // 继续分离出(方向)命令部分
+                    string strCommand = "";
+                    nRet = strReaderRecPath.IndexOf("$");
+                    if (nRet != -1)
+                    {
+                        strCommand = strReaderRecPath.Substring(nRet + 1);
+                        strReaderRecPath = strReaderRecPath.Substring(0, nRet);
+                    }
+
+                    if (this.IsReaderRecPath(strReaderRecPath) == false)
+                    {
+                        strError = "记录路径 '" + strReaderRecPath + "' 并不是一个读者库记录路径，因此拒绝操作。";
+                        return -1;
+                    }
+
+                    string strMetaData = "";
+
+                    // 2008/6/20 changed
+                    string strStyle = "content,data,metadata,timestamp,outputpath";
+
+                    if (String.IsNullOrEmpty(strCommand) == false
+            && (strCommand == "prev" || strCommand == "next"))
+                    {
+                        strStyle += "," + strCommand;
+                    }
+
+                    // 观察一个读者记录路径，看看是不是在当前用户管辖的读者库范围内?
+                    if (this.IsCurrentChangeableReaderPath(strReaderRecPath,
+                        sessioninfo.LibraryCodeList) == false)
+                    {
+                        strError = "读者记录路径 '" + strReaderRecPath + "' 的读者库不在当前用户管辖范围内";
+                        return -1;
+                    }
+
+                    lRet = channel.GetRes(strReaderRecPath,
+                        strStyle,
+                        out strXml,
+                        out strMetaData,
+                        out baTimestamp,
+                        out strOutputPath,
+                        out strError);
+                    if (lRet == -1)
+                    {
+                        if (channel.ErrorCode == ChannelErrorCode.NotFound)
+                        {
+                            if (strCommand == "prev")
+                                strError = "到头";
+                            else if (strCommand == "next")
+                                strError = "到尾";
+                            else
+                                strError = "没有找到";
+                            error_code = ErrorCode.NotFound;
+                            return 0;
+                        }
+
+                        nRet = -1;
+                    }
+                    else
+                    {
+                        nRet = 1;
+                    }
+
+                    bRecordGetted = true;
+                }
+                else if (StringUtil.HasHead(strBarcode, strLeadDisplayName) == true)
+                {
+                    // 2011/2/19
+                    string strDisplayName = strBarcode.Substring(strLeadDisplayName.Length);
+
+                    // 通过读者显示名获得读者记录
+                    // return:
+                    //      -1  error
+                    //      0   not found
+                    //      1   命中1条
+                    //      >1  命中多于1条
+                    nRet = this.GetReaderRecXmlByDisplayName(
+                        // sessioninfo.Channels,
+                        channel,
+                        strDisplayName,
+                        out strXml,
+                        out strOutputPath,
+                        out baTimestamp,
+                        out strError);
+                    if (nRet == -1)
+                        return -1;
+                    if (nRet == 0)
+                    {
+                        strError = "没有找到";
+                        error_code = ErrorCode.NotFound;
+                        return 0;
+                    }
+                    // 观察一个读者记录路径，看看是不是在当前用户管辖的读者库范围内?
+                    if (this.IsCurrentChangeableReaderPath(strOutputPath,
+                        sessioninfo.LibraryCodeList) == false)
+                    {
+                        strError = "读者记录路径 '" + strOutputPath + "' 的读者库不在当前用户管辖范围内";
+                        return -1;
+                    }
+                    bRecordGetted = true;
+                }
+                else if (StringUtil.HasHead(strBarcode, strLeadBarcode) == true)
+                {
+                    strBarcode = strBarcode.Substring(strLeadBarcode.Length);
+                    bOnlyBarcode = true;
+                    bRecordGetted = false;
+                }
+                else
+                {
+                    strError = "不支持的检索词格式: '" + strBarcode + "'。目前仅支持'@path:'和'@displayName:'引导的检索词";
+                    return -1;
+                }
+
+            }
+
+            // 从证条码号获得
+            if (bRecordGetted == false)
+            {
+                if (string.IsNullOrEmpty(strBarcode) == false)
+                {
+                    string strOutputCode = "";
+                    // 把二维码字符串转换为读者证条码号
+                    // parameters:
+                    //      strReaderBcode  [out]读者证条码号
+                    // return:
+                    //      -1      出错
+                    //      0       所给出的字符串不是读者证号二维码
+                    //      1       成功      
+                    nRet = this.DecodeQrCode(strBarcode,
+                        out strOutputCode,
+                        out strError);
+                    if (nRet == -1)
+                        return -1;
+                    if (nRet == 1)
+                    {
+                        strBarcode = strOutputCode;
+                    }
+                }
+
+                // 加读锁
+                // 可以避免拿到读者记录处理中途的临时状态
+#if DEBUG_LOCK_READER
+                this.WriteErrorLog("GetReaderInfo 开始为读者加读锁 '" + strBarcode + "'");
+#endif
+                this.ReaderLocks.LockForRead(strBarcode);
+
+                try
+                {
+                    // 返回测试读者记录
+                    if (IsTestReaderBarcode(strBarcode))
+                    {
+                        nRet = 1;
+                        strXml = GetTestReaderXml();
+                        recpaths = new List<string>();
+                        recpaths.Add("测试读者/1");
+                        baTimestamp = null;
+                    }
+                    else
+                    {
+                        // 慢速版本。但能获得重复的记录路径
+                        // return:
+                        //      -1  error
+                        //      0   not found
+                        //      1   命中1条
+                        //      >1  命中多于1条
+                        nRet = this.GetReaderRecXml(
+                            channel,
+                            strBarcode,
+                            100,
+                            sessioninfo.LibraryCodeList,
+                            out recpaths,
+                            out strXml,
+                            out baTimestamp,
+                            out strError);
+                    }
+                    if (nRet > 0)
+                        strOutputPath = recpaths[0];
+
+                }
+                finally
+                {
+                    this.ReaderLocks.UnlockForRead(strBarcode);
+#if DEBUG_LOCK_READER
+                    this.WriteErrorLog("GetReaderInfo 结束为读者加读锁 '" + strBarcode + "'");
+#endif
+                }
+
+
+                if (nRet == 0)
+                {
+                    if (bOnlyBarcode == true)
+                        goto NOT_FOUND;
+                    // 如果是身份证号，则试探检索“身份证号”途径
+                    if (StringUtil.IsIdcardNumber(strBarcode) == true)
+                    {
+                        strIdcardNumber = strBarcode;
+                        strBarcode = "";
+
+                        // 通过特定检索途径获得读者记录
+                        // return:
+                        //      -1  error
+                        //      0   not found
+                        //      1   命中1条
+                        //      >1  命中多于1条
+                        nRet = this.GetReaderRecXmlByFrom(
+    // sessioninfo.Channels,
+    channel,
+    null,
+    strIdcardNumber,
+    "身份证号",
+    100,
+    sessioninfo.LibraryCodeList,
+    out recpaths,
+    out strXml,
+    // out strOutputPath,
+    out baTimestamp,
+    out strError);
+                        if (nRet == -1)
+                        {
+                            // text-level: 内部错误
+                            strError = "用身份证号 '" + strIdcardNumber + "' 读入读者记录时发生错误: " + strError;
+                            return -1;
+                        }
+
+                        if (nRet == 0)
+                        {
+                            error_code = ErrorCode.IdcardNumberNotFound;
+
+                            // text-level: 用户提示
+                            strError = string.Format(this.GetString("身份证号s不存在"),   // "身份证号 '{0}' 不存在"
+                                strIdcardNumber);
+                            return 0;
+                        }
+
+                        if (nRet > 0)
+                            strOutputPath = recpaths[0];
+
+                        goto SKIP0;
+                    }
+                    else
+                    {
+                        // 如果需要，从读者证号等辅助途径进行检索
+                        foreach (string strFrom in this.PatronAdditionalFroms)
+                        {
+                            nRet = this.GetReaderRecXmlByFrom(
+// sessioninfo.Channels,
+channel,
+null,
+strBarcode,
+strFrom,
+100,
+sessioninfo.LibraryCodeList,
+out recpaths,
+out strXml,
+out baTimestamp,
+out strError);
+                            if (nRet == -1)
+                            {
+                                // text-level: 内部错误
+                                strError = "用" + strFrom + " '" + strBarcode + "' 读入读者记录时发生错误: " + strError;
+                                return -1;
+                            }
+
+
+                            if (nRet == 0)
+                                continue;
+
+                            if (nRet > 0)
+                                strOutputPath = recpaths[0];
+
+                            goto SKIP0;
+                        }
+                    }
+
+                    NOT_FOUND:
+                    strError = "没有找到";
+                    error_code = ErrorCode.NotFound;
+                    return 0;
+                }
+
+                // 观察一个读者记录路径，看看是不是在当前用户管辖的读者库范围内?
+                if (IsTestReaderBarcode(strBarcode) == false
+                    && this.IsCurrentChangeableReaderPath(strOutputPath,
+                    sessioninfo.LibraryCodeList) == false)
+                {
+                    strError = "读者记录路径 '" + strOutputPath + "' 的读者库不在当前用户管辖范围内";
+                    return -1;
+                }
+
+                if (nRet == -1)
+                    return -1;
+
+                return nRet;
+            }
+
+            SKIP0:
+            // 2013/5/21
+            if (recpaths != null)
+                strOutputPath = StringUtil.MakePathList(recpaths);
+
+            SKIP1:
+
+
+            XmlDocument readerdom = null;
+            if (sessioninfo.UserType == "reader")
+            {
+                nRet = LibraryApplication.LoadToDom(strXml,
+                    out readerdom,
+                    out strError);
+                if (nRet == -1)
+                {
+                    strError = "装载读者记录进入 XML DOM 时发生错误: " + strError;
+                    return -1;
+                }
+
+            }
+
+            string strLibraryCode = "";
+            if (strOutputPath == "?" || IsTestReaderBarcode(strBarcode))
+            {
+                // 从当前用户管辖的馆代码中选择第一个
+                // TODO: 如果发来的XML记录中有读者库名和馆代码帮助判断则更好
+                List<string> librarycodes = StringUtil.FromListString(sessioninfo.LibraryCodeList);
+                if (librarycodes != null && librarycodes.Count > 0)
+                    strLibraryCode = librarycodes[0];
+                else
+                    strLibraryCode = "";
+            }
+            else
+            {
+                nRet = this.GetLibraryCode(strOutputPath,
+                    out strLibraryCode,
+                    out strError);
+                if (nRet == -1)
+                    return -1;
+            }
+
+            {
+                if (readerdom != null)
+                {
+                    DomUtil.DeleteElement(readerdom.DocumentElement, "password");
+                    DomUtil.SetElementText(readerdom.DocumentElement, "libraryCode", strLibraryCode);
+                }
+                if (string.IsNullOrEmpty(strXml) == false)
+                {
+                    XmlDocument temp = new XmlDocument();
+                    try
+                    {
+                        temp.LoadXml(strXml);
+                    }
+                    catch (Exception ex)
+                    {
+                        strError = "读者记录 XML 装入 DOM 时出错:" + ex.Message;
+                        return -1;
+                    }
+
+                    DomUtil.DeleteElement(temp.DocumentElement, "password");
+                    DomUtil.SetElementText(temp.DocumentElement, "libraryCode", strLibraryCode);
+                    strXml = temp.DocumentElement.OuterXml;
+                }
+            }
+
+            return 1;
+        }
+
         // 获得读者信息
         // parameters:
         //      strBarcode  读者证条码号。如果前方引导以"@path:"，则表示读者记录路径。在@path引导下，路径后面还可以跟随 "$prev"或"$next"表示方向
@@ -3689,7 +4170,6 @@ strLibraryCode);    // 读者所在的馆代码
                         foreach (string strFrom in this.PatronAdditionalFroms)
                         {
                             nRet = this.GetReaderRecXmlByFrom(
-                                // sessioninfo.Channels,
 channel,
 null,
 strBarcode,
@@ -4664,9 +5144,12 @@ out strError);
             }
             catch (Exception ex)
             {
+                string strErrorText = "MoveReaderInfo() 抛出异常:" + ExceptionUtil.GetDebugText(ex);
+                this.WriteErrorLog(strErrorText);
+
                 result.Value = -1;
                 result.ErrorCode = ErrorCode.SystemError;
-                result.ErrorInfo = "抛出异常:" + ex.Message;
+                result.ErrorInfo = strErrorText;
                 return result;
             }
             finally
@@ -4964,6 +5447,14 @@ out strError);
                     strError = "strBindID 参数值 '" + strBindingID + "' 不合法。应为 xxxx:xxxx 形态";
                     return -1;
                 }
+
+                // 2016/11/17
+                strLeft = strLeft.ToLower();
+                if (strLeft == "ip" || strLeft == "router_ip" || strLeft == "sms")
+                {
+                    strError = "strBindID 参数值 '" + strBindingID + "' 不合法。冒号左边的名称部分不能使用 '" + strLeft + "'，因为这是系统保留的绑定方式";
+                    return -1;
+                }
             }
 
             // 绑定工作人员账户
@@ -5005,16 +5496,19 @@ out strError);
                     if (nRet == -1 || nRet == 0)
                         return -1;
 
-                    nRet = LibraryServerUtil.MatchUserPassword(strPassword, account.Password, out strError);
-                    if (nRet == -1)
+                    if (strPassword != null)
                     {
-                        strError = "匹配过程出现错误";
-                        return -1;
-                    }
-                    if (nRet == 0)
-                    {
-                        strError = this.GetString("帐户不存在或密码不正确");
-                        return -1;
+                        nRet = LibraryServerUtil.MatchUserPassword(strPassword, account.Password, out strError);
+                        if (nRet == -1)
+                        {
+                            strError = "匹配过程出现错误";
+                            return -1;
+                        }
+                        if (nRet == 0)
+                        {
+                            strError = this.GetString("帐户不存在或密码不正确");
+                            return -1;
+                        }
                     }
                 }
 
@@ -5071,6 +5565,38 @@ out strError);
                     return 1;
 
                 return 0;
+            }
+
+            // 2016/9/27 允许使用 PQR
+            {
+                string strOutputCode = "";
+                // 把二维码字符串转换为读者证条码号
+                // parameters:
+                //      strReaderBcode  [out]读者证条码号
+                // return:
+                //      -1      出错
+                //      0       所给出的字符串不是读者证号二维码
+                //      1       成功      
+                nRet = this.DecodeQrCode(strQueryWord,
+                    out strOutputCode,
+                    out strError);
+                if (nRet == -1)
+                    return -1;
+                if (nRet == 1)
+                {
+                    // 对 strPassword 有要求
+                    // 要求提供一个 hash 字符串，增加一下使用这个方法的难度
+                    string strSHA1 = Cryptography.GetSHA1(strQueryWord);
+                    if (strPassword != strSHA1)
+                    {
+                        strError = "PQR 模式下，strPassword 参数不正确";
+                        return -1;
+                    }
+
+                    strPassword = null; // 后面不再检验读者密码
+
+                    strQueryWord = strOutputCode;
+                }
             }
 
             RmsChannel channel = sessioninfo.Channels.GetChannel(this.WsUrl);
@@ -5254,6 +5780,26 @@ out strError);
 
                 // 构造读者记录的返回格式
                 DomUtil.DeleteElement(readerdom.DocumentElement, "password");
+
+                // 2016/9/4
+                {
+                    string strLibraryCode = "";
+                    nRet = this.GetLibraryCode(strOutputPath,
+            out strLibraryCode,
+            out strError);
+                    if (nRet == -1)
+                        return -1;
+                    DomUtil.SetElementText(readerdom.DocumentElement, "libraryCode", strLibraryCode);
+                }
+
+                // 2016/12/2
+                // 在 readerdom 中去掉一些不必要的元素，以缩减记录尺寸
+                DomUtil.DeleteElement(readerdom.DocumentElement, "borrowHistory");
+                DomUtil.DeleteElement(readerdom.DocumentElement, "password");
+                DomUtil.DeleteElement(readerdom.DocumentElement, "fingerprint");
+                DomUtil.DeleteElement(readerdom.DocumentElement, "face");
+                DomUtil.DeleteElement(readerdom.DocumentElement, "borrows");
+
                 nRet = BuildReaderResults(
         sessioninfo,
         readerdom,
@@ -5318,32 +5864,6 @@ out strError);
             }
         }
 
-        // 从读者记录 email 元素值中获得 email 地址部分
-        public static string GetEmailAddress(string strValue)
-        {
-            if (string.IsNullOrEmpty(strValue))
-                return "";
-
-            // 注: email 元素内容，现在是存储 email 和微信号等多种绑定途径 2016/4/16
-            // return:
-            //      null    没有找到前缀
-            //      ""      找到了前缀，并且值部分为空
-            //      其他     返回值部分
-            string strReaderEmailAddress = StringUtil.GetParameterByPrefix(strValue,
-    "email",
-    ":");
-            // 读者记录中没有email地址，就无法进行email方式的通知了
-            if (String.IsNullOrEmpty(strReaderEmailAddress) == true)
-            {
-                // 按照以前的 xxxx@xxxx 方式探索一下
-                if (strValue.IndexOf(":") != -1 || strValue.IndexOf("@") == -1)
-                    return "";
-                return strValue;
-            }
-
-            return strReaderEmailAddress;
-        }
-
         // 在一个绑定信息字符串里面，找到一个特定的 xxxx:xxxx 部分的下标
         // return:
         //      -1  没有找到
@@ -5384,12 +5904,39 @@ out strError);
                 string strLine = s.Trim();
                 if (string.IsNullOrEmpty(strLine))
                     continue;
-                if (strLine == strBinding)
+                if (MatchBindingString(strLine, strBinding) == true)
                     continue;   // 忽视发现的号码
+
+                // 2016/11/14
+                if (string.IsNullOrEmpty(strBinding) == false && strBinding[0] == '@')
+                {
+                    if (StringUtil.RegexCompare(strBinding.Substring(1),
+    RegexOptions.None,
+    strLine) == true)
+                        continue;
+                }
+
                 results.Add(strLine);
             }
 
             return StringUtil.MakePathList(results);
+        }
+
+        // strText -- weixinid:12345678@单位名称
+        // strPattern -- weixinid:12345678@*
+        static bool MatchBindingString(string strText, string strPattern)
+        {
+            if (strText == strPattern)
+                return true;
+
+            if (string.IsNullOrEmpty(strPattern) == false && strPattern.EndsWith("*"))
+            {
+                string head = strPattern.Substring(0, strPattern.Length - 1);
+                if (strText.StartsWith(head))
+                    return true;
+            }
+
+            return false;
         }
 
     }

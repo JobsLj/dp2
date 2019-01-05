@@ -1,12 +1,10 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using System.Drawing;
-using System.Threading;
 using System.Diagnostics;
-
-using DigitalPlatform.GUI;
-// using DigitalPlatform.CommonControl;
+using System.Text;
+using DigitalPlatform.Text;
 
 namespace DigitalPlatform.Marc
 {
@@ -17,10 +15,10 @@ namespace DigitalPlatform.Marc
 #endif
         public bool ContentIsNull = false;
 
-        public int DisableFlush = 0;    // ÁÙÊ±½ûÖ¹flush
+        public int DisableFlush = 0;    // ä¸´æ—¶ç¦æ­¢flush
         MarcEditor m_marcEditor = null;
 
-        //ÊÇ·ñÊÇÌæ»»×´Ì¬
+        //æ˜¯å¦æ˜¯æ›¿æ¢çŠ¶æ€
         public bool Overwrite = false;
 
         public int nInMenu = 0;
@@ -28,7 +26,7 @@ namespace DigitalPlatform.Marc
         public bool m_bChanged = false;
 
         /// <summary>
-        /// ÄÚÈİÊÇ·ñ·¢Éú¹ıĞŞ¸Ä
+        /// å†…å®¹æ˜¯å¦å‘ç”Ÿè¿‡ä¿®æ”¹
         /// </summary>
         public bool Changed
         {
@@ -79,10 +77,10 @@ namespace DigitalPlatform.Marc
             }
         }
 
-        // »ñµÃÓĞ¹Ø²åÈë·ûËùÔÚµ±Ç°×Ó×Ö¶ÎµÄĞÅÏ¢
+        // è·å¾—æœ‰å…³æ’å…¥ç¬¦æ‰€åœ¨å½“å‰å­å­—æ®µçš„ä¿¡æ¯
         // return:
-        //      0   ²»ÔÚ×Ó×Ö¶ÎÉÏ
-        //      1   ÔÚ×Ó×Ö¶ÎÉÏ
+        //      0   ä¸åœ¨å­å­—æ®µä¸Š
+        //      1   åœ¨å­å­—æ®µä¸Š
         public static int GetCurrentSubfieldCaretInfo(
             string strFieldValue,
             int nCaretPos,
@@ -104,7 +102,7 @@ namespace DigitalPlatform.Marc
 
             int nEnd = strFieldValue.Length;
 
-            // Ïò×óÕÒµ½$·ûºÅ
+            // å‘å·¦æ‰¾åˆ°$ç¬¦å·
             for (int i = nCaretPos; i >= 0; i--)
             {
                 if (nCaretPos > strFieldValue.Length - 1)
@@ -112,7 +110,7 @@ namespace DigitalPlatform.Marc
 
                 char ch = strFieldValue[i];
 
-                // ÊÇ×Ó×Ö¶Î·ûºÅ
+                // æ˜¯å­å­—æ®µç¬¦å·
                 if (ch == Record.SUBFLD)
                 {
                     bFoundPrevDollar = true;
@@ -121,12 +119,12 @@ namespace DigitalPlatform.Marc
                 }
             }
 
-            // ÏòÓÒÕÒµ½$·ûºÅ
+            // å‘å³æ‰¾åˆ°$ç¬¦å·
             for (int i = nCaretPos + 1; i < strFieldValue.Length; i++)
             {
                 char ch = strFieldValue[i];
 
-                // ÊÇ×Ó×Ö¶Î·ûºÅ
+                // æ˜¯å­å­—æ®µç¬¦å·
                 if (ch == Record.SUBFLD)
                 {
                     nEnd = i;
@@ -148,12 +146,52 @@ namespace DigitalPlatform.Marc
             return 1;
         }
 
+        public void DupCurrentSubfield()
+        {
+            if (this.MarcEditor.m_nFocusCol != 3)
+                return;
+
+            string strSubfieldName = "";
+            string strSufieldContent = "";
+            int nStart = 0;
+            int nContentStart = 0;
+            int nContentLength = 0;
+
+            // è·å¾—æœ‰å…³æ’å…¥ç¬¦æ‰€åœ¨å½“å‰å­å­—æ®µçš„ä¿¡æ¯
+            // return:
+            //      0   ä¸åœ¨å­å­—æ®µä¸Š
+            //      1   åœ¨å­å­—æ®µä¸Š
+            int nRet = GetCurrentSubfieldCaretInfo(
+                this.Text,
+                this.SelectionStart,
+                out strSubfieldName,
+                out strSufieldContent,
+                out nStart,
+                out nContentStart,
+                out nContentLength);
+            if (nRet == 0)
+                return;
+
+            if (nContentStart >= 2)
+            {
+                nContentStart -= 2;
+                nContentLength += 2;
+            }
+
+            string strText = this.Text.Substring(nContentStart, nContentLength);
+            int nInsertPos = nContentStart + nContentLength;
+            this.Text = this.Text.Substring(0, nInsertPos) + strText + this.Text.Substring(nInsertPos);
+            this.SelectionStart = nContentStart;
+            this.SelectionLength = nContentLength;
+        }
+
+
         // return:
-        //      false   ĞèÒªÖ´ĞĞÈ±Ê¡´°¿Ú¹ı³Ì
-        //      true    ²»ÒªÖ´ĞĞÈ±Ê¡´°¿Ú¹ı³Ì¡£¼´ÏûÏ¢½Ó¹ÜÁË¡£
+        //      false   éœ€è¦æ‰§è¡Œç¼ºçœçª—å£è¿‡ç¨‹
+        //      true    ä¸è¦æ‰§è¡Œç¼ºçœçª—å£è¿‡ç¨‹ã€‚å³æ¶ˆæ¯æ¥ç®¡äº†ã€‚
         bool DoDoubleClick()
         {
-            // OnMouseDoubleClickÄÇÀï½Ó¹Ü²»ĞĞ¡£ÒòÎªÄÇÀïeditÔ­ÓĞ¶¯×÷ÒÑ¾­Ö´ĞĞ,this.SelectionStartÖµÒÑ¾­±»ÆÆ»µ
+            // OnMouseDoubleClické‚£é‡Œæ¥ç®¡ä¸è¡Œã€‚å› ä¸ºé‚£é‡ŒeditåŸæœ‰åŠ¨ä½œå·²ç»æ‰§è¡Œ,this.SelectionStartå€¼å·²ç»è¢«ç ´å
 
             if (this.MarcEditor.m_nFocusCol != 3)
                 return false;
@@ -164,10 +202,10 @@ namespace DigitalPlatform.Marc
             int nContentStart = 0;
             int nContentLength = 0;
 
-            // »ñµÃÓĞ¹Ø²åÈë·ûËùÔÚµ±Ç°×Ó×Ö¶ÎµÄĞÅÏ¢
+            // è·å¾—æœ‰å…³æ’å…¥ç¬¦æ‰€åœ¨å½“å‰å­å­—æ®µçš„ä¿¡æ¯
             // return:
-            //      0   ²»ÔÚ×Ó×Ö¶ÎÉÏ
-            //      1   ÔÚ×Ó×Ö¶ÎÉÏ
+            //      0   ä¸åœ¨å­å­—æ®µä¸Š
+            //      1   åœ¨å­å­—æ®µä¸Š
             int nRet = GetCurrentSubfieldCaretInfo(
                 this.Text,
                 this.SelectionStart,
@@ -185,9 +223,9 @@ namespace DigitalPlatform.Marc
         }
 
         /// <summary>
-        /// È±Ê¡´°¿Ú¹ı³Ì
+        /// ç¼ºçœçª—å£è¿‡ç¨‹
         /// </summary>
-        /// <param name="m">ÏûÏ¢</param>
+        /// <param name="m">æ¶ˆæ¯</param>
         protected override void DefWndProc(ref Message m)
         {
 
@@ -195,7 +233,7 @@ namespace DigitalPlatform.Marc
             {
 #if BIDI_SUPPORT
                 case WM_ADJUST_CARET:
-                    // ²åÈë·û±ÜÃâ´¦ÔÚ·½Ïò·ûºÅºÍ×Ó×Ö¶Î·ûºÅ(31)Ö®¼ä
+                    // æ’å…¥ç¬¦é¿å…å¤„åœ¨æ–¹å‘ç¬¦å·å’Œå­å­—æ®µç¬¦å·(31)ä¹‹é—´
                     if (this.SelectionLength == 0)
                     {
                         if (IsInForbiddenPos(this.SelectionStart) == true
@@ -205,7 +243,7 @@ namespace DigitalPlatform.Marc
                     return;
 #endif
 
-                    // ½ûÖ¹edit±¾ÉíµÄ²Ëµ¥
+                // ç¦æ­¢editæœ¬èº«çš„èœå•
                 case API.WM_RBUTTONDOWN:
                 case API.WM_RBUTTONUP:
                     {
@@ -218,7 +256,7 @@ namespace DigitalPlatform.Marc
                         uint nCurClickTime = API.GetMessageTime();
                         uint nDelta = nCurClickTime - this.MarcEditor.m_nLastClickTime;
 
-                        
+
 
                         int x = (int)((uint)m.LParam & 0x0000ffff);
                         int y = (int)(((uint)m.LParam >> 16) & 0x0000ffff);
@@ -252,7 +290,7 @@ namespace DigitalPlatform.Marc
 
                         if (nDelta < API.GetDoubleClickTime())
                         {
-                            // µÈÓÚË«»÷
+                            // ç­‰äºåŒå‡»
                             if (DoDoubleClick() == true)
                                 return;
                         }
@@ -265,103 +303,38 @@ namespace DigitalPlatform.Marc
                     }
                     break;
             }
-
-            /*
-            try
-            {
-             * */
-
-            base.DefWndProc(ref m);
-            /*
-            }
-            catch { }
-             * */
-        }
-
-        /*
-        // ½Ó¹Ü»Ø³µ¼ü£¬±ä³É¸øºóÃæĞÂÔö×Ö¶Î
-        // ¿ÉÒÔ¸ÄĞ´µ½OnKeyPressÖĞ?
-        /// <summary>
-        /// È±Ê¡´°¿Ú¹ı³Ì
-        /// </summary>
-        /// <param name="m">ÏûÏ¢</param>
-        protected override void DefWndProc(ref Message m)
-        {
-            switch (m.Msg)
-            {
-                case API.WM_CHAR:
-                    {
-                        int nKey =API.LoWord(m.WParam.ToInt32());
-                        switch (nKey)
-                        {
-                            case (int)Keys.Enter:
-                                {
-                                    // ºó²å×Ö¶Î
-                                    this.MarcEditor.InsertAfterFieldNoDlg();
-                                    return;
-                                }
-                            case (int)Keys.Back:
-                                {
-                                    if (this.Overwrite == true)
-                                    {
-                                        int nOldSelectionStart = this.SelectionStart;
-                                        if (nOldSelectionStart > 0)
-                                        {
-                                            this.Text = this.Text.Remove(nOldSelectionStart - 1, 1);
-
-                                            this.Text = this.Text.Insert(nOldSelectionStart - 1, " ");
-                                            this.SelectionStart = nOldSelectionStart - 1;
-                                            return;
-                                        }
-                                    }
-                                }
-                                break;
-                            default:
-                                {
-                                    if (this.Overwrite == true)
-                                    {
-                                        if ((Control.ModifierKeys == Keys.Control)
-                                            || Control.ModifierKeys == Keys.Shift
-                                            || Control.ModifierKeys == Keys.Alt)
-                                        {
-                                            break;
-                                        }
-                                        int nOldSelectionStart = this.SelectionStart;
-                                        if (nOldSelectionStart < this.Text.Length)
-                                        {
-                                            this.Text = this.Text.Remove(this.SelectionStart, 1);
-                                            this.SelectionStart = nOldSelectionStart;
-                                        }
-                                    }
-                                }
-                                break;
-                        }
-                    }
-                    break;
-            }
             base.DefWndProc(ref m);
         }
-         */
 
 
-        // ½Ó¹ÜCtrl+¸÷ÖÖ¼ü
+        bool _k = false;    // æ˜¯å¦åœ¨ Ctrl+K çŠ¶æ€
+
+        // æ¥ç®¡Ctrl+å„ç§é”®
         /// <summary>
-        /// ´¦Àí¶Ô»°¿ò¼ü
+        /// å¤„ç†å¯¹è¯æ¡†é”®
         /// </summary>
-        /// <param name="keyData">System.Windows.Forms.Keys ÖµÖ®Ò»£¬Ëü±íÊ¾Òª´¦ÀíµÄ¼ü¡£</param>
-        /// <returns>Èç¹û¿Ø¼ş´¦Àí²¢Ê¹ÓÃ»÷¼ü£¬ÔòÎª true£»·ñÔòÎª false£¬ÒÔÔÊĞí½øÒ»²½´¦Àí</returns>
+        /// <param name="keyData">System.Windows.Forms.Keys å€¼ä¹‹ä¸€ï¼Œå®ƒè¡¨ç¤ºè¦å¤„ç†çš„é”®ã€‚</param>
+        /// <returns>å¦‚æœæ§ä»¶å¤„ç†å¹¶ä½¿ç”¨å‡»é”®ï¼Œåˆ™ä¸º trueï¼›å¦åˆ™ä¸º falseï¼Œä»¥å…è®¸è¿›ä¸€æ­¥å¤„ç†</returns>
         protected override bool ProcessDialogKey(
             Keys keyData)
         {
-            // È¥µôControl/Shift/Alt ÒÔºóµÄ´¿¾»µÄ¼üÂë
+            // å»æ‰Control/Shift/Alt ä»¥åçš„çº¯å‡€çš„é”®ç 
             // 2008/11/30 changed
             Keys pure_key = (keyData & (~(Keys.Control | Keys.Shift | Keys.Alt)));
+
+
+            if (_k)
+            {
+                this.MarcEditor.DoCtrlK(pure_key);
+                _k = false;
+                return true;
+            }
 
             // Ctrl + M
             if (Control.ModifierKeys == Keys.Control
                 && pure_key == Keys.Enter)
             {
-                // ½ûÖ¹²åÈë»Ø³µ»»ĞĞ
+                // ç¦æ­¢æ’å…¥å›è½¦æ¢è¡Œ
                 return true;
             }
 
@@ -371,7 +344,7 @@ namespace DigitalPlatform.Marc
             {
                 MarcEditor.EditControlTextToItem();
 
-                // µ÷Ä£°å
+                // è°ƒæ¨¡æ¿
                 this.MarcEditor.GetValueFromTemplate();
                 return true;
             }
@@ -380,7 +353,7 @@ namespace DigitalPlatform.Marc
             if ((keyData & Keys.Control) == Keys.Control
                 && pure_key == Keys.C)
             {
-                this.Menu_Copy(null,null);
+                this.Menu_Copy(null, null);
                 return true;
             }
 
@@ -400,8 +373,16 @@ namespace DigitalPlatform.Marc
                 return true;
             }
 
+            // Ctrl + K
+            if ((keyData & Keys.Control) == Keys.Control
+                && pure_key == Keys.K)
+            {
+                _k = true;
+                return true;
+            }
+
             /*
-            // Ctrl + A ×Ô¶¯Â¼Èë¹¦ÄÜ
+            // Ctrl + A è‡ªåŠ¨å½•å…¥åŠŸèƒ½
             if ((keyData & Keys.Control) == Keys.Control
                 && (keyData & Keys.A) == Keys.A)
             {
@@ -413,10 +394,10 @@ namespace DigitalPlatform.Marc
                 }
             }*/
 
-            // Ctrl + A ×Ô¶¯Â¼Èë¹¦ÄÜ
-            // && (keyData & (~Keys.Control)) == Keys.A)   // 2007/5/15 ĞŞ¸Ä£¬Ô­À´µÄĞĞÊÇCTRL+CºÍCTRL+A¶¼Æğ×÷ÓÃ£¬CTRL+CÊÇ¸±×÷ÓÃ¡£
+            // Ctrl + A è‡ªåŠ¨å½•å…¥åŠŸèƒ½
+            // && (keyData & (~Keys.Control)) == Keys.A)   // 2007/5/15 ä¿®æ”¹ï¼ŒåŸæ¥çš„è¡Œæ˜¯CTRL+Cå’ŒCTRL+Aéƒ½èµ·ä½œç”¨ï¼ŒCTRL+Cæ˜¯å‰¯ä½œç”¨ã€‚
 
-            if (keyData == (Keys.A | Keys.Control) // ÕâÒ²ÊÇÒ»¸ö°ì·¨
+            if (keyData == (Keys.A | Keys.Control) // è¿™ä¹Ÿæ˜¯ä¸€ä¸ªåŠæ³•
                 || keyData == (Keys.A | Keys.Control | Keys.Alt))
             {
                 if (this.m_marcEditor != null)
@@ -427,7 +408,7 @@ namespace DigitalPlatform.Marc
                 }
             }
 
-            if (keyData == (Keys.Y | Keys.Control)) // ÕâÒ²ÊÇÒ»¸ö°ì·¨
+            if (keyData == (Keys.Y | Keys.Control)) // è¿™ä¹Ÿæ˜¯ä¸€ä¸ªåŠæ³•
             {
                 if (this.m_marcEditor != null)
                 {
@@ -438,9 +419,9 @@ namespace DigitalPlatform.Marc
             }
 
             /*
-            // Ctrl + T ²âÊÔ
+            // Ctrl + T æµ‹è¯•
             if ((keyData & Keys.Control) == Keys.Control
-                && (keyData & (~Keys.Control)) == Keys.T)   // 2008/11/30 ĞŞ¸Ä£¬Ô­À´µÄĞĞÊÇCTRL+CºÍCTRL+A¶¼Æğ×÷ÓÃ£¬CTRL+CÊÇ¸±×÷ÓÃ¡£
+                && (keyData & (~Keys.Control)) == Keys.T)   // 2008/11/30 ä¿®æ”¹ï¼ŒåŸæ¥çš„è¡Œæ˜¯CTRL+Cå’ŒCTRL+Aéƒ½èµ·ä½œç”¨ï¼ŒCTRL+Cæ˜¯å‰¯ä½œç”¨ã€‚
                 // && (keyData & Keys.T) == Keys.T)
             {
                 if (this.m_marcEditor != null)
@@ -451,7 +432,7 @@ namespace DigitalPlatform.Marc
                 }
             }*/
 
-            // ÆäÓàÎ´´¦ÀíµÄ¼ü
+            // å…¶ä½™æœªå¤„ç†çš„é”®
             if ((keyData & Keys.Control) == Keys.Control)
             {
                 bool bRet = this.MarcEditor.OnControlLetterKeyPress(pure_key);
@@ -459,11 +440,10 @@ namespace DigitalPlatform.Marc
                     return true;
             }
 
-            // 2008/11/30 changed
-            return base.ProcessDialogKey(keyData);  // return false
+            return base.ProcessDialogKey(keyData);
         }
 
-        // Ê§È¥½¹µãÊ±£¬Ó¦°ÑÄÚÈİ»¹»ØÈ¥
+        // å¤±å»ç„¦ç‚¹æ—¶ï¼Œåº”æŠŠå†…å®¹è¿˜å›å»
         protected override void OnLostFocus(EventArgs e)
         {
             // 2008/6/4
@@ -479,7 +459,7 @@ namespace DigitalPlatform.Marc
             base.OnLostFocus(e);
         }
 
-        // »ñµÃ½¹µã£¬½ûÖ¹È«Ñ¡
+        // è·å¾—ç„¦ç‚¹ï¼Œç¦æ­¢å…¨é€‰
         protected override void OnGotFocus(EventArgs e)
         {
             base.OnGotFocus(e);
@@ -501,7 +481,7 @@ namespace DigitalPlatform.Marc
             }
         }
 
-        // ¾í¹ö
+        // å·æ»š
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
@@ -511,19 +491,19 @@ namespace DigitalPlatform.Marc
             this.MarcEditor.DocumentOrgY += numberOfPixelsToMove;
         }
 
-        #region ÓÒ¼ü²Ëµ¥
+        #region å³é”®èœå•
 
         // parameters:
-        //      nActiveCol  µ±Ç°»î¶¯µÄÁĞ
+        //      nActiveCol  å½“å‰æ´»åŠ¨çš„åˆ—
         public void PopupMenu(Control control,
             Point p)
         {
             ContextMenu contextMenu = new ContextMenu();
             MenuItem menuItem;
 
-            // È±Ê¡Öµ
+            // ç¼ºçœå€¼
             Cursor oldcursor = this.Cursor;
-            this.Cursor = Cursors.WaitCursor;   // ³öÏÖÉ³Â©
+            this.Cursor = Cursors.WaitCursor;   // å‡ºç°æ²™æ¼
 
             List<string> macros = this.MarcEditor.SetDefaultValue(true, -1);
 
@@ -531,14 +511,14 @@ namespace DigitalPlatform.Marc
 
             string strText = "";
             if (macros == null || macros.Count == 0)
-                strText = "È±Ê¡Öµ(ÎŞ)";
+                strText = "ç¼ºçœå€¼(æ— )";
             else if (macros.Count == 1)
             {
                 Debug.Assert(macros != null, "");
-                strText = "È±Ê¡Öµ '" + macros[0].Replace(" ", "_").Replace(Record.SUBFLD, Record.KERNEL_SUBFLD) + "'";
+                strText = "ç¼ºçœå€¼ '" + macros[0].Replace(" ", "_").Replace(Record.SUBFLD, Record.KERNEL_SUBFLD) + "'";
             }
             else
-                strText = "È±Ê¡Öµ " + macros.Count.ToString() + " ¸ö";
+                strText = "ç¼ºçœå€¼ " + macros.Count.ToString() + " ä¸ª";
 
             menuItem = new MenuItem(strText);
             // menuItem.Click += new System.EventHandler(this.MarcEditor.SetCurFirstDefaultValue);
@@ -550,7 +530,7 @@ namespace DigitalPlatform.Marc
             }
             else if (macros != null && macros.Count > 1)
             {
-                // ×Ó²Ëµ¥
+                // å­èœå•
                 for (int i = 0; i < macros.Count; i++)
                 {
                     string strMenuText = macros[i];
@@ -569,8 +549,8 @@ namespace DigitalPlatform.Marc
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
 
-            // ³·Ïû
-            menuItem = new MenuItem("³·Ïû(&U)");
+            // æ’¤æ¶ˆ
+            menuItem = new MenuItem("æ’¤æ¶ˆ(&U)");
             menuItem.Click += new System.EventHandler(this.Menu_Undo);
             contextMenu.MenuItems.Add(menuItem);
             if (this.CanUndo == true)
@@ -582,8 +562,8 @@ namespace DigitalPlatform.Marc
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
 
-            // ¼ôÇĞ
-            menuItem = new MenuItem("¼ôÇĞ(&I)");
+            // å‰ªåˆ‡
+            menuItem = new MenuItem("å‰ªåˆ‡(&I)");
             menuItem.Click += new System.EventHandler(this.Menu_Cut);
             contextMenu.MenuItems.Add(menuItem);
             if (this.SelectionLength > 0)
@@ -591,8 +571,8 @@ namespace DigitalPlatform.Marc
             else
                 menuItem.Enabled = false;
 
-            // ¸´ÖÆ
-            menuItem = new MenuItem("¸´ÖÆ(&C)");
+            // å¤åˆ¶
+            menuItem = new MenuItem("å¤åˆ¶(&C)");
             menuItem.Click += new System.EventHandler(this.Menu_Copy);
             contextMenu.MenuItems.Add(menuItem);
             if (this.SelectionLength > 0)
@@ -600,17 +580,21 @@ namespace DigitalPlatform.Marc
             else
                 menuItem.Enabled = false;
 
-            // Õ³Ìù
-            menuItem = new MenuItem("Õ³Ìù(&P)");
+            // ç²˜è´´
+            menuItem = new MenuItem("ç²˜è´´(&P)");
             menuItem.Click += new System.EventHandler(this.Menu_Paste);
             contextMenu.MenuItems.Add(menuItem);
-            if (Clipboard.GetDataObject().GetDataPresent(DataFormats.Text) == true)
-                menuItem.Enabled = true;
-            else
-                menuItem.Enabled = false;
 
-            // É¾³ı
-            menuItem = new MenuItem("É¾³ı(&D)");
+            StringUtil.RunClipboard(() =>
+            {
+                if (Clipboard.GetDataObject().GetDataPresent(DataFormats.Text) == true)
+                    menuItem.Enabled = true;
+                else
+                    menuItem.Enabled = false;
+            });
+
+            // åˆ é™¤
+            menuItem = new MenuItem("åˆ é™¤(&D)");
             menuItem.Click += new System.EventHandler(this.Menu_Delete);
             contextMenu.MenuItems.Add(menuItem);
             if (this.SelectionLength > 0)
@@ -622,8 +606,8 @@ namespace DigitalPlatform.Marc
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
 
-            // È«Ñ¡
-            menuItem = new MenuItem("È«Ñ¡(&A)");
+            // å…¨é€‰
+            menuItem = new MenuItem("å…¨é€‰(&A)");
             menuItem.Click += new System.EventHandler(this.Menu_SelectAll);
             contextMenu.MenuItems.Add(menuItem);
             if (this.Text != "")
@@ -635,13 +619,13 @@ namespace DigitalPlatform.Marc
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
 
-            // ¶¨³¤Ä£°å
+            // å®šé•¿æ¨¡æ¿
             string strCurName = "";
             bool bEnable = this.MarcEditor.HasTemplateOrValueListDef(
                 "template",
                 out strCurName);
 
-            menuItem = new MenuItem("¶¨³¤Ä£°å(Ctrl+M) " + strCurName);
+            menuItem = new MenuItem("å®šé•¿æ¨¡æ¿(Ctrl+M) " + strCurName);
             menuItem.Click += new System.EventHandler(this.MarcEditor.GetValueFromTemplate);
             contextMenu.MenuItems.Add(menuItem);
             if (this.MarcEditor.SelectedFieldIndices.Count == 1
@@ -650,12 +634,12 @@ namespace DigitalPlatform.Marc
             else
                 menuItem.Enabled = false;
 
-            // ÖµÁĞ±í
+            // å€¼åˆ—è¡¨
             bEnable = this.MarcEditor.HasTemplateOrValueListDef(
                 "valuelist",
                 out strCurName);
 
-            menuItem = new MenuItem("ÖµÁĞ±í " + strCurName);
+            menuItem = new MenuItem("å€¼åˆ—è¡¨ " + strCurName);
             menuItem.Click += new System.EventHandler(this.MarcEditor.GetValueFromValueList);
             contextMenu.MenuItems.Add(menuItem);
             if (this.MarcEditor.SelectedFieldIndices.Count == 1
@@ -665,7 +649,7 @@ namespace DigitalPlatform.Marc
                 menuItem.Enabled = false;
 
 #if NO
-            // ²âÊÔ
+            // æµ‹è¯•
             menuItem = new MenuItem("IMEMODE");
             menuItem.Click += new System.EventHandler(this.ShowImeMode);
             contextMenu.MenuItems.Add(menuItem);
@@ -676,8 +660,8 @@ namespace DigitalPlatform.Marc
             menuItem = new MenuItem("-");
             contextMenu.MenuItems.Add(menuItem);
 
-            // É¾³ı×Ö¶Î
-            menuItem = new MenuItem("É¾³ı×Ö¶Î");
+            // åˆ é™¤å­—æ®µ
+            menuItem = new MenuItem("åˆ é™¤å­—æ®µ");
             menuItem.Click += new System.EventHandler(this.MarcEditor.DeleteFieldWithDlg);
             contextMenu.MenuItems.Add(menuItem);
             if (this.MarcEditor.m_nFocusCol == 1 || this.MarcEditor.m_nFocusCol == 2)
@@ -686,7 +670,7 @@ namespace DigitalPlatform.Marc
                 menuItem.Enabled = false;
              */
 
-            // ×·¼ÓÆäËû²Ëµ¥Ïî
+            // è¿½åŠ å…¶ä»–èœå•é¡¹
             if (this.MarcEditor != null)
             {
                 //--------------
@@ -710,7 +694,7 @@ namespace DigitalPlatform.Marc
             {
                 string strText = this.SelectedText;
                 strText = strText.Replace(Record.KERNEL_SUBFLD, Record.SUBFLD);
-                DigitalPlatform.Marc.MarcEditor.TextToClipboard(strText);
+                DigitalPlatform.Marc.MarcEditor.TextToClipboardFormat(strText);
 
                 //this.Copy();
             }
@@ -725,15 +709,15 @@ namespace DigitalPlatform.Marc
 
                 this.Cut();
 
-                DigitalPlatform.Marc.MarcEditor.TextToClipboard(strText);
+                DigitalPlatform.Marc.MarcEditor.TextToClipboardFormat(strText);
 
-                // ×Ö¶ÎÃû£¬È·±£3×Ö·û
+                // å­—æ®µåï¼Œç¡®ä¿3å­—ç¬¦
                 if (this.MarcEditor.m_nFocusCol == 1)
                 {
                     if (this.Text.Length < 3)
                         this.Text = this.Text.PadRight(3, ' ');
                 }
-                // ×Ö¶ÎÖ¸Ê¾·û£¬È·±£2×Ö·û
+                // å­—æ®µæŒ‡ç¤ºç¬¦ï¼Œç¡®ä¿2å­—ç¬¦
                 else if (this.MarcEditor.m_nFocusCol == 2)
                 {
                     if (this.Text.Length < 2)
@@ -744,30 +728,97 @@ namespace DigitalPlatform.Marc
             }
         }
 
+        public void PasteToCurrent(string strText)
+        {
+            if (string.IsNullOrEmpty(strText) == false)
+            {
+                int nPos = this.SelectionStart;
+                if (this.SelectionLength != 0)
+                    this.Text = this.Text.Remove(nPos, this.SelectionLength);
+                this.Text = this.Text.Insert(nPos, strText);
+                this.SelectionStart = nPos;
+                this.SelectionLength = strText.Length;
+            }
+        }
+
+        // ç§»èµ° $a åé¢çš„ä¸€ä¸ªç©ºæ ¼
+        static string RemoveBlankChar(string strText)
+        {
+            int step = -1;  // è¡¨ç¤ºå½“å‰ char è·ç¦» $ å­—ç¬¦çš„æ­¥é•¿ã€‚0 è¡¨ç¤ºæ­£å¥½åœ¨ $a çš„ $ ä¸Šï¼Œ1 è¡¨ç¤ºåœ¨ $a çš„ a ä¸Šï¼Œ2ï¼Œè¡¨ç¤ºåœ¨ a åé¢ä¸€ä¸ªå­—ç¬¦ä¸Š
+            StringBuilder result = new StringBuilder();
+            foreach (char ch in strText)
+            {
+                if (ch == Record.KERNEL_SUBFLD)
+                    step = 0;
+                else if (step != -1)
+                    step++;
+
+                if (step == 2 && ch == ' ')
+                {
+                    // è¶Šè¿‡
+                }
+                else
+                    result.Append(ch);
+            }
+
+            // å»é™¤ $ å‰é¢çš„ä¸€ä¸ªç©ºæ ¼
+            for (int i = result.Length - 1; i >= 0; i--)
+            {
+                if (i - 1 >= 0
+                    && result[i] == Record.KERNEL_SUBFLD
+                    && result[i - 1] == ' ')
+                {
+                    result.Remove(i - 1, 1);
+                    // i--;
+                }
+            }
+
+            return result.ToString();
+        }
+
         private void Menu_Paste(System.Object sender, System.EventArgs e)
         {
-            // Determine if there is any text in the Clipboard to paste into the text box.
-            if (Clipboard.GetDataObject().GetDataPresent(DataFormats.Text) == true)
-            {
-                // °Ñ×Ó×Ö¶Î·ûºÅ»»Ò»ÏÂ
-                string strText = DigitalPlatform.Marc.MarcEditor.ClipboardToText();
+            bool bControl = Control.ModifierKeys == Keys.Control;
 
-                // È¥µô»Ø³µ»»ĞĞ·ûºÅ
+            string strText = MarcEditor.ClipboardToTextFormat();
+
+            // Determine if there is any text in the Clipboard to paste into the text box.
+            // if (Clipboard.GetDataObject().GetDataPresent(DataFormats.Text) == true)
+            if (strText != null)
+            {
+                // æŠŠå­å­—æ®µç¬¦å·æ¢ä¸€ä¸‹
+                //string strText = DigitalPlatform.Marc.MarcEditor.ClipboardToText();
+                //if (strText == null)
+                //    strText = "";
+
+                // å»æ‰å›è½¦æ¢è¡Œç¬¦å·
                 strText = strText.Replace("\r\n", "\r");
                 strText = strText.Replace("\r", "*");
                 strText = strText.Replace("\n", "*");
                 strText = strText.Replace("\t", "*");
 
-                Debug.Assert(this.MarcEditor.SelectedFieldIndices.Count == 1, "Menu_Paste(),MarcEditor.SelectedFieldIndices±ØĞëÎª1¡£");
+                // 2017/2/20
+                strText = strText.Replace(Record.SUBFLD, Record.KERNEL_SUBFLD);
+
+                if (bControl)
+                {
+                    strText = strText.Replace('|', Record.KERNEL_SUBFLD);
+                    // strText = strText.Replace(" ", "");
+                    strText = RemoveBlankChar(strText);
+                }
+
+                Debug.Assert(this.MarcEditor.SelectedFieldIndices.Count == 1, "Menu_Paste(),MarcEditor.SelectedFieldIndiceså¿…é¡»ä¸º1ã€‚");
 
                 string strFieldsMarc = strText;
-                // ÏÈÕÒµ½ÓĞ¼¸¸ö×Ö¶Î
-                strFieldsMarc = strFieldsMarc.Replace(Record.SUBFLD, Record.KERNEL_SUBFLD);
+                // strFieldsMarc = strFieldsMarc.Replace(Record.SUBFLD, Record.KERNEL_SUBFLD);
+
+                // å…ˆæ‰¾åˆ°æœ‰å‡ ä¸ªå­—æ®µ
+
                 List<string> fields = Record.GetFields(strFieldsMarc);
                 if (fields == null || fields.Count == 0)
                     return;
 
-                // Õ³ÌùÄÚÈİ
+                // ç²˜è´´å†…å®¹
                 if (fields.Count == 1)
                 {
                     string strThisText = fields[0];
@@ -787,42 +838,42 @@ namespace DigitalPlatform.Marc
 
                     this.SelectionStart = nOldSelectionStart + strThisText.Length;
 
-                    // ×Ö¶ÎÃû£¬È·±£3×Ö·û
+                    // å­—æ®µåï¼Œç¡®ä¿3å­—ç¬¦
                     if (this.MarcEditor.m_nFocusCol == 1)
                     {
                         if (this.Text.Length > 3)
                             this.Text = this.Text.Substring(0, 3);
                     }
-                    // ×Ö¶ÎÖ¸Ê¾·û£¬È·±£2×Ö·û
+                    // å­—æ®µæŒ‡ç¤ºç¬¦ï¼Œç¡®ä¿2å­—ç¬¦
                     else if (this.MarcEditor.m_nFocusCol == 2)
                     {
                         if (this.Text.Length > 2)
                             this.Text = this.Text.Substring(0, 2);
                     }
 
-                    this.MarcEditor.Flush();    // ´ÙÊ¹Í¨ÖªÍâ½ç
+                    this.MarcEditor.Flush();    // ä¿ƒä½¿é€šçŸ¥å¤–ç•Œ
                 }
                 else if (fields.Count > 1)
                 {
                     List<string> addFields = new List<string>();
-                    // Ë¦µôµÚÒ»¸ö i = 1
+                    // ç”©æ‰ç¬¬ä¸€ä¸ª i = 1
                     for (int i = 0; i < fields.Count; i++)
                     {
                         addFields.Add(fields[i]);
                     }
 
                     int nIndex = this.MarcEditor.FocusedFieldIndex;
-                    Debug.Assert(nIndex >= 0 && nIndex < this.MarcEditor.Record.Fields.Count, "Menu_Paste()£¬FocusFieldIndexÔ½½ç¡£");
+                    Debug.Assert(nIndex >= 0 && nIndex < this.MarcEditor.Record.Fields.Count, "Menu_Paste()ï¼ŒFocusFieldIndexè¶Šç•Œã€‚");
                     int nStartIndex = nIndex + 1;
                     int nNewFieldsCount = addFields.Count;
 
                     this.MarcEditor.Record.Fields.InsertInternal(nStartIndex,
                         addFields);
 
-                    // °Ñ½¹µãÉèÎª×îºóÒ»ÏîÉÏ
-                    Debug.Assert(nStartIndex + nNewFieldsCount <= this.MarcEditor.Record.Fields.Count, "²»¿ÉÄÜµÄÇé¿ö");
+                    // æŠŠç„¦ç‚¹è®¾ä¸ºæœ€åä¸€é¡¹ä¸Š
+                    Debug.Assert(nStartIndex + nNewFieldsCount <= this.MarcEditor.Record.Fields.Count, "ä¸å¯èƒ½çš„æƒ…å†µ");
 
-                    // °ÑĞÂ×Ö¶ÎÖĞµÄ×îºóÒ»¸ö×Ö¶ÎÉèÎªµ±Ç°×Ö¶Î
+                    // æŠŠæ–°å­—æ®µä¸­çš„æœ€åä¸€ä¸ªå­—æ®µè®¾ä¸ºå½“å‰å­—æ®µ
                     this.MarcEditor.SetActiveField(nStartIndex + nNewFieldsCount - 1, 3);
 
                     InvalidateRect iRect = new InvalidateRect();
@@ -844,13 +895,13 @@ namespace DigitalPlatform.Marc
                 this.Text = this.Text.Remove(this.SelectionStart, this.SelectionLength);
                 this.SelectionStart = nStart;
 
-                // ×Ö¶ÎÃû£¬È·±£3×Ö·û
+                // å­—æ®µåï¼Œç¡®ä¿3å­—ç¬¦
                 if (this.MarcEditor.m_nFocusCol == 1)
                 {
                     if (this.Text.Length < 3)
                         this.Text = this.Text.PadRight(3, ' ');
                 }
-                // ×Ö¶ÎÖ¸Ê¾·û£¬È·±£2×Ö·û
+                // å­—æ®µæŒ‡ç¤ºç¬¦ï¼Œç¡®ä¿2å­—ç¬¦
                 else if (this.MarcEditor.m_nFocusCol == 2)
                 {
                     if (this.Text.Length < 2)
@@ -878,10 +929,8 @@ namespace DigitalPlatform.Marc
 
         #endregion
 
-
         protected override void OnMouseUp(MouseEventArgs e)
         {
-
             base.OnMouseUp(e);
         }
 
@@ -906,7 +955,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
             base.OnMouseDown(e);
 
             /*
-             * ÔİÊ±×¢ÊÍµô xietao
+             * æš‚æ—¶æ³¨é‡Šæ‰ xietao
 
             POINT point = new POINT();
             point.x = 0;
@@ -917,31 +966,64 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                 20,
                 30);
             // parameter:
-            //		nCol	ÁĞºÅ 
-            //				0 ×Ö¶ÎËµÃ÷;
-            //				1 ×Ö¶ÎÃû;
-            //				2 ×Ö¶ÎÖ¸Ê¾·û 
-            //				3 ×Ö¶ÎÄÚ²¿
+            //		nCol	åˆ—å· 
+            //				0 å­—æ®µè¯´æ˜;
+            //				1 å­—æ®µå;
+            //				2 å­—æ®µæŒ‡ç¤ºç¬¦ 
+            //				3 å­—æ®µå†…éƒ¨
             this.MarcEditor.EnsureVisible(this.MarcEditor.FocusedFieldIndex,
                 3,
                 rect);
              */
         }
 
+        /*
+å†…å®¹ å‘ç”Ÿæœªæ•è·çš„ç•Œé¢çº¿ç¨‹å¼‚å¸¸: 
+Type: System.ArgumentOutOfRangeException
+Message: ç´¢å¼•å’Œè®¡æ•°å¿…é¡»å¼•ç”¨è¯¥å­—ç¬¦ä¸²å†…çš„ä½ç½®ã€‚
+å‚æ•°å: count
+Stack:
+åœ¨ System.String.RemoveInternal(Int32 startIndex, Int32 count)
+åœ¨ System.String.Remove(Int32 startIndex, Int32 count)
+åœ¨ DigitalPlatform.Marc.MyEdit.OnKeyPress(KeyPressEventArgs e)
+åœ¨ System.Windows.Forms.Control.ProcessKeyEventArgs(Message& m)
+åœ¨ System.Windows.Forms.Control.ProcessKeyMessage(Message& m)
+åœ¨ System.Windows.Forms.Control.WmKeyChar(Message& m)
+åœ¨ System.Windows.Forms.Control.WndProc(Message& m)
+åœ¨ System.Windows.Forms.TextBoxBase.WndProc(Message& m)
+åœ¨ System.Windows.Forms.TextBox.WndProc(Message& m)
+åœ¨ System.Windows.Forms.Control.ControlNativeWindow.OnMessage(Message& m)
+åœ¨ System.Windows.Forms.Control.ControlNativeWindow.WndProc(Message& m)
+åœ¨ System.Windows.Forms.NativeWindow.Callback(IntPtr hWnd, Int32 msg, IntPtr wparam, IntPtr lparam)
+
+
+dp2Circulation ç‰ˆæœ¬: dp2Circulation, Version=2.30.6506.29202, Culture=neutral, PublicKeyToken=null
+æ“ä½œç³»ç»Ÿï¼šMicrosoft Windows NT 6.1.7601 Service Pack 1
+æœ¬æœº MAC åœ°å€: xxx 
+æ“ä½œæ—¶é—´ 2017/10/26 9:28:53 (Thu, 26 Oct 2017 09:28:53 +0800) 
+         * * */
         protected override void OnKeyPress(KeyPressEventArgs e)
         {
+            _k = false;
             switch (e.KeyChar)
             {
+                case '#':
+                    if (this.m_marcEditor.m_nFocusCol == 1)
+                    {
+                        e.Handled = true;
+                        Console.Beep(); // è¡¨ç¤ºæ‹’ç»äº†è¾“å…¥çš„å­—ç¬¦
+                        return;
+                    }
+                    break;
                 case '\\':
                     {
                         if (this.m_marcEditor.m_nFocusCol != 3)
                             break;
 
-                        // ÎªºÎ²»Æğ×÷ÓÃ?
-                        // Ctrl + \ »¹ÊÇÊäÈë \
+                        // ä¸ºä½•ä¸èµ·ä½œç”¨?
+                        // Ctrl + \ è¿˜æ˜¯è¾“å…¥ \
                         if (Control.ModifierKeys == Keys.Control)
                             break;
-
 
                         int nOldStart = this.SelectionStart;
 
@@ -979,11 +1061,11 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         }
                         else
                         {
-                            // ºó²å×Ö¶Î
+                            // åæ’å­—æ®µ
                             // this.MarcEditor.InsertAfterFieldWithoutDlg();
 
                             // parameters:
-                            //      nAutoComplate   0: false; 1: true; -1:±£³Öµ±Ç°¼ÇÒä×´Ì¬
+                            //      nAutoComplate   0: false; 1: true; -1:ä¿æŒå½“å‰è®°å¿†çŠ¶æ€
                             this.MarcEditor.InsertField(this.MarcEditor.FocusedFieldIndex, 0, 1);   // false, true
                         }
                         e.Handled = true;
@@ -997,7 +1079,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                             Console.Beep();
                             return;
 
-                            /* Õâ¸ö¹¦ÄÜ±¾À´²»´í£¬µ«ÊÇ±»½ûÖ¹ÁË
+                            /* è¿™ä¸ªåŠŸèƒ½æœ¬æ¥ä¸é”™ï¼Œä½†æ˜¯è¢«ç¦æ­¢äº†
                             int nOldSelectionStart = this.SelectionStart;
                             if (nOldSelectionStart > 0)
                             {
@@ -1011,28 +1093,39 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         }
 
 #if BIDI_SUPPORT
-                            int nStart = this.SelectionStart - 1;
+                        int nStart = this.SelectionStart - 1;
                         if (this.SelectionLength == 0
                             && nStart > 0)
                         {
-                            // Èç¹ûÉ¾³ıµÄÕıºÃÊÇ·½Ïò×Ö·û
-                            if (this.Text[nStart] == 0x200e
-                                && this.Text.Length >= nStart + 1 + 1)
+                            // ä¸ºè°ƒè¯•å‡†å¤‡çš„ä¿¡æ¯
+                            string strDebugInfo = "åˆ é™¤å‰çš„ text [" + this.Text + "] hex[" + GetTextHex(this.Text) + "], nStart=" + nStart + ", this.Text.Length=" + this.Text.Length;
+
+                            try
                             {
-                                // Ò»Í¬É¾³ı
-                                this.Text = this.Text.Remove(nStart-1, 2);
-                                this.SelectionStart = nStart-1;
-                                // 2011/12/5 ÉÏÃæÁ½ĞĞÔø¾­ÓĞBUG
-                                e.Handled = true;
+                                // å¦‚æœåˆ é™¤çš„æ­£å¥½æ˜¯æ–¹å‘å­—ç¬¦ï¼Œé‚£ä¹ˆä¹Ÿè¦è¿½åŠ åˆ é™¤å…¶å·¦æ–¹ä¸€ä¸ªæ™®é€šå­—ç¬¦
+                                if (this.Text[nStart] == 0x200e)    // && this.Text.Length >= nStart + 1 + 1
+                                {
+                                    // ä¸€åŒåˆ é™¤
+                                    this.Text = this.Text.Remove(
+                                        nStart - 1,
+                                        2);
+                                    this.SelectionStart = nStart - 1;
+                                    // 2011/12/5 ä¸Šé¢ä¸¤è¡Œæ›¾ç»æœ‰BUG
+                                    e.Handled = true;
+                                }
+                                // å¦‚æœåˆ é™¤ä½ç½®çš„å·¦æ–¹æ­£å¥½æ˜¯æ–¹å‘å­—ç¬¦ï¼Œä¹Ÿè¦ä¸€å¹¶åˆ é™¤
+                                else if (nStart > 0
+                                    && this.Text[nStart - 1] == 0x200e)
+                                {
+                                    // ä¸€åŒåˆ é™¤
+                                    this.Text = this.Text.Remove(nStart - 1, 2);
+                                    this.SelectionStart = nStart - 1;
+                                    e.Handled = true;
+                                }
                             }
-                            // Èç¹ûÉ¾³ıÎ»ÖÃµÄ×ó·½ÕıºÃÊÇ·½Ïò×Ö·û
-                            else if (nStart > 0
-                                && this.Text[nStart - 1] == 0x200e)
+                            catch (ArgumentOutOfRangeException ex)
                             {
-                                // Ò»Í¬É¾³ı
-                                this.Text = this.Text.Remove(nStart - 1, 2);
-                                this.SelectionStart = nStart - 1;
-                                e.Handled = true;
+                                throw new Exception("Backspace å‘ç”Ÿå¼‚å¸¸:" + strDebugInfo, ex);
                             }
                         }
 #endif
@@ -1052,31 +1145,48 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                             int nOldSelectionStart = this.SelectionStart;
                             if (nOldSelectionStart < this.Text.Length)
                             {
-                                /*
-                                if (this.Text.Length >= this.MaxLength - 1) // 2008/12/18
-                                {
-                                    this.Text = this.Text.Remove(this.SelectionStart, 1);
-                                    this.SelectionStart = nOldSelectionStart;
-                                }
-                                 * */
                                 if (this.Text.Length >= this.MaxLength) // 2009/3/6 changed
                                 {
-                                    this.Text = this.Text.Remove(this.SelectionStart, 1 + (this.Text.Length - this.MaxLength));
-                                    this.SelectionStart = nOldSelectionStart;
-                                }
+                                    // ä¸ºè°ƒè¯•å‡†å¤‡çš„ä¿¡æ¯
+                                    string strDebugInfo = "åˆ é™¤å‰çš„ text [" + this.Text + "] hex[" + GetTextHex(this.Text) + "], this.MaxLength=" + this.MaxLength + ", this.Text.Length=" + this.Text.Length;
 
+                                    try
+                                    {
+                                        this.Text = this.Text.Remove(this.SelectionStart, 1 + (this.Text.Length - this.MaxLength));
+                                        this.SelectionStart = nOldSelectionStart;
+                                    }
+                                    catch (ArgumentOutOfRangeException ex)
+                                    {
+                                        throw new Exception("default overwrite å‘ç”Ÿå¼‚å¸¸:" + strDebugInfo, ex);
+                                    }
+                                }
+                                this.ContentIsNull = false; // 2017/1/15 é˜²æ­¢é¦–æ¬¡åœ¨ MyEdit ä¸­è¾“å…¥æ— æ³•å…‘ç°åˆ°å†…å­˜
                             }
                             else
                             {
-                                Console.Beep(); // ±íÊ¾¾Ü¾øÁËÊäÈëµÄ×Ö·û
+                                Console.Beep(); // è¡¨ç¤ºæ‹’ç»äº†è¾“å…¥çš„å­—ç¬¦
                             }
                         }
                     }
                     break;
-
             }
 
             base.OnKeyPress(e);
+        }
+
+        static string GetTextHex(string strText)
+        {
+            StringBuilder result = new StringBuilder();
+            int i = 0;
+            foreach (char ch in strText)
+            {
+                string strHex = Convert.ToString(ch, 16).PadLeft(2, '0');
+
+                result.Append(i.ToString() + ":" + strHex + ",");
+                i++;
+            }
+
+            return result.ToString();
         }
 
 #if BIDI_SUPPORT
@@ -1101,7 +1211,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
             char left = this.Text[index - 1];
             char current = this.Text[index];
 
-            // ²åÈë·û±ÜÃâ´¦ÔÚ·½Ïò·ûºÅºÍ×Ó×Ö¶Î·ûºÅ(31)
+            // æ’å…¥ç¬¦é¿å…å¤„åœ¨æ–¹å‘ç¬¦å·å’Œå­å­—æ®µç¬¦å·(31)
             if (left == 0x200e && current == Record.KERNEL_SUBFLD)
                 return true;
 
@@ -1110,7 +1220,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
         }
 #endif
 
-        // °´ÏÂ¼ü
+        // æŒ‰ä¸‹é”®
         protected override void OnKeyDown(KeyEventArgs e)
         {
             switch (e.KeyCode)
@@ -1122,7 +1232,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         API.GetEditCurrentCaretPos(this,
                             out x,
                             out y);
-                        if (y == 0 && this.MarcEditor.FocusedFieldIndex != 0)		// ËäÈ»ÏÖÔÚÊÇ0£¬µ«ÊÇÂíÉÏ»áÊÇ-1
+                        if (y == 0 && this.MarcEditor.FocusedFieldIndex != 0)		// è™½ç„¶ç°åœ¨æ˜¯0ï¼Œä½†æ˜¯é©¬ä¸Šä¼šæ˜¯-1
                         {
                             this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex - 1,
                                 this.MarcEditor.m_nFocusCol);
@@ -1145,7 +1255,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                             e.Handled = true;
                         }
 #if BIDI_SUPPORT
-                        // ²åÈë·û±ÜÃâ´¦ÔÚ·½Ïò·ûºÅºÍ×Ó×Ö¶Î·ûºÅ(31)Ö®¼ä
+                        // æ’å…¥ç¬¦é¿å…å¤„åœ¨æ–¹å‘ç¬¦å·å’Œå­å­—æ®µç¬¦å·(31)ä¹‹é—´
                         API.PostMessage(this.Handle, WM_ADJUST_CARET, 0, 0);
 #endif
                     }
@@ -1184,7 +1294,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
 
                         }
 #if BIDI_SUPPORT
-                        // ²åÈë·û±ÜÃâ´¦ÔÚ·½Ïò·ûºÅºÍ×Ó×Ö¶Î·ûºÅ(31)Ö®¼ä
+                        // æ’å…¥ç¬¦é¿å…å¤„åœ¨æ–¹å‘ç¬¦å·å’Œå­å­—æ®µç¬¦å·(31)ä¹‹é—´
                         API.PostMessage(this.Handle, WM_ADJUST_CARET, 0, 0);
 #endif
                     }
@@ -1200,7 +1310,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         if (this.SelectionStart != 0)
                         {
 #if BIDI_SUPPORT
-                            // ²åÈë·û±ÜÃâ´¦ÔÚ·½Ïò·ûºÅºÍ×Ó×Ö¶Î·ûºÅ(31)Ö®¼ä
+                            // æ’å…¥ç¬¦é¿å…å¤„åœ¨æ–¹å‘ç¬¦å·å’Œå­å­—æ®µç¬¦å·(31)ä¹‹é—´
                             if (this.SelectionLength == 0)
                             {
                                 if (IsInForbiddenPos(this.SelectionStart - 1) == true
@@ -1215,7 +1325,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         {
                             if (this.MarcEditor.FocusedFieldIndex > 0)
                             {
-                                // µ½´ïÉÏÒ»ĞĞµÄÄ©Î²
+                                // åˆ°è¾¾ä¸Šä¸€è¡Œçš„æœ«å°¾
                                 this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex - 1, 3);
                                 this.SelectionStart = this.Text.Length;
                                 e.Handled = true;
@@ -1224,7 +1334,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         }
                         else if (this.MarcEditor.m_nFocusCol == 2)
                         {
-                            // ´ÓÖ¸Ê¾·ûµ½×Ö¶ÎÃû
+                            // ä»æŒ‡ç¤ºç¬¦åˆ°å­—æ®µå
                             this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 1);
                             this.SelectionStart = 2;
                             e.Handled = true;
@@ -1232,9 +1342,9 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         }
                         else if (this.MarcEditor.m_nFocusCol == 3)
                         {
-                            // ´ÓÄÚÈİµ½Ö¸Ê¾·û
+                            // ä»å†…å®¹åˆ°æŒ‡ç¤ºç¬¦
 
-                            // Ò»°ã×Ö¶Î
+                            // ä¸€èˆ¬å­—æ®µ
                             if (Record.IsControlFieldName(this.MarcEditor.FocusedField.Name) == false)
                             {
                                 this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 2);
@@ -1244,7 +1354,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                             }
                             else
                             {
-                                // Í·±êÇø
+                                // å¤´æ ‡åŒº
                                 if (this.MarcEditor.FocusedField.Name != "###")
                                 {
                                     this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 1);
@@ -1254,10 +1364,9 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                                 }
                             }
                         }
-
                     }
                     break;
-                case Keys.Right:    // ÓÒ·½Ïò¼ü
+                case Keys.Right:    // å³æ–¹å‘é”®
                     {
                         API.PostMessage(this.MarcEditor.Handle,
 MarcEditor.WM_LEFTRIGHT_MOVED,
@@ -1266,10 +1375,10 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
 
                         if (this.MarcEditor.m_nFocusCol == 1)
                         {
-                            // ´Ó×Ö¶ÎÃûµ½Ö¸Ê¾·û
+                            // ä»å­—æ®µååˆ°æŒ‡ç¤ºç¬¦
                             if (this.SelectionStart >= 2)
                             {
-                                // ¿ØÖÆ×Ö¶ÎÃ»ÓĞÖ¸Ê¾·û, Ö±½Óµ½ÄÚÈİ
+                                // æ§åˆ¶å­—æ®µæ²¡æœ‰æŒ‡ç¤ºç¬¦, ç›´æ¥åˆ°å†…å®¹
                                 if (Record.IsControlFieldName(this.MarcEditor.FocusedField.Name) == true)
                                     this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 3);
                                 else
@@ -1281,7 +1390,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         }
                         else if (this.MarcEditor.m_nFocusCol == 2)
                         {
-                            // ´ÓÖ¸Ê¾·ûµ½ÄÚÈİ
+                            // ä»æŒ‡ç¤ºç¬¦åˆ°å†…å®¹
                             if (this.SelectionStart == 1 || this.SelectionStart == 2)
                             {
                                 this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 3);
@@ -1291,7 +1400,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         }
                         else if (this.MarcEditor.m_nFocusCol == 3)
                         {
-                            // ´ÓÄÚÈİÄ©Î²µ½ÏÂÒ»ĞĞÊ×²¿
+                            // ä»å†…å®¹æœ«å°¾åˆ°ä¸‹ä¸€è¡Œé¦–éƒ¨
                             if (this.SelectionStart == this.Text.Length
                                 && this.MarcEditor.FocusedFieldIndex < this.MarcEditor.Record.Fields.Count - 1)
                             {
@@ -1302,7 +1411,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                             }
 
 #if BIDI_SUPPORT
-                            // ²åÈë·û±ÜÃâ´¦ÔÚ·½Ïò·ûºÅºÍ×Ó×Ö¶Î·ûºÅ(31)Ö®¼ä
+                            // æ’å…¥ç¬¦é¿å…å¤„åœ¨æ–¹å‘ç¬¦å·å’Œå­å­—æ®µç¬¦å·(31)ä¹‹é—´
                             if (this.SelectionLength == 0)
                             {
                                 if (IsInForbiddenPos(this.SelectionStart + 1) == true)
@@ -1317,14 +1426,14 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                     {
                         if (this.MarcEditor.m_nFocusCol == 3)
                         {
-                            // Ä¿Ç°ÕıÔÚÄÚÈİÉÏ
+                            // ç›®å‰æ­£åœ¨å†…å®¹ä¸Š
                             break;
                         }
 
-                        // ÏÈµ½ÄÚÈİÇø
+                        // å…ˆåˆ°å†…å®¹åŒº
                         this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 3);
 
-                        // Í·±êÇø
+                        // å¤´æ ‡åŒº
                         if (this.MarcEditor.FocusedField.Name == "###")
                             this.SelectionStart = this.Text.Length - 1;
                         else
@@ -1342,15 +1451,15 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                         {
                             if (this.MarcEditor.m_nFocusCol == 3)
                             {
-                                // Ä¿Ç°ÕıÔÚÄÚÈİÉÏ
+                                // ç›®å‰æ­£åœ¨å†…å®¹ä¸Š
                                 if (Record.IsControlFieldName(this.MarcEditor.FocusedField.Name) == true)
                                 {
-                                    // ¿ØÖÆ×Ö¶Î,µ½×Ö¶ÎÃûÉÏ
+                                    // æ§åˆ¶å­—æ®µ,åˆ°å­—æ®µåä¸Š
                                     this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 1);
                                 }
                                 else
                                 {
-                                    // Ò»°ã×Ö¶Î,µ½Ö¸Ê¾·ûÉÏ
+                                    // ä¸€èˆ¬å­—æ®µ,åˆ°æŒ‡ç¤ºç¬¦ä¸Š
                                     this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 2);
                                 }
                                 this.SelectionStart = 0;
@@ -1359,7 +1468,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                             }
                             else if (this.MarcEditor.m_nFocusCol == 2)
                             {
-                                // Ä¿Ç°ÕıÔÚÖ¸Ê¾·ûÉÏ, ÄÇ¾Íµ½×Ö¶ÎÃûÉÏ
+                                // ç›®å‰æ­£åœ¨æŒ‡ç¤ºç¬¦ä¸Š, é‚£å°±åˆ°å­—æ®µåä¸Š
                                 this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 1);
                                 this.SelectionStart = 0;
                                 e.Handled = true;
@@ -1367,7 +1476,7 @@ MarcEditor.WM_LEFTRIGHT_MOVED,
                             }
                             else if (this.MarcEditor.m_nFocusCol == 1)
                             {
-                                // Ä¿Ç°ÕıÔÚ×Ö¶ÎÃûÉÏ, ÄÇ¾Íµ½ÄÚÈİÉÏ
+                                // ç›®å‰æ­£åœ¨å­—æ®µåä¸Š, é‚£å°±åˆ°å†…å®¹ä¸Š
                                 this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 3);
                                 this.SelectionStart = 0;
                                 e.Handled = true;
@@ -1484,8 +1593,8 @@ API.MakeLParam(x, y));
                                 break;
                             }
                             // parameters:
-                            //      nAutoComplate   0: false; 1: true; -1:±£³Öµ±Ç°¼ÇÒä×´Ì¬
-                            bool bDone = this.MarcEditor.InsertField(this.MarcEditor.FocusedFieldIndex, -1/*Ô­À´ÊÇ1*/, -1);    // true, false
+                            //      nAutoComplate   0: false; 1: true; -1:ä¿æŒå½“å‰è®°å¿†çŠ¶æ€
+                            bool bDone = this.MarcEditor.InsertField(this.MarcEditor.FocusedFieldIndex, -1/*åŸæ¥æ˜¯1*/, -1);    // true, false
                             if (bDone == false)
                                 break;
                         }
@@ -1501,7 +1610,7 @@ API.MakeLParam(x, y));
                                 Console.Beep();
                                 break;
                             }
-                            // ÔÚ ×Ö¶ÎÃû »ò Ö¸Ê¾·û Î»ÖÃ
+                            // åœ¨ å­—æ®µå æˆ– æŒ‡ç¤ºç¬¦ ä½ç½®
                             int nStart = this.SelectionStart;
                             bool bRemoved = this.MarcEditor.DeleteFieldWithDlg();
                             if (bRemoved == false)
@@ -1566,21 +1675,21 @@ API.MakeLParam(x, y));
                             if (this.SelectionLength == 0
                                 && this.SelectionStart < this.Text.Length)
                             {
-                                // Èç¹ûÉ¾³ıµÄÕıºÃÊÇ·½Ïò×Ö·û
+                                // å¦‚æœåˆ é™¤çš„æ­£å¥½æ˜¯æ–¹å‘å­—ç¬¦
                                 if (this.Text[this.SelectionStart] == 0x200e
                                     && this.Text.Length >= this.SelectionStart + 1 + 1)
                                 {
-                                    // Ò»Í¬É¾³ı
+                                    // ä¸€åŒåˆ é™¤
                                     int nStart = this.SelectionStart;
                                     this.Text = this.Text.Remove(this.SelectionStart, 2);
                                     this.SelectionStart = nStart;
                                     e.Handled = true;
                                 }
-                                // Èç¹ûÉ¾³ıÎ»ÖÃµÄ×ó·½ÕıºÃÊÇ·½Ïò×Ö·û
+                                // å¦‚æœåˆ é™¤ä½ç½®çš„å·¦æ–¹æ­£å¥½æ˜¯æ–¹å‘å­—ç¬¦
                                 else if (this.SelectionStart > 0
                                     && this.Text[this.SelectionStart - 1] == 0x200e)
                                 {
-                                    // Ò»Í¬É¾³ı
+                                    // ä¸€åŒåˆ é™¤
                                     int nStart = this.SelectionStart;
                                     this.Text = this.Text.Remove(this.SelectionStart - 1, 2);
                                     this.SelectionStart = nStart - 1;
@@ -1621,7 +1730,7 @@ API.MakeLParam(x, y));
                     return;
             }
 
-            //¼ü²»´øShiftÊ±£¬°ÑMarcEditorµÄShiftÑ¡ÖĞÆğÊ¼Î»ÖÃÉèÎª0
+            //é”®ä¸å¸¦Shiftæ—¶ï¼ŒæŠŠMarcEditorçš„Shifté€‰ä¸­èµ·å§‹ä½ç½®è®¾ä¸º0
             if (e.Shift == false)
                 this.MarcEditor.nStartFieldIndex = -1;
 
@@ -1653,7 +1762,7 @@ API.MakeLParam(x, y));
                     }
                     break;
 
-                // ÉÏÏÂ×óÓÒ¼üÊ±
+                // ä¸Šä¸‹å·¦å³é”®æ—¶
                 case Keys.Left:
                     {
                         if (this.SelectionStart != 0)
@@ -1762,16 +1871,16 @@ API.MakeLParam(x, y));
                 case Keys.Down:
                     break;
 
-                // ÆäËüÊäÈëÇé¿ö£¬µ±KeyUpÊ±£¬Èç¹ûÊÇvalue¿ò£¬Ôò°ÑÊäÈë¿ò±ä´ó£¬
-                // Èç¹ûÊÇ×Ö¶ÎÃû£¬ÊäÍêµÚ3¸ö£¬°ÑÎ»ÖÃ¶¨Î»µ½×Ö¶ÎÖ¸Ê¾·û
-                // Èç¹ûÊÇÖ¸Ê¾·û£¬ÊäÍêµÚ2¸ö£¬°ÑÎ»ÖÃ¶¨Î»µ½×Ö¶ÎÖµÉÏ
+                // å…¶å®ƒè¾“å…¥æƒ…å†µï¼Œå½“KeyUpæ—¶ï¼Œå¦‚æœæ˜¯valueæ¡†ï¼Œåˆ™æŠŠè¾“å…¥æ¡†å˜å¤§ï¼Œ
+                // å¦‚æœæ˜¯å­—æ®µåï¼Œè¾“å®Œç¬¬3ä¸ªï¼ŒæŠŠä½ç½®å®šä½åˆ°å­—æ®µæŒ‡ç¤ºç¬¦
+                // å¦‚æœæ˜¯æŒ‡ç¤ºç¬¦ï¼Œè¾“å®Œç¬¬2ä¸ªï¼ŒæŠŠä½ç½®å®šä½åˆ°å­—æ®µå€¼ä¸Š
                 default:
                     {
                         this.MarcEditor.Flush();
 
                         if (this.m_marcEditor.m_nFocusCol == 1)
                         {
-                            // µ±Ä¿Ç°ÊäÈë¿òÊÇ×Ö¶ÎÃûÊ±
+                            // å½“ç›®å‰è¾“å…¥æ¡†æ˜¯å­—æ®µåæ—¶
                             if (this.SelectionStart == 3)
                             {
                                 if (Record.IsControlFieldName(this.MarcEditor.FocusedField.Name) == true)
@@ -1785,16 +1894,16 @@ API.MakeLParam(x, y));
                         }
                         if (this.m_marcEditor.m_nFocusCol == 2)
                         {
-                            // µ±Ä¿Ç°ÊäÈë¿òÊÇ×Ö¶ÎÖ¸Ê¾·ûÊ±
+                            // å½“ç›®å‰è¾“å…¥æ¡†æ˜¯å­—æ®µæŒ‡ç¤ºç¬¦æ—¶
                             if (this.SelectionStart == 2)
                             {
-                                Debug.Assert(Record.IsControlFieldName(this.MarcEditor.FocusedField.Name) == false, "ÁĞºÅÎª2Ê±,²»Ó¦Îª¿ØÖÆ×Ö¶Î");
+                                Debug.Assert(Record.IsControlFieldName(this.MarcEditor.FocusedField.Name) == false, "åˆ—å·ä¸º2æ—¶,ä¸åº”ä¸ºæ§åˆ¶å­—æ®µ");
                                 this.MarcEditor.SetActiveField(this.MarcEditor.FocusedFieldIndex, 3);
                             }
                         }
                         else if (this.m_marcEditor.m_nFocusCol == 3)
                         {
-                            // µ±Ä¿Ç°ÊäÈë¿òÊÇ×Ö¶ÎÖµÊ±
+                            // å½“ç›®å‰è¾“å…¥æ¡†æ˜¯å­—æ®µå€¼æ—¶
                             bool bChangedHeight = false;
                             API.SendMessage(this.Handle,
                                 API.EM_LINESCROLL,
@@ -1821,7 +1930,7 @@ API.MakeLParam(x, y));
                     break;
             }
 
-            // ÈÃ²åÈë·ûµÄÎ»ÖÃ¿É¼û
+            // è®©æ’å…¥ç¬¦çš„ä½ç½®å¯è§
             // this.Focus();
             int nHeight = 20;
 
@@ -1840,11 +1949,11 @@ API.MakeLParam(x, y));
                 20,
                 nHeight);
             // parameter:
-            //		nCol	ÁĞºÅ 
-            //				0 ×Ö¶ÎËµÃ÷;
-            //				1 ×Ö¶ÎÃû;
-            //				2 ×Ö¶ÎÖ¸Ê¾·û
-            //				3 ×Ö¶ÎÄÚ²¿
+            //		nCol	åˆ—å· 
+            //				0 å­—æ®µè¯´æ˜;
+            //				1 å­—æ®µå;
+            //				2 å­—æ®µæŒ‡ç¤ºç¬¦
+            //				3 å­—æ®µå†…éƒ¨
             this.MarcEditor.EnsureVisible(this.MarcEditor.FocusedFieldIndex,
                 3,
                 rect);
@@ -1862,9 +1971,9 @@ API.MakeLParam(x, y));
 
         public void EnsureVisible()
         {
-                        // ÈÃ²åÈë·ûµÄÎ»ÖÃ¿É¼û
+            // è®©æ’å…¥ç¬¦çš„ä½ç½®å¯è§
             int nHeight = 20;
-            
+
             /*
             if (this.MarcEditor.curEdit != null)
                 nHeight = Math.Max(20, this.MarcEditor.curEdit.Height + 8);
@@ -1880,11 +1989,11 @@ API.MakeLParam(x, y));
                 20,
                 nHeight);
             // parameter:
-            //		nCol	ÁĞºÅ 
-            //				0 ×Ö¶ÎËµÃ÷;
-            //				1 ×Ö¶ÎÃû;
-            //				2 ×Ö¶ÎÖ¸Ê¾·û
-            //				3 ×Ö¶ÎÄÚ²¿
+            //		nCol	åˆ—å· 
+            //				0 å­—æ®µè¯´æ˜;
+            //				1 å­—æ®µå;
+            //				2 å­—æ®µæŒ‡ç¤ºç¬¦
+            //				3 å­—æ®µå†…éƒ¨
             this.MarcEditor.EnsureVisible(this.MarcEditor.FocusedFieldIndex,
                 3,
                 rect);

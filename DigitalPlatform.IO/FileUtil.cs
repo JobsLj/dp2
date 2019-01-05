@@ -1,16 +1,178 @@
-﻿using System;
+﻿using AutoIt.Common;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace DigitalPlatform.IO
 {
+    public static class StreamExtension
+    {
+        // 带有 Lock/Unlock 的写入操作
+        public static void LockingWrite(this Stream stream,
+            byte[] buffer,
+            int offset,
+            int length)
+        {
+            if (stream is FileStream)
+            {
+                FileStream file = stream as FileStream;
+                long lock_position = 0;
+                if (file != null)
+                {
+                    lock_position = file.Position;
+                    file.Lock(lock_position, length);
+                }
+                try
+                {
+                    stream.Write(buffer, offset, length);
+                }
+                finally
+                {
+                    if (file != null)
+                        file.Unlock(lock_position, length);
+                }
+            }
+            else
+                stream.Write(buffer, offset, length);
+        }
+    }
     /// <summary>
     /// File功能扩展函数
     /// </summary>
     public class FileUtil
     {
+        // 将一个文本文件的内容修改为 UTF-8 编码方式
+        public static int ConvertGb2312TextfileToUtf8(string strFilename,
+out string strError)
+        {
+            strError = "";
+
+            // 2013/10/31 如果无法通过文件头部探测出来，则不作转换
+            Encoding encoding = FileUtil.DetectTextFileEncoding(strFilename, null);
+
+            if (encoding == null || encoding.Equals(Encoding.UTF8) == true)
+                return 0;
+
+            string strContent = "";
+            try
+            {
+                using (StreamReader sr = new StreamReader(strFilename, encoding))
+                {
+                    strContent = sr.ReadToEnd();
+                }
+            }
+            catch (Exception ex)
+            {
+                strError = "从文件 " + strFilename + " 读取失败: " + ex.Message;
+                return -1;
+            }
+
+            try
+            {
+                using (StreamWriter sw = new StreamWriter(strFilename, false, Encoding.UTF8))
+                {
+                    sw.Write(strContent);
+                }
+            }
+            catch (Exception ex)
+            {
+                strError = "写入文件 " + strFilename + " 失败: " + ex.Message;
+                return -1;
+            }
+
+            return 0;
+        }
+
+        // 比较两个文本文件的内容是否一致
+        // return:
+        //      -1  出错
+        //      0   两个文件内容一样
+        //      1   两个文件内容不一样
+        public static int CompareTwoTextFile(string filename1,
+            string filename2,
+            out string strError)
+        {
+            strError = "";
+
+            int nRet = ConvertGb2312TextfileToUtf8(filename1,
+        out strError);
+            if (nRet == -1)
+                return -1;
+
+            nRet = ConvertGb2312TextfileToUtf8(filename2,
+out strError);
+            if (nRet == -1)
+                return -1;
+
+            try
+            {
+                using (StreamReader sr1 = new StreamReader(filename1, Encoding.UTF8))
+                using (StreamReader sr2 = new StreamReader(filename2, Encoding.UTF8))
+                {
+                    string s1 = sr1.ReadToEnd();
+                    string s2 = sr2.ReadToEnd();
+                    if (s1 == s2)
+                        return 0;
+                    return 1;
+                }
+            }
+            catch (Exception ex)
+            {
+                strError = "从文件 " + filename1 + " 或 " + filename2 + " 读取失败: " + ex.Message;
+                return -1;
+            }
+        }
+
+        // return:
+        //      0   相同
+        //      其他  不同
+        public static int CompareTwoFile(string filename1, string filename2)
+        {
+
+
+            using (Stream s1 = File.OpenRead(filename1))
+            using (Stream s2 = File.OpenRead(filename2))
+            {
+                if (s1.Length != s2.Length)
+                    return -1;
+
+                int nChunkSize = 8192;
+                byte[] bytes1 = new byte[nChunkSize];
+                byte[] bytes2 = new byte[nChunkSize];
+
+                while (true)
+                {
+                    int n = s1.Read(bytes1, 0, nChunkSize);
+                    if (n <= 0)
+                        break;
+
+                    s2.Read(bytes2, 0, n);
+                    if (ByteArray.Compare(bytes1, bytes2, n) != 0)
+                        return -1;
+                }
+            }
+
+            return 0;
+        }
+
+        public static byte[] GetFileMd5(string filename)
+        {
+            using (var md5 = MD5.Create())
+            {
+                using (var stream = File.Open(
+                        filename,
+                        FileMode.Open,
+                        FileAccess.ReadWrite, // Read会造成无法打开
+                        FileShare.ReadWrite))
+                {
+                    return md5.ComputeHash(stream);
+                }
+            }
+        }
+
         // 检测字符串是否为纯数字(不包含'-','.'号)
         public static bool IsPureNumber(string s)
         {
@@ -53,6 +215,8 @@ namespace DigitalPlatform.IO
         }
 
         // 根据时间戳信息，设置文件的最后修改时间
+        // parameters:
+        //      baTimeStamp 8 byte 的表示 ticks 的文件最后修改时间。应该是 GMT 时间
         public static void SetFileLastWriteTimeByTimestamp(string strFilePath,
             byte[] baTimeStamp)
         {
@@ -104,6 +268,9 @@ namespace DigitalPlatform.IO
         }
 
         // 写入日志文件。每天创建一个单独的日志文件
+        // Exception:
+        //      可能会抛出异常。
+        //      System.UnauthorizedAccessException 对路径的访问被拒绝。
         public static void WriteErrorLog(
             object lockObj,
             string strLogDir,
@@ -118,6 +285,9 @@ namespace DigitalPlatform.IO
                 // 每天一个日志文件
                 string strFilename = Path.Combine(strLogDir, strPrefix + DateTimeUtil.DateTimeToString8(now) + strPostfix);
                 string strTime = now.ToString();
+                // Exception:
+                //      可能会抛出异常。
+                //      System.UnauthorizedAccessException 对路径的访问被拒绝。
                 StreamUtil.WriteText(strFilename,
                     strTime + " " + strText + "\r\n");
             }
@@ -170,7 +340,7 @@ namespace DigitalPlatform.IO
                     else
                     {
                         long lLoadedLength = 0;
-                        StringBuilder temp = new StringBuilder(4096);
+                        StringBuilder temp = new StringBuilder();
                         for (; ; )
                         {
                             string strLine = sr.ReadLine();
@@ -234,7 +404,7 @@ namespace DigitalPlatform.IO
                 if (fi.Exists == false)
                 {
                     // 创建一个0 byte的文件
-                    using(FileStream f = File.Create(strFileName))
+                    using (FileStream f = File.Create(strFileName))
                     {
 
                     }
@@ -251,8 +421,8 @@ namespace DigitalPlatform.IO
         public static void WriteByteArray(string strFileName,
             byte[] data)
         {
-            using(FileStream s = File.Create(strFileName))
-            { 
+            using (FileStream s = File.Create(strFileName))
+            {
                 s.Write(data,
                     0,
                     data.Length);
@@ -401,6 +571,22 @@ UTF-32 little-endian byte order: FF FE 00 00
                         if (buffer[0] == 0xff && buffer[1] == 0xfe && buffer[2] == 0x00 && buffer[3] == 0x00)
                         {
                             return Encoding.GetEncoding(65006);    // UTF-32 big-endian
+                        }
+                    }
+
+                    // 2018/11/6
+                    // 检测是不是没有 BOM 的 UTF-8
+                    {
+                        byte[] temp_buffer = new byte[4096];
+                        file.Seek(0, SeekOrigin.Begin);
+                        int length = file.Read(temp_buffer, 0, temp_buffer.Length);
+                        TextEncodingDetect detector = new TextEncodingDetect();
+                        TextEncodingDetect.Encoding encoding = detector.DetectEncoding(temp_buffer, length);
+                        switch(encoding)
+                        {
+                            case TextEncodingDetect.Encoding.Utf8Bom:
+                            case TextEncodingDetect.Encoding.Utf8Nobom:
+                                return Encoding.UTF8;
                         }
                     }
                 }

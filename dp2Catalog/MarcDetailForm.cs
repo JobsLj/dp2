@@ -3,8 +3,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
@@ -28,9 +26,6 @@ using DigitalPlatform.IO;
 using DigitalPlatform.CommonControl;
 
 using DigitalPlatform.CirculationClient;
-using DigitalPlatform.GcatClient;
-using DigitalPlatform.GcatClient.gcat_new_ws;
-using System.Threading;
 
 namespace dp2Catalog
 {
@@ -241,6 +236,7 @@ namespace dp2Catalog
 
             this.MarcEditor.AppInfo = this.MainForm.AppInfo;
             LoadFontToMarcEditor();
+            this.MarcEditor.UiState = Program.MainForm.AppInfo.GetString("marcDetialForm", "marcEditorState", "");
 
             this.m_macroutil.ParseOneMacro -= new ParseOneMacroEventHandler(m_macroutil_ParseOneMacro);
             this.m_macroutil.ParseOneMacro += new ParseOneMacroEventHandler(m_macroutil_ParseOneMacro);
@@ -394,6 +390,7 @@ namespace dp2Catalog
                 stop = null;
             }
 #endif
+            Program.MainForm.AppInfo.SetString("marcDetialForm", "marcEditorState", this.MarcEditor.UiState);
 
             SaveSize();
 
@@ -469,11 +466,12 @@ namespace dp2Catalog
 
         public void LoadSize()
         {
-            if (this.SupressSizeSetting == false)
+            if (this.SuppressSizeSetting == false)
             {
                 // 设置窗口尺寸状态
                 MainForm.AppInfo.LoadMdiChildFormStates(this,
                     "mdi_form_state",
+                    SizeStyle.All,
                     MainForm.DefaultMdiWindowWidth,
                     MainForm.DefaultMdiWindowHeight);
 
@@ -499,7 +497,7 @@ namespace dp2Catalog
         {
             if (this.MainForm != null && this.MainForm.AppInfo != null)
             {
-                if (this.SupressSizeSetting == false)
+                if (this.SuppressSizeSetting == false)
                 {
                     MainForm.AppInfo.SaveMdiChildFormStates(this,
                         "mdi_form_state");
@@ -649,7 +647,7 @@ namespace dp2Catalog
                 strAction,
                 out strError);
             return nRet;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -799,7 +797,7 @@ namespace dp2Catalog
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -1128,7 +1126,7 @@ namespace dp2Catalog
             {
                 _processing--;
             }
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -1275,7 +1273,7 @@ namespace dp2Catalog
 
             this.MarcEditor.Focus();
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -1507,7 +1505,7 @@ namespace dp2Catalog
 
                 index = Convert.ToInt32(strIndex) - 1;
 
-            REDO:
+                REDO:
                 if (strDirection == "prev")
                 {
                     index--;
@@ -1556,7 +1554,7 @@ namespace dp2Catalog
             {
                 this._processing--;
             }
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -1811,7 +1809,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 this.EnableControls(true);
                 this._processing--;
             }
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -1930,7 +1928,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2063,7 +2061,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2233,6 +2231,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                     {
                         MarcRecord temp = new MarcRecord(strMarc);
                         temp.select("field[@name='998']").detach();
+                        temp.select("field[@name='997']").detach();
                         strMarc = temp.Text;
                     }
 
@@ -2318,7 +2317,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 s.Close();
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -2473,7 +2472,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 return;
             }
 
-        OTHER:
+            OTHER:
             {
                 string strCfgFileName = e.Path;
                 nRet = strCfgFileName.IndexOf("#");
@@ -2505,7 +2504,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             e.ErrorInfo = strError;
         }
 
@@ -2630,7 +2629,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 return;
             }
 
-        OTHER:
+            OTHER:
             {
                 string strCfgFileName = e.Path;
                 nRet = strCfgFileName.IndexOf("#");
@@ -2671,7 +2670,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             }
 
             return;
-        ERROR1:
+            ERROR1:
             e.ErrorInfo = strError;
         }
 
@@ -2822,7 +2821,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             }
             LoadLinkedMarcRecord(strMarc, baRecord);
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -2922,7 +2921,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
 
             this.MarcEditor.Focus();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3056,7 +3055,11 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                             GuiUtil.SetControlFont(dlg, this.Font);
 
                             dlg.Text = "请指定一个 dp2library 数据库，以作为模拟的查重起点";
+#if OLD_CHANNEL
                             dlg.dp2Channels = dp2_searchform.Channels;
+#endif
+                            dlg.ChannelManager = Program.MainForm;
+
                             dlg.Servers = this.MainForm.Servers;
                             dlg.EnabledIndices = new int[] { dp2ResTree.RESTYPE_DB };
                             dlg.Path = strDefaultStartPath;  // 采用遗留的上次用过的路径
@@ -3192,7 +3195,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 this.EnableControls(true);
             }
 
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
 
@@ -3248,7 +3251,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 "current",
                 true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -3549,7 +3552,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                             bVerifyed = true;
                         }
 
-                    REDO_SAVE_DP2:
+                        REDO_SAVE_DP2:
                         string strOutputPath = "";
                         byte[] baOutputTimestamp = null;
                         // return:
@@ -3759,7 +3762,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                             this.LoginInfo = new dp2Catalog.LoginInfo();
 
                         bool bRedo = false;
-                    REDO_LOGIN:
+                        REDO_LOGIN:
                         if (string.IsNullOrEmpty(this.LoginInfo.UserName) == true
                             || bRedo == true)
                         {
@@ -3872,7 +3875,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             {
                 _processing--;
             }
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -3992,7 +3995,9 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
         {
             dp2SearchForm dp2_searchform = this.GetDp2SearchForm();
 
+#if OLD_CHANNEL
             e.dp2Channels = dp2_searchform.Channels;
+#endif
             e.MainForm = this.MainForm;
         }
 
@@ -4108,7 +4113,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             }
 
             // return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -4141,7 +4146,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             {
                 strChangedWarning = "当前有 "
                     + GetCurrentChangedPartName()
-                    // strChangedWarning
+                // strChangedWarning
                 + " 被修改过。\r\n\r\n";
             }
 
@@ -4271,7 +4276,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                         this.LoginInfo = new dp2Catalog.LoginInfo();
 
                     bool bRedo = false;
-                REDO_LOGIN:
+                    REDO_LOGIN:
                     if (string.IsNullOrEmpty(this.LoginInfo.UserName) == true
                         || bRedo == true)
                     {
@@ -4377,7 +4382,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
             }
 
             // return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -5440,7 +5445,7 @@ dp2Catalog 版本: dp2Catalog, Version=2.4.5698.23777, Culture=neutral, PublicKe
                 goto ERROR1;
             }
 
-        BEGIN:
+            BEGIN:
             // 如果必要，重新准备Assembly
             if (m_autogenDataAssembly == null
                 || m_strAutogenDataCfgFilename != strAutogenDataCfgFilename)
@@ -5589,7 +5594,7 @@ out strError);
             if (bAssemblyReloaded == true)
                 return 1;
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5779,7 +5784,7 @@ Stack:
             {
                 this._processing--;
             }
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -5872,7 +5877,7 @@ Stack:
                 this.m_genDataViewer.CloseWhenComplete = bOpenWindow;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, "DisplayAutoGenMenu() 出错: " + strError);
         }
 
@@ -5981,7 +5986,7 @@ Stack:
                     this.m_genDataViewer.RefreshState();
             }
             return;
-        ERROR1:
+            ERROR1:
             // MessageBox.Show(this, strError);
             {
                 bool bSendReport = true;
@@ -6084,11 +6089,14 @@ Stack:
             strError = "";
             assembly = null;
 
-            string[] saRef = null;
             int nRet;
 
+            // 2018/8/26
+            // 为了兼容以前代码，对 using 部分进行修改
+            strCode = ScriptManager.ModifyCode(strCode);
+
             nRet = ScriptManager.GetRefsFromXml(strRef,
-                out saRef,
+                out string[] saRef,
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -6103,26 +6111,26 @@ Stack:
                                     "system.drawing.dll",
                                     "System.Runtime.Serialization.dll",
 
-									Environment.CurrentDirectory + "\\digitalplatform.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.script.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.script.dll",
 									//Environment.CurrentDirectory + "\\digitalplatform.xmleditor.dll",
 									//Environment.CurrentDirectory + "\\digitalplatform.rms.dll",
 									//Environment.CurrentDirectory + "\\digitalplatform.rms.client.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.marceditor.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marcfixedfieldcontrol.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marcfixedfieldcontrol.dll",
+									//Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.commoncontrol.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.circulationclient.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.libraryclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.circulationclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.libraryclient.dll",
 
                                     //Environment.CurrentDirectory + "\\digitalplatform.library.dll",
 									// Environment.CurrentDirectory + "\\Interop.SHDocVw.dll",
 									Environment.CurrentDirectory + "\\dp2catalog.exe"
-								};
+                                };
 
             if (saAddRef != null)
             {
@@ -6409,7 +6417,7 @@ Stack:
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -6532,7 +6540,7 @@ Stack:
 
             this.LinkedSearchForm = null;  // 切断和原来关联的检索窗的联系。这样就没法前后翻页了
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -6631,7 +6639,11 @@ Stack:
                 dbname_dlg.EnableNotAsk = true;
 
                 dbname_dlg.Text = "装载书目模板 -- 请选择目标数据库";
+#if OLD_CHANNEL
                 dbname_dlg.dp2Channels = dp2_searchform.Channels;
+#endif
+                dbname_dlg.ChannelManager = Program.MainForm;
+
                 dbname_dlg.Servers = this.MainForm.Servers;
                 dbname_dlg.EnabledIndices = new int[] { dp2ResTree.RESTYPE_DB };
                 dbname_dlg.Path = strStartPath;
@@ -6791,7 +6803,7 @@ Stack:
 
                 this.LinkedSearchForm = null;  // 切断和原来关联的检索窗的联系。这样就没法前后翻页了
                 return 0;
-            ERROR1:
+                ERROR1:
                 MessageBox.Show(this, strError);
                 return -1;
             }
@@ -6845,7 +6857,7 @@ Stack:
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -6942,7 +6954,7 @@ Stack:
 
             MessageBox.Show(this, "修改模板 '" + strCfgPath + "' 成功");
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -6985,7 +6997,11 @@ Stack:
             GuiUtil.SetControlFont(dlg, this.Font);
 
             dlg.Text = "请选择目标数据库";
+#if OLD_CHANNEL
             dlg.dp2Channels = dp2_searchform.Channels;
+#endif
+            dlg.ChannelManager = Program.MainForm;
+
             dlg.Servers = this.MainForm.Servers;
             dlg.EnabledIndices = new int[] { dp2ResTree.RESTYPE_DB };
             dlg.Path = strStartPath;
@@ -7120,7 +7136,7 @@ Stack:
 
             MessageBox.Show(this, "修改模板 '" + strCfgFilePath + "' 成功");
             return 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             return -1;
         }
@@ -7402,7 +7418,7 @@ Keys keyData)
             }
 
             return bVerifyFail == true ? 2 : 0;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
             if (this.m_verifyViewer != null)
                 this.m_verifyViewer.ResultString = strError;
@@ -7438,21 +7454,21 @@ Keys keyData)
                                     "system.drawing.dll",
                                     "System.Runtime.Serialization.dll",
 
-									Environment.CurrentDirectory + "\\digitalplatform.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marceditor.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marcfixedfieldcontrol.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marceditor.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marcfixedfieldcontrol.dll",
+									//Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.script.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.commoncontrol.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.circulationclient.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.libraryclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.commoncontrol.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.circulationclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.libraryclient.dll",
 
                                     Environment.CurrentDirectory + "\\dp2catalog.exe"
-								};
+                                };
 
             if (saAddRef != null)
             {
@@ -7545,9 +7561,9 @@ Keys keyData)
                 return -1;
             }
 
-            string strCode = "";    // c#代码
+            // c#代码
 
-            int nRet = filter.BuildScriptFile(out strCode,
+            int nRet = filter.BuildScriptFile(out string strCode,
                 out strError);
             if (nRet == -1)
                 goto ERROR1;
@@ -7559,22 +7575,22 @@ Keys keyData)
                                     "system.drawing.dll",
                                     "System.Runtime.Serialization.dll",
 
-									Environment.CurrentDirectory + "\\digitalplatform.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marceditor.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marcdom.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.marcfixedfieldcontrol.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marceditor.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marcdom.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.marcfixedfieldcontrol.dll",
+									//Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.script.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.commoncontrol.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.circulationclient.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.libraryclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.commoncontrol.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.circulationclient.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.libraryclient.dll",
 
                                     Environment.CurrentDirectory + "\\dp2catalog.exe"
-								};
+                                };
 
             Assembly assembly = null;
             string strWarning = "";
@@ -7594,7 +7610,6 @@ Keys keyData)
                 out assembly,
                 out strError,
                 out strWarning);
-
             if (nRet == -2)
                 goto ERROR1;
             if (nRet == -1)
@@ -7607,9 +7622,8 @@ Keys keyData)
             }
 
             filter.Assembly = assembly;
-
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -7678,7 +7692,7 @@ Keys keyData)
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, "DoViewVerifyResult() 出错: " + strError);
         }
 
@@ -7822,7 +7836,7 @@ Keys keyData)
 
             this.MarcEditor.SelectCurEdit(subfield.Offset + 2, 0);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7903,7 +7917,7 @@ Keys keyData)
             //      -1  error
             //      0   not found
             //      1   found
-            nRet = MacroUtil.GetFromLocalMacroTable(PathUtil.MergePath(this.MainForm.DataDir, "marceditor_macrotable.xml"),
+            nRet = MacroUtil.GetFromLocalMacroTable(PathUtil.MergePath(this.MainForm.UserDir, "marceditor_macrotable.xml"),
                 strName,
                 e.Simulate,
                 out strValue,
@@ -7921,7 +7935,7 @@ Keys keyData)
                 return;
             }
 
-        ERROR1:
+            ERROR1:
             e.Canceled = true;  // 不能解释处理
             return;
         }
@@ -7973,6 +7987,7 @@ Keys keyData)
                         }
                     }
 
+#if OLD_CHANNEL
                     if (dp2_searchform.Channel == null)
                     {
                         string strServerName = "";
@@ -7993,10 +8008,29 @@ Keys keyData)
                     if (dp2_searchform.Channel != null)
                         return dp2_searchform.Channel.UserName;
                     return "";
+#endif
+                    if (string.IsNullOrEmpty(dp2_searchform.CurrentUserName))
+                    {
+                        string strServerName = "";
+                        string strLocalPath = "";
+
+                        // 解析记录路径。
+                        // 记录路径为如下形态 "中文图书/1 @服务器"
+                        dp2SearchForm.ParseRecPath(strPath,
+                            out strServerName,
+                            out strLocalPath);
+
+                        nRet = dp2_searchform.ForceLogin(
+    null,
+    strServerName,
+    out strError);
+                    }
+
+                    return dp2_searchform.CurrentUserName;
                 }
 
                 return "";
-            ERROR1:
+                ERROR1:
                 // throw new Exception(strError);
                 return null;
             }
@@ -8746,7 +8780,7 @@ Keys keyData)
 
         #endregion
 
-        public bool GetQueryContent(out string strUse, 
+        public bool GetQueryContent(out string strUse,
             out string strWord)
         {
             strUse = "";
@@ -8791,7 +8825,7 @@ Keys keyData)
             {
                 strWord = record.select("field[@name='020']/subfield[@name='a']").FirstContent;
                 if (string.IsNullOrEmpty(strWord) == true)
-                { 
+                {
                     strWord = record.select("field[@name='245']/subfield[@name='a']").FirstContent;
                     strUse = "title";
                 }

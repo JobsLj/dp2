@@ -14,13 +14,17 @@ using DigitalPlatform.Script;
 using DigitalPlatform.Text;
 using DigitalPlatform;
 using DigitalPlatform.GUI;
-using DigitalPlatform.GcatClient;
 using DigitalPlatform.CirculationClient;
+using DigitalPlatform.LibraryClient;
+using DigitalPlatform.LibraryClient.localhost;
+using DigitalPlatform.CommonDialog;
+using DigitalPlatform.CommonControl;
 
 namespace dp2Circulation
 {
     /// <summary>
-    /// 种册 Host 类
+    /// 种册 Host 类。
+    /// 注：比 DetailHost 更加通用。因 DetailHost 的 DetailForm 和 MarcEditor 捆绑太深，无法用于册登记窗
     /// 对 MARC 记录的访问尽量用 MarcQuery 的 MarcRecord 实现，以增强适应性
     /// </summary>
     public class BiblioItemsHost : IDetailHost
@@ -202,11 +206,12 @@ namespace dp2Circulation
         #endregion
 
 
-
+#if OLD_CODE
         /// <summary>
         /// GCAT 通讯通道
         /// </summary>
         DigitalPlatform.GcatClient.Channel GcatChannel = null;
+#endif
 
         /// <summary>
         /// 构造函数
@@ -218,8 +223,10 @@ namespace dp2Circulation
 
         public void Dispose()
         {
+#if OLD_CODE
             if (this.GcatChannel != null)
                 this.GcatChannel.Dispose();
+#endif
         }
 
         /// <summary>
@@ -295,7 +302,7 @@ namespace dp2Circulation
                 goto ERROR1;
             }
             return;
-        ERROR1:
+            ERROR1:
             e.ErrorInfo = strError;
             if (e.ShowErrorBox == true)
                 MessageBox.Show(this.Form, strError);
@@ -347,7 +354,7 @@ namespace dp2Circulation
                 strLocation = StringUtil.GetPureLocationString(strLocation);
 
                 // 获得关于一个特定馆藏地点的索取号配置信息
-                nRet = this._detailWindow.MainForm.GetArrangementInfo(strLocation,
+                nRet = Program.MainForm.GetArrangementInfo(strLocation,
                     out info,
                     out strError);
                 if (nRet == 0)
@@ -422,9 +429,7 @@ namespace dp2Circulation
 
                 try
                 {
-                    dlg.MainForm = this._detailWindow.MainForm;
-                    // dlg.TopMost = true;
-                    //    dlg.Owner = owner;
+                    // dlg.MainForm = this._detailWindow.MainForm;
                     dlg.MyselfItemRecPath = strItemRecPath;
                     dlg.MyselfParentRecPath = this._detailWindow.BiblioRecPath;
                     dlg.MyselfCallNumberItems = callnumber_items;   // 2009/6/4 
@@ -492,7 +497,7 @@ namespace dp2Circulation
                 (string.IsNullOrEmpty(strQufenhao) == false ?
                 "/" + strQufenhao : "");
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -627,7 +632,7 @@ namespace dp2Circulation
                     strFieldName = "694";
                     strSubfieldName = "a";
                 }
-                else if (strClassType == "其它")
+                else if (strClassType == "其它" || strClassType == "红泥巴")
                 {
                     strFieldName = "686";
                     strSubfieldName = "a";
@@ -685,7 +690,7 @@ namespace dp2Circulation
                     strFieldName = "095";
                     strSubfieldName = "a";
                 }
-                else if (strClassType == "其它")
+                else if (strClassType == "其它" || strClassType == "红泥巴")
                 {
                     strFieldName = "084";
                     strSubfieldName = "a";
@@ -740,7 +745,12 @@ namespace dp2Circulation
             }
         }
 
-
+        // 注意：此函数和 DetailHost.cs 中的同名函数重复内容。请尽量保持同步修改
+        // 获得种次号以外的其他区分号，主要是著者号
+        // return:
+        //      -1  error
+        //      0   not found。注意此时也要设置strError值
+        //      1   found
         /// <summary>
         /// 获得种次号以外的其他区分号，主要是著者号
         /// </summary>
@@ -904,14 +914,21 @@ namespace dp2Circulation
                 string type = one.Type;
                 string strAuthor = one.Author;
                 Debug.Assert(String.IsNullOrEmpty(strAuthor) == false, "");
+                REDO:
 
                 if (type == "GCAT")
                 {
+                    string strPinyin = "";
+                    List<string> two = StringUtil.ParseTwoPart(strAuthor, "|");
+                    strAuthor = two[0];
+                    strPinyin = two[1];
+
                     // 获得著者号
-                    string strGcatWebServiceUrl = this._detailWindow.MainForm.GcatServerUrl;   // "http://dp2003.com/dp2libraryws/gcat.asmx";
+                    string strGcatWebServiceUrl = Program.MainForm.GcatServerUrl;   // "http://dp2003.com/dp2libraryws/gcat.asmx";
 
                     // 获得著者号
                     // return:
+                    //      -4  著者字符串没有检索命中
                     //      -1  error
                     //      0   canceled
                     //      1   succeed
@@ -928,6 +945,45 @@ namespace dp2Circulation
                         if (string.IsNullOrEmpty(strError) == true)
                             strError = "放弃从 GCAT 取号";
                         return 0;
+                    }
+
+                    if (nRet == -4)
+                    {
+                        string strHanzi = strAuthor;
+                        string strLastError = strError;
+                        // 临时取汉字的拼音
+                        if (string.IsNullOrEmpty(strPinyin))
+                        {
+                            strPinyin = strAuthor;
+                            // 取拼音
+                            nRet = HanziToPinyin(ref strPinyin,
+                                out strError);
+                            if (nRet == -1)
+                                goto ERROR1;
+                        }
+                        if (string.IsNullOrEmpty(strPinyin))
+                            goto ERROR1;
+                        string strMessage = "字符串 '" + strHanzi + "' 取汉语著者号码时出现意外状况: " + strLastError + "\r\n\r\n后面软件会自动尝试用卡特表方式为拼音字符串 '" + strPinyin + "' 取号。";
+                        strAuthor = strPinyin;
+                        type = "Cutter-Sanborn Three-Figure";
+                        // MessageBox.Show(this.Form, strMessage);
+
+                        object o = Program.MainForm.ParamTable["gcat_warning"];
+                        bool bTemp = (o == null ? false : (bool)o);
+                        if (bTemp == false)
+                        {
+                            MessageDialog.Show(this.Form,
+                                "汉语著者号码缺字",
+                                strMessage,
+                                "下次不再出现此对话框",
+                                ref bTemp);
+                            Program.MainForm.ParamTable["gcat_warning"] = bTemp;
+                        }
+
+                        // 尝试把信息发给 dp2003.com
+                        Program.MainForm.ReportError("dp2circulation 创建索取号", "(安静汇报)" + strMessage);
+
+                        goto REDO;
                     }
 
                     return 1;
@@ -1004,7 +1060,7 @@ namespace dp2Circulation
                 }
             }
             //return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1091,7 +1147,7 @@ namespace dp2Circulation
 
                     strError = "MARC记录中 700/710/720/701/711/702/712/200 中均未发现包含汉字的 $a 子字段内容，无法获得著者字符串";
                     return 0;
-                FOUND:
+                    FOUND:
                     Debug.Assert(results.Count > 0, "");
                     strAuthor = results[0];
                 }
@@ -1189,7 +1245,7 @@ namespace dp2Circulation
                     strError = "MARC记录中 700/710/720/701/711/702/712/200 中均未发现包含汉字的 $a 子字段内容，无法获得著者字符串";
                     fLevel = 0;
                     return 0;
-                FOUND:
+                    FOUND:
                     Debug.Assert(results.Count > 0, "");
                     strAuthor = results[0];
                 }
@@ -1284,7 +1340,7 @@ namespace dp2Circulation
                     strError = "MARC记录中 700/710/720/701/711/702/712/200 中均未发现不含汉字的 $a 子字段内容，无法获得西文著者字符串";
                     fLevel = 0;
                     return 0;
-                FOUND:
+                    FOUND:
                     Debug.Assert(results.Count > 0, "");
                     strAuthor = results[0];
                 }
@@ -1553,7 +1609,7 @@ namespace dp2Circulation
                     out strError);
             }
 #endif
-            nRet = this._detailWindow.MainForm.GetPinyin(
+            nRet = Program.MainForm.GetPinyin(
                 this._detailWindow.Form,
                 strText,
                 PinyinStyle.None,
@@ -1789,8 +1845,10 @@ namespace dp2Circulation
 
         void DoGcatStop(object sender, StopEventArgs e)
         {
+#if OLD_CODE
             if (this.GcatChannel != null)
                 this.GcatChannel.Abort();
+#endif
         }
 
         /// <summary>
@@ -1835,7 +1893,7 @@ namespace dp2Circulation
         /// <param name="strAuthor">著者字符串</param>
         /// <param name="strAuthorNumber">返回著者号</param>
         /// <param name="strError">返回出错信息</param>
-        /// <returns>-1: 出错; 0: 放弃; 1: 成功</returns>
+        /// <returns>-1: 出错; 0: 放弃; 1: 成功; -4: ??</returns>
         public int GetGcatAuthorNumber(string strGcatWebServiceUrl,
             string strAuthor,
             out string strAuthorNumber,
@@ -1847,6 +1905,7 @@ namespace dp2Circulation
             if (String.IsNullOrEmpty(strGcatWebServiceUrl) == true)
                 strGcatWebServiceUrl = "http://dp2003.com/gcatserver/";  //  "http://dp2003.com/dp2libraryws/gcat.asmx";
 
+#if OLD_CODE
             if (strGcatWebServiceUrl.IndexOf(".asmx") != -1)
             {
                 if (this.GcatChannel == null)
@@ -1858,6 +1917,7 @@ namespace dp2Circulation
                 try
                 {
                     // return:
+                    //      -4  ??
                     //      -1  error
                     //      0   canceled
                     //      1   succeed
@@ -1886,14 +1946,14 @@ namespace dp2Circulation
                     EndGcatLoop();
                 }
             }
-            else
+            else if (strGcatWebServiceUrl.Contains("gcat"))
             {
                 // 新的WebService
 
-                string strID = this._detailWindow.MainForm.AppInfo.GetString("DetailHost", "gcat_id", "");
-                bool bSaveID = this._detailWindow.MainForm.AppInfo.GetBoolean("DetailHost", "gcat_saveid", false);
+                string strID = Program.MainForm.AppInfo.GetString("DetailHost", "gcat_id", "");
+                bool bSaveID = Program.MainForm.AppInfo.GetBoolean("DetailHost", "gcat_saveid", false);
 
-                Hashtable question_table = (Hashtable)this._detailWindow.MainForm.ParamTable["question_table"];
+                Hashtable question_table = (Hashtable)Program.MainForm.ParamTable["question_table"];
                 if (question_table == null)
                     question_table = new Hashtable();
 
@@ -1928,8 +1988,8 @@ namespace dp2Circulation
                     if (nRet == -2)
                     {
                         IdLoginDialog login_dlg = new IdLoginDialog();
-                        GuiUtil.SetControlFont(login_dlg, 
-                            this._detailWindow.MainForm.DefaultFont, 
+                        GuiUtil.SetControlFont(login_dlg,
+                            Program.MainForm.DefaultFont,
                             false);
                         login_dlg.Text = "获得著者号 -- "
                             + ((string.IsNullOrEmpty(strID) == true) ? "请输入ID" : strError);
@@ -1945,17 +2005,17 @@ namespace dp2Circulation
                         bSaveID = login_dlg.SaveID;
                         if (login_dlg.SaveID == true)
                         {
-                            this._detailWindow.MainForm.AppInfo.SetString("DetailHost", "gcat_id", strID);
+                            Program.MainForm.AppInfo.SetString("DetailHost", "gcat_id", strID);
                         }
                         else
                         {
-                            this._detailWindow.MainForm.AppInfo.SetString("DetailHost", "gcat_id", "");
+                            Program.MainForm.AppInfo.SetString("DetailHost", "gcat_id", "");
                         }
-                        this._detailWindow.MainForm.AppInfo.SetBoolean("DetailHost", "gcat_saveid", bSaveID);
+                        Program.MainForm.AppInfo.SetBoolean("DetailHost", "gcat_saveid", bSaveID);
                         goto REDO_GETNUMBER;
                     }
 
-                    this._detailWindow.MainForm.ParamTable["question_table"] = question_table;
+                    Program.MainForm.ParamTable["question_table"] = question_table;
 
                     return nRet;
                 }
@@ -1964,13 +2024,161 @@ namespace dp2Circulation
                     EndGcatLoop();
                 }
             }
+            else 
+#endif
+            // dp2library 服务器
+            {
+                Hashtable question_table = (Hashtable)Program.MainForm.ParamTable["question_table"];
+                if (question_table == null)
+                    question_table = new Hashtable();
+
+                string strDebugInfo = "";
+
+                BeginGcatLoop("正在获取 '" + strAuthor + "' 的著者号，从 " + strGcatWebServiceUrl + " ...");
+                try
+                {
+                    // return:
+                    //      -4  著者字符串没有检索命中
+                    //      -2  strID验证失败
+                    //      -1  error
+                    //      0   canceled
+                    //      1   succeed
+                    long nRet = GetAuthorNumber(
+                        ref question_table,
+                        this._detailWindow.Progress,
+                        this._detailWindow.Form,
+                        strGcatWebServiceUrl,
+                        strAuthor,
+                        "",
+                        true,	// bSelectPinyin
+                        true,	// bSelectEntry
+                        true,	// bOutputDebugInfo
+                        out strAuthorNumber,
+                        out strDebugInfo,
+                        out strError);
+                    if (nRet == -1)
+                    {
+                        strError = "取 著者 '" + strAuthor + "' 之号码时出错 : " + strError;
+                        return -1;
+                    }
+                    Program.MainForm.ParamTable["question_table"] = question_table;
+                    return (int)nRet;
+                }
+                finally
+                {
+                    EndGcatLoop();
+                }
+            }
         }
 
+        // 外部调用
+        // 特殊版本，具有缓存问题和答案的功能
+        // return:
+        //      -4  著者字符串没有检索命中
+        //      -2  strID验证失败
+        //      -1  error
+        //      0   canceled
+        //      1   succeed
+        public static int GetAuthorNumber(
+            ref Hashtable question_table,
+            Stop stop,
+            System.Windows.Forms.IWin32Window parent,
+            string strUrl,
+            string strAuthor,
+            string strPinyin,
+            bool bSelectPinyin,
+            bool bSelectEntry,
+            bool bOutputDebugInfo,
+            out string strNumber,
+            out string strDebugInfo,
+            out string strError)
+        {
+            strError = "";
+            strDebugInfo = "";
+            strNumber = "";
+
+            long nRet = 0;
+
+            Question[] questions = null;
+            if (question_table != null)
+                questions = (Question[])question_table[strAuthor];
+            if (questions == null)
+                questions = new Question[0];
+
+            for (; ; )
+            {
+                LibraryChannel channel = Program.MainForm.GetExtChannel(strUrl, "public");
+                try
+                {
+                    // 这个函数具有catch 通讯中 exeption的能力
+                    // return:
+                    //      -4  "著者 'xxx' 的整体或局部均未检索命中" 2017/3/1
+                    //		-3	需要回答问题
+                    //      -2  strID验证失败
+                    //      -1  出错
+                    //      0   成功
+                    nRet = channel.GetAuthorNumber(
+                        strAuthor,
+                        bSelectPinyin,
+                        bSelectEntry,
+                        bOutputDebugInfo,
+                        ref questions,
+                        out strNumber,
+                        out strDebugInfo,
+                        out strError);
+                    if (nRet != -3)
+                        break;
+
+                    Debug.Assert(nRet == -3, "");
+                }
+                finally
+                {
+                    Program.MainForm.ReturnExtChannel(channel);
+                }
+
+                string strTitle = strError;
+
+                string strQuestion = questions[questions.Length - 1].Text;
+                string strXml = questions[questions.Length - 1].Xml;
+
+                QuestionDlg dlg = new QuestionDlg();
+                GuiUtil.AutoSetDefaultFont(dlg);
+                dlg.StartPosition = FormStartPosition.CenterScreen;
+                dlg.MessageTitle = strTitle;
+                dlg.Question = strQuestion.Replace("\n", "\r\n");
+                dlg.Xml = strXml;
+                if (string.IsNullOrEmpty(strPinyin) == false)
+                    dlg.HanziPinyinTable = QuestionDlg.BuildHanziPinyinTable(strAuthor, strPinyin);
+
+                dlg.ShowDialog(parent);
+
+                if (dlg.DialogResult != DialogResult.OK)
+                {
+                    strError = "放弃";
+                    return 0;
+                }
+
+                questions[questions.Length - 1].Answer = dlg.Result;
+
+                if (question_table != null)
+                    question_table[strAuthor] = questions;  // 保存
+            }
+
+            if (nRet == -1)
+                return -1;
+            if (nRet == -2)
+                return -2;  // strID验证失败
+            if (nRet == -4)
+                return -4;  // 2017/3/1
+            return 1;
+        }
+
+#if OLD_CODE
         internal void gcat_channel_BeforeLogin(object sender,
     DigitalPlatform.GcatClient.BeforeLoginEventArgs e)
         {
-            string strUserName = (string)this._detailWindow.MainForm.ParamTable["author_number_account_username"];
-            string strPassword = (string)this._detailWindow.MainForm.ParamTable["author_number_account_password"];
+            string strUserName = (string)Program.MainForm.ParamTable["author_number_account_username"];
+            string strPassword = (string)Program.MainForm.ParamTable["author_number_account_password"];
 
             if (String.IsNullOrEmpty(strUserName) == true)
             {
@@ -1988,7 +2196,7 @@ namespace dp2Circulation
             }
 
             LoginDlg dlg = new LoginDlg();
-            GuiUtil.SetControlFont(dlg, this._detailWindow.MainForm.DefaultFont, false);
+            GuiUtil.SetControlFont(dlg, Program.MainForm.DefaultFont, false);
 
             if (e.Failed == true)
                 dlg.textBox_comment.Text = "登录失败。加著者号码功能需要重新登录";
@@ -2015,11 +2223,12 @@ namespace dp2Circulation
             e.UserName = strUserName;
             e.Password = strPassword;
 
-            this._detailWindow.MainForm.ParamTable["author_number_account_username"] = strUserName;
-            this._detailWindow.MainForm.ParamTable["author_number_account_password"] = strPassword;
+            Program.MainForm.ParamTable["author_number_account_username"] = strUserName;
+            Program.MainForm.ParamTable["author_number_account_password"] = strPassword;
         }
+#endif
 
-#endregion
+        #endregion
 
         /// <summary>
         /// 获得字叫号码著者号。本函数可以被脚本重载
@@ -2055,7 +2264,7 @@ namespace dp2Circulation
             //      -1  出错
             //      0   用户希望中断
             //      1   正常
-            nRet = this._detailWindow.MainForm.HanziTextToSjhm(
+            nRet = Program.MainForm.HanziTextToSjhm(
                 true,
                 strResult,
                 out sjhms,
@@ -2120,7 +2329,7 @@ namespace dp2Circulation
             strError = "";
             strAuthorNumber = "";
 
-            int nRet = this._detailWindow.MainForm.LoadQuickCutter(true, out strError);
+            int nRet = Program.MainForm.LoadQuickCutter(true, out strError);
             if (nRet == -1)
                 return -1;
 
@@ -2130,7 +2339,7 @@ namespace dp2Circulation
             //      -1  error
             //      0   not found
             //      1   found
-            nRet = this._detailWindow.MainForm.QuickCutter.GetEntry(strAuthor,
+            nRet = Program.MainForm.QuickCutter.GetEntry(strAuthor,
                 out strText,
                 out strNumber,
                 out strError);
@@ -2147,7 +2356,7 @@ namespace dp2Circulation
             List<string> results = new List<string>();
             MarcRecord record = new MarcRecord(this._detailWindow.GetMarc());
             MarcNodeList nodes = record.select(strXPath);
-            foreach(MarcSubfield subfield in nodes)
+            foreach (MarcSubfield subfield in nodes)
             {
                 if (string.IsNullOrEmpty(subfield.Content) == false)
                     results.Add(subfield.Content);

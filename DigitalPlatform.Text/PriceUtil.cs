@@ -1,20 +1,13 @@
-using System;
-using System.IO;
-using System.Xml;
-using System.Text;
-using System.Collections;
+ï»¿using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Globalization;
-using System.Text.RegularExpressions;
-using System.Security.Cryptography;
 using System.Diagnostics;
 
 namespace DigitalPlatform.Text
 {
     public class PriceUtil
     {
-        #region ¼¶Áª²Ù×÷º¯Êı
+
+        #region çº§è”æ“ä½œå‡½æ•°
 
         public static string Add(string strText1, string strText2)
         {
@@ -22,7 +15,7 @@ namespace DigitalPlatform.Text
             return currency.Add(strText2).ToString();
         }
 
-        string _current = "";   // ½ğ¶î×Ö·û´®
+        string _current = "";   // é‡‘é¢å­—ç¬¦ä¸²
 
         public PriceUtil()
         {
@@ -76,7 +69,7 @@ namespace DigitalPlatform.Text
             {
                 if (string.IsNullOrEmpty(this._current)
                     || string.IsNullOrEmpty(strText))
-                    throw new ArgumentException("³Ë·¨ºÍ³ı·¨ÔËËãÒªÇóÁ½¸ö²Ù×÷Êı¶¼²»ÄÜÎª¿Õ");
+                    throw new ArgumentException("ä¹˜æ³•å’Œé™¤æ³•è¿ç®—è¦æ±‚ä¸¤ä¸ªæ“ä½œæ•°éƒ½ä¸èƒ½ä¸ºç©º");
 
                 string strString = this._current + strOperator + strText;
                 nRet = SumPrices(strString,
@@ -157,7 +150,7 @@ namespace DigitalPlatform.Text
             {
                 if (string.IsNullOrEmpty(this._current)
                     || string.IsNullOrEmpty(strText))
-                    throw new ArgumentException("³Ë·¨ºÍ³ı·¨ÔËËãÒªÇóÁ½¸ö²Ù×÷Êı¶¼²»ÄÜÎª¿Õ");
+                    throw new ArgumentException("ä¹˜æ³•å’Œé™¤æ³•è¿ç®—è¦æ±‚ä¸¤ä¸ªæ“ä½œæ•°éƒ½ä¸èƒ½ä¸ºç©º");
 
                 string strString = this._current + strOperator + strText;
                 nRet = SumPrices(strString,
@@ -226,8 +219,34 @@ namespace DigitalPlatform.Text
 
         #endregion
 
-        // ¼ÆËã¼Û¸ñ³Ë»ı
-        // ´ÓPrintOrderFormÖĞ×ªÒÆ¹ıÀ´
+        // åˆ¤æ–­ä¸¤ä¸ªä»·æ ¼å­—ç¬¦ä¸²æ˜¯å¦ç›¸ç­‰
+        public static bool IsEqual(string strPrice1, string strPrice2, string strDefaultPrefix = "CNY")
+        {
+            if (strPrice1 == strPrice2)
+                return true;
+
+            try
+            {
+                CurrencyItem item1 = CurrencyItem.Parse(strPrice1);
+                CurrencyItem item2 = CurrencyItem.Parse(strPrice2);
+                if (string.IsNullOrEmpty(item1.Prefix))
+                    item1.Prefix = strDefaultPrefix;
+                if (string.IsNullOrEmpty(item2.Prefix))
+                    item2.Prefix = strDefaultPrefix;
+                if (item1.Prefix == item2.Prefix
+                    && item1.Value == item2.Value
+                    && item1.Postfix == item2.Postfix)
+                    return true;
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // è®¡ç®—ä»·æ ¼ä¹˜ç§¯
+        // ä»PrintOrderFormä¸­è½¬ç§»è¿‡æ¥
         public static int MultiPrice(string strPrice,
             int nCopy,
             out string strResult,
@@ -236,13 +255,10 @@ namespace DigitalPlatform.Text
             strError = "";
             strResult = "";
 
-            string strPrefix = "";
-            string strValue = "";
-            string strPostfix = "";
             int nRet = PriceUtil.ParsePriceUnit(strPrice,
-                out strPrefix,
-                out strValue,
-                out strPostfix,
+                out string strPrefix,
+                out string strValue,
+                out string strPostfix,
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -254,17 +270,17 @@ namespace DigitalPlatform.Text
             }
             catch
             {
-                strError = "Êı×Ö '" + strValue + "' ¸ñÊ½²»ÕıÈ·";
+                strError = "æ•°å­— '" + strValue + "' æ ¼å¼ä¸æ­£ç¡®";
                 return -1;
             }
 
             value *= (decimal)nCopy;
 
-            strResult = strPrefix + value.ToString() + strPostfix;
+            strResult = strPrefix + value.ToString(CurrencyItem.fmt) + strPostfix;
             return 0;
         }
 
-        // ÄÜ¹»´¦Àí³ËºÅ»òÕß³ıºÅÁË
+        // èƒ½å¤Ÿå¤„ç†ä¹˜å·æˆ–è€…é™¤å·äº†
         public static string GetPurePrice(string strText)
         {
             string strError = "";
@@ -272,11 +288,11 @@ namespace DigitalPlatform.Text
             string strLeft = "";
             string strRight = "";
             string strOperator = "";
-            // ÏÈ´¦Àí³Ë³ıºÅ
+            // å…ˆå¤„ç†ä¹˜é™¤å·
             // return:
-            //      -1  ³ö´í
-            //      0   Ã»ÓĞ·¢ÏÖ³ËºÅ¡¢³ıºÅ
-            //      1   ·¢ÏÖ³ËºÅ»òÕß³ıºÅ
+            //      -1  å‡ºé”™
+            //      0   æ²¡æœ‰å‘ç°ä¹˜å·ã€é™¤å·
+            //      1   å‘ç°ä¹˜å·æˆ–è€…é™¤å·
             int nRet = ParseMultipcation(strText,
                 out strLeft,
                 out strRight,
@@ -295,7 +311,7 @@ namespace DigitalPlatform.Text
             if (StringUtil.IsDouble(strLeft) == false
                 && StringUtil.IsDouble(strRight) == false)
             {
-                strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ËºÅ»ò³ıºÅµÄÁ½±ß±ØĞëÖÁÉÙÓĞÒ»±ßÊÇ´¿Êı×Ö";
+                strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚ä¹˜å·æˆ–é™¤å·çš„ä¸¤è¾¹å¿…é¡»è‡³å°‘æœ‰ä¸€è¾¹æ˜¯çº¯æ•°å­—";
                 throw new Exception(strError);
             }
 
@@ -310,13 +326,13 @@ namespace DigitalPlatform.Text
                 strMultiper = strLeft;
                 if (strOperator == "/")
                 {
-                    strError = "½ğ¶î×Ö·û´® '" + strText + "' ¸ñÊ½´íÎó¡£³ıºÅµÄÓÒ±ß²ÅÄÜÊÇ´¿Êı×Ö";
+                    strError = "é‡‘é¢å­—ç¬¦ä¸² '" + strText + "' æ ¼å¼é”™è¯¯ã€‚é™¤å·çš„å³è¾¹æ‰èƒ½æ˜¯çº¯æ•°å­—";
                     throw new Exception(strError);
                 }
             }
             else
             {
-                // Ä¬ÈÏ×ó±ßÊÇ¼Û¸ñ£¬ÓÒ±ßÊÇ±¶ÂÊ
+                // é»˜è®¤å·¦è¾¹æ˜¯ä»·æ ¼ï¼Œå³è¾¹æ˜¯å€ç‡
                 strPrice = strLeft;
                 strMultiper = strRight;
             }
@@ -330,7 +346,7 @@ namespace DigitalPlatform.Text
             }
             catch
             {
-                strError = "µ¥¸ö½ğ¶î×Ö·û´® '" + strPrice + "' ÖĞ, Êı×Ö²¿·Ö '" + strValue + "' ¸ñÊ½²»ÕıÈ·";
+                strError = "å•ä¸ªé‡‘é¢å­—ç¬¦ä¸² '" + strPrice + "' ä¸­, æ•°å­—éƒ¨åˆ† '" + strValue + "' æ ¼å¼ä¸æ­£ç¡®";
                 throw new Exception(strError);
             }
 
@@ -343,7 +359,7 @@ namespace DigitalPlatform.Text
                 }
                 catch
                 {
-                    strError = "Êı×Ö '" + strMultiper + "' ¸ñÊ½²»ÕıÈ·";
+                    strError = "æ•°å­— '" + strMultiper + "' æ ¼å¼ä¸æ­£ç¡®";
                     throw new Exception(strError);
                 }
 
@@ -357,31 +373,31 @@ namespace DigitalPlatform.Text
 
                     if (multiper == 0)
                     {
-                        strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ı·¨ÔËËãÖĞ£¬³ıÊı²»ÄÜÎª0";
+                        strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚é™¤æ³•è¿ç®—ä¸­ï¼Œé™¤æ•°ä¸èƒ½ä¸º0";
                         throw new Exception(strError);
                     }
 
                     value = (decimal)((double)value / multiper);
                 }
 
-                return value.ToString();
+                return value.ToString(CurrencyItem.fmt);
             }
 
             return strValue;
         }
 
-        // ´Ó¸´ÔÓµÄ×Ö·û´®ÖĞ£¬Îö³ö´¿´â¼Û¸ñÊı×Ö²¿·Ö£¨°üÀ¨Ğ¡Êıµã£©¡£
-        // 2006/11/15 ÄÜ´¦ÀíÊı×ÖÇ°µÄÕı¸ººÅ
+        // ä»å¤æ‚çš„å­—ç¬¦ä¸²ä¸­ï¼Œæå‡ºçº¯ç²¹ä»·æ ¼æ•°å­—éƒ¨åˆ†ï¼ˆåŒ…æ‹¬å°æ•°ç‚¹ï¼‰ã€‚
+        // 2006/11/15 èƒ½å¤„ç†æ•°å­—å‰çš„æ­£è´Ÿå·
         public static string OldGetPurePrice(string strPrice)
         {
             if (String.IsNullOrEmpty(strPrice) == true)
                 return strPrice;
 
             string strResult = "";
-            int nSegment = 0;   // 0 ·ÇÊı×Ö¶Î 1Êı×Ö¶Î 2 ·ÇÊı×Ö¶Î
+            int nSegment = 0;   // 0 éæ•°å­—æ®µ 1æ•°å­—æ®µ 2 éæ•°å­—æ®µ
             int nPointCount = 0;
 
-            bool bNegative = false; // ÊÇ·ñÎª¸ºÊı
+            bool bNegative = false; // æ˜¯å¦ä¸ºè´Ÿæ•°
 
             for (int i = 0; i < strPrice.Length; i++)
             {
@@ -394,7 +410,7 @@ namespace DigitalPlatform.Text
                     if (ch == '.')
                     {
                         if (nPointCount == 1)
-                            break;  // ÒÑ¾­³öÏÖ¹ıÒ»¸öĞ¡ÊıµãÁË
+                            break;  // å·²ç»å‡ºç°è¿‡ä¸€ä¸ªå°æ•°ç‚¹äº†
 
                         nPointCount++;
                     }
@@ -423,7 +439,7 @@ namespace DigitalPlatform.Text
                     strResult += ch;
             }
 
-            // Èç¹ûµÚÒ»¸ö¾ÍÊÇĞ¡Êıµã
+            // å¦‚æœç¬¬ä¸€ä¸ªå°±æ˜¯å°æ•°ç‚¹
             if (strResult.Length > 0
                 && strResult[0] == '.')
             {
@@ -438,28 +454,25 @@ namespace DigitalPlatform.Text
         }
 
 
-        // »ã×Ü¼Û¸ñ
-        // »õ±Òµ¥Î»²»Í¬µÄ£¬»¥Ïà¶ÀÁ¢
-        // ±¾º¯ÊıÖ÷ÒªÓÃÓÚÏÔÊ¾£¬¿ÉÒÔ×Ô¶¯´¦Àí³ö´íÇé¿ö -- °Ñ´íÎó×Ö·û´®µ±×÷½á¹û·µ»Ø
+        // æ±‡æ€»ä»·æ ¼
+        // è´§å¸å•ä½ä¸åŒçš„ï¼Œäº’ç›¸ç‹¬ç«‹
+        // æœ¬å‡½æ•°ä¸»è¦ç”¨äºæ˜¾ç¤ºï¼Œå¯ä»¥è‡ªåŠ¨å¤„ç†å‡ºé”™æƒ…å†µ -- æŠŠé”™è¯¯å­—ç¬¦ä¸²å½“ä½œç»“æœè¿”å›
         // return:
-        //      »ã×ÜºóµÄ¼Û¸ñ×Ö·û´®
+        //      æ±‡æ€»åçš„ä»·æ ¼å­—ç¬¦ä¸²ï¼Œæˆ–è€…æŠ¥é”™ä¿¡æ¯
         public static string TotalPrice(List<string> prices)
         {
-            string strResult = "";
-            string strError = "";
-
             int nRet = TotalPrice(prices,
-                out strResult,
-                out strError);
+                out string strResult,
+                out string strError);
             if (nRet == -1)
                 return strError;
 
             return strResult;
         }
 
-        // »ã×Ü¼Û¸ñ
-        // »õ±Òµ¥Î»²»Í¬µÄ£¬»¥Ïà¶ÀÁ¢
-        // ±¾º¯Êı»¹ÓĞÁíÍâÒ»¸ö°æ±¾£¬ÊÇ·µ»ØList<string>µÄ
+        // æ±‡æ€»ä»·æ ¼
+        // è´§å¸å•ä½ä¸åŒçš„ï¼Œäº’ç›¸ç‹¬ç«‹
+        // æœ¬å‡½æ•°è¿˜æœ‰å¦å¤–ä¸€ä¸ªç‰ˆæœ¬ï¼Œæ˜¯è¿”å›List<string>çš„
         // return:
         //      -1  error
         //      0   succeed
@@ -484,7 +497,7 @@ namespace DigitalPlatform.Text
             return 0;
         }
 
-        // °ÑÈô¸É¼Û¸ñ×Ö·û´®½áºÏÆğÀ´
+        // æŠŠè‹¥å¹²ä»·æ ¼å­—ç¬¦ä¸²ç»“åˆèµ·æ¥
         public static string JoinPriceString(List<string> prices)
         {
             string strResult = "";
@@ -497,7 +510,7 @@ namespace DigitalPlatform.Text
                     strResult += strPrice;
                 else
                 {
-                    // µÚÒ»¸ö¼Û¸ñÇ°Ãæ²»ÓÃ¼Ó+ºÅ
+                    // ç¬¬ä¸€ä¸ªä»·æ ¼å‰é¢ä¸ç”¨åŠ +å·
                     if (String.IsNullOrEmpty(strResult) == false)
                         strResult += "+";
 
@@ -508,7 +521,7 @@ namespace DigitalPlatform.Text
             return strResult;
         }
 
-        // Á¬½ÓÁ½¸ö¼Û¸ñ×Ö·û´®
+        // è¿æ¥ä¸¤ä¸ªä»·æ ¼å­—ç¬¦ä¸²
         public static string JoinPriceString(string strPrice1,
             string strPrice2)
         {
@@ -541,9 +554,9 @@ namespace DigitalPlatform.Text
             return strPrice1 + "+" + strPrice2;
         }
 
-        // ½«ĞÎÈç"-123.4+10.55-20.3"µÄ¼Û¸ñ×Ö·û´®·´×ªÕı¸ººÅ
+        // å°†å½¢å¦‚"-123.4+10.55-20.3"çš„ä»·æ ¼å­—ç¬¦ä¸²åè½¬æ­£è´Ÿå·
         // parameters:
-        //      bSum    ÊÇ·ñÒªË³±ã»ã×Ü? true±íÊ¾Òª»ã×Ü
+        //      bSum    æ˜¯å¦è¦é¡ºä¾¿æ±‡æ€»? trueè¡¨ç¤ºè¦æ±‡æ€»
         public static int NegativePrices(string strPrices,
             bool bSum,
             out string strResultPrice,
@@ -558,7 +571,7 @@ namespace DigitalPlatform.Text
                 return 0;
 
             List<string> prices = null;
-            // ½«ĞÎÈç"-123.4+10.55-20.3"µÄ¼Û¸ñ×Ö·û´®ÇĞ¸îÎªµ¥¸öµÄ¼Û¸ñ×Ö·û´®£¬²¢¸÷×Ô´øÉÏÕı¸ººÅ
+            // å°†å½¢å¦‚"-123.4+10.55-20.3"çš„ä»·æ ¼å­—ç¬¦ä¸²åˆ‡å‰²ä¸ºå•ä¸ªçš„ä»·æ ¼å­—ç¬¦ä¸²ï¼Œå¹¶å„è‡ªå¸¦ä¸Šæ­£è´Ÿå·
             // return:
             //      -1  error
             //      0   succeed
@@ -568,7 +581,7 @@ namespace DigitalPlatform.Text
             if (nRet == -1)
                 return -1;
 
-            // Ö±½ÓÃ¿¸ö·´×ª
+            // ç›´æ¥æ¯ä¸ªåè½¬
             if (bSum == false)
             {
                 for (int i = 0; i < prices.Count; i++)
@@ -581,7 +594,7 @@ namespace DigitalPlatform.Text
                     else if (strOnePrice[0] == '-')
                         strResultPrice += "+" + strOnePrice.Substring(1);
                     else
-                        strResultPrice += "-" + strOnePrice;    // È±Ê¡ÎªÕıÊı
+                        strResultPrice += "-" + strOnePrice;    // ç¼ºçœä¸ºæ­£æ•°
                 }
 
                 return 0;
@@ -589,8 +602,8 @@ namespace DigitalPlatform.Text
 
             List<string> results = new List<string>();
 
-            // »ã×Ü¼Û¸ñ
-            // »õ±Òµ¥Î»²»Í¬µÄ£¬»¥Ïà¶ÀÁ¢
+            // æ±‡æ€»ä»·æ ¼
+            // è´§å¸å•ä½ä¸åŒçš„ï¼Œäº’ç›¸ç‹¬ç«‹
             // return:
             //      -1  error
             //      0   succeed
@@ -610,19 +623,19 @@ namespace DigitalPlatform.Text
                 else if (strOnePrice[0] == '-')
                     strResultPrice += "+" + strOnePrice.Substring(1);
                 else
-                    strResultPrice += "-" + strOnePrice;    // È±Ê¡ÎªÕıÊı
+                    strResultPrice += "-" + strOnePrice;    // ç¼ºçœä¸ºæ­£æ•°
             }
 
             return 0;
         }
 
-        // ±È½ÏÁ½¸ö¼Û¸ñ×Ö·û´®
+        // æ¯”è¾ƒä¸¤ä¸ªä»·æ ¼å­—ç¬¦ä¸²
         // return:
-        //      -3  ±ÒÖÖ²»Í¬£¬ÎŞ·¨Ö±½Ó±È½Ï strErrorÖĞÓĞËµÃ÷
-        //      -2  error strErrorÖĞÓĞËµÃ÷
-        //      -1  strPrice1Ğ¡ÓÚstrPrice2
-        //      0   µÈÓÚ
-        //      1   strPrice1´óÓÚstrPrice2
+        //      -3  å¸ç§ä¸åŒï¼Œæ— æ³•ç›´æ¥æ¯”è¾ƒ strErrorä¸­æœ‰è¯´æ˜
+        //      -2  error strErrorä¸­æœ‰è¯´æ˜
+        //      -1  strPrice1å°äºstrPrice2
+        //      0   ç­‰äº
+        //      1   strPrice1å¤§äºstrPrice2
         public static int Compare(string strPrice1,
             string strPrice2,
             out string strError)
@@ -639,7 +652,7 @@ namespace DigitalPlatform.Text
                 out strError);
             if (nRet == -1)
             {
-                strError = "½ğ¶î×Ö·û´®1 '" + strPrice1 + "' ½âÎö³ö´í: " + strError;
+                strError = "é‡‘é¢å­—ç¬¦ä¸²1 '" + strPrice1 + "' è§£æå‡ºé”™: " + strError;
                 return -2;
             }
 
@@ -650,7 +663,7 @@ namespace DigitalPlatform.Text
             }
             catch
             {
-                strError = "Êı×Ö '" + strValue1 + "' ¸ñÊ½²»ÕıÈ·";
+                strError = "æ•°å­— '" + strValue1 + "' æ ¼å¼ä¸æ­£ç¡®";
                 return -2;
             }
 
@@ -667,7 +680,7 @@ namespace DigitalPlatform.Text
                 out strError);
             if (nRet == -1)
             {
-                strError = "½ğ¶î×Ö·û´®2 '" + strPrice2 + "' ½âÎö³ö´í: " + strError;
+                strError = "é‡‘é¢å­—ç¬¦ä¸²2 '" + strPrice2 + "' è§£æå‡ºé”™: " + strError;
                 return -2;
             }
 
@@ -677,7 +690,7 @@ namespace DigitalPlatform.Text
             if (strPrefix1 != strPrefix2
                 || strPostfix1 != strPostfix2)
             {
-                strError = "±ÒÖÖ²»Í¬(Ò»¸öÊÇ'" + strPrice1 + "'£¬Ò»¸öÊÇ'" + strPrice2 + "')£¬ÎŞ·¨½øĞĞ½ğ¶î±È½Ï";
+                strError = "å¸ç§ä¸åŒ(ä¸€ä¸ªæ˜¯'" + strPrice1 + "'ï¼Œä¸€ä¸ªæ˜¯'" + strPrice2 + "')ï¼Œæ— æ³•è¿›è¡Œé‡‘é¢æ¯”è¾ƒ";
                 return -3;
             }
 
@@ -688,7 +701,7 @@ namespace DigitalPlatform.Text
             }
             catch
             {
-                strError = "Êı×Ö '" + strValue2 + "' ¸ñÊ½²»ÕıÈ·";
+                strError = "æ•°å­— '" + strValue2 + "' æ ¼å¼ä¸æ­£ç¡®";
                 return -2;
             }
 
@@ -703,11 +716,11 @@ namespace DigitalPlatform.Text
             return 1;
         }
 
-        // ¿´¿´Èô¸É¸ö¼Û¸ñ×Ö·û´®ÊÇ·ñ¶¼±íÊ¾ÁË0?
+        // çœ‹çœ‹è‹¥å¹²ä¸ªä»·æ ¼å­—ç¬¦ä¸²æ˜¯å¦éƒ½è¡¨ç¤ºäº†0?
         // return:
-        //      -1  ³ö´í
-        //      0   ²»Îª0
-        //      1   Îª0
+        //      -1  å‡ºé”™
+        //      0   ä¸ä¸º0
+        //      1   ä¸º0
         public static int IsZero(List<string> prices,
             out string strError)
         {
@@ -715,7 +728,7 @@ namespace DigitalPlatform.Text
 
             List<CurrencyItem> items = new List<CurrencyItem>();
 
-            // ±ä»»ÎªPriceItem
+            // å˜æ¢ä¸ºPriceItem
             for (int i = 0; i < prices.Count; i++)
             {
                 string strPrefix = "";
@@ -735,7 +748,7 @@ namespace DigitalPlatform.Text
                 }
                 catch
                 {
-                    strError = "Êı×Ö '" + strValue + "' ¸ñÊ½²»ÕıÈ·";
+                    strError = "æ•°å­— '" + strValue + "' æ ¼å¼ä¸æ­£ç¡®";
                     return -1;
                 }
 
@@ -747,19 +760,19 @@ namespace DigitalPlatform.Text
                 items.Add(item);
             }
 
-            // ·ÖÎö
+            // åˆ†æ
             for (int i = 0; i < items.Count; i++)
             {
                 CurrencyItem item = items[i];
 
                 if (item.Value != 0)
-                    return 0;   // ÖĞ¼ä³öÏÖÁË²»Îª0µÄ
+                    return 0;   // ä¸­é—´å‡ºç°äº†ä¸ä¸º0çš„
             }
 
-            return 1;   // È«²¿Îª0
+            return 1;   // å…¨éƒ¨ä¸º0
         }
 
-        // ½«ĞÎÈç"-123.4+10.55-20.3"µÄ¼Û¸ñ×Ö·û´®¹é²¢»ã×Ü
+        // å°†å½¢å¦‚"-123.4+10.55-20.3"çš„ä»·æ ¼å­—ç¬¦ä¸²å½’å¹¶æ±‡æ€»
         public static int SumPrices(string strPrices,
             out List<string> results,
             out string strError)
@@ -768,7 +781,7 @@ namespace DigitalPlatform.Text
             results = new List<string>();
 
             List<string> prices = null;
-            // ½«ĞÎÈç"-123.4+10.55-20.3"µÄ¼Û¸ñ×Ö·û´®ÇĞ¸îÎªµ¥¸öµÄ¼Û¸ñ×Ö·û´®£¬²¢¸÷×Ô´øÉÏÕı¸ººÅ
+            // å°†å½¢å¦‚"-123.4+10.55-20.3"çš„ä»·æ ¼å­—ç¬¦ä¸²åˆ‡å‰²ä¸ºå•ä¸ªçš„ä»·æ ¼å­—ç¬¦ä¸²ï¼Œå¹¶å„è‡ªå¸¦ä¸Šæ­£è´Ÿå·
             // return:
             //      -1  error
             //      0   succeed
@@ -778,8 +791,8 @@ namespace DigitalPlatform.Text
             if (nRet == -1)
                 return -1;
 
-            // »ã×Ü¼Û¸ñ
-            // »õ±Òµ¥Î»²»Í¬µÄ£¬»¥Ïà¶ÀÁ¢
+            // æ±‡æ€»ä»·æ ¼
+            // è´§å¸å•ä½ä¸åŒçš„ï¼Œäº’ç›¸ç‹¬ç«‹
             // return:
             //      -1  error
             //      0   succeed
@@ -793,7 +806,7 @@ namespace DigitalPlatform.Text
         }
 
         // 2012/3/7
-        // ½«ĞÎÈç"-123.4+10.55-20.3"µÄ¼Û¸ñ×Ö·û´®¹é²¢»ã×Ü
+        // å°†å½¢å¦‚"-123.4+10.55-20.3"çš„ä»·æ ¼å­—ç¬¦ä¸²å½’å¹¶æ±‡æ€»
         public static int SumPrices(string strPrices,
             out string strSumPrices,
             out string strError)
@@ -802,7 +815,7 @@ namespace DigitalPlatform.Text
             strSumPrices = "";
 
             List<string> prices = null;
-            // ½«ĞÎÈç"-123.4+10.55-20.3"µÄ¼Û¸ñ×Ö·û´®ÇĞ¸îÎªµ¥¸öµÄ¼Û¸ñ×Ö·û´®£¬²¢¸÷×Ô´øÉÏÕı¸ººÅ
+            // å°†å½¢å¦‚"-123.4+10.55-20.3"çš„ä»·æ ¼å­—ç¬¦ä¸²åˆ‡å‰²ä¸ºå•ä¸ªçš„ä»·æ ¼å­—ç¬¦ä¸²ï¼Œå¹¶å„è‡ªå¸¦ä¸Šæ­£è´Ÿå·
             // return:
             //      -1  error
             //      0   succeed
@@ -814,8 +827,8 @@ namespace DigitalPlatform.Text
 
             List<string> results = new List<string>();
 
-            // »ã×Ü¼Û¸ñ
-            // »õ±Òµ¥Î»²»Í¬µÄ£¬»¥Ïà¶ÀÁ¢
+            // æ±‡æ€»ä»·æ ¼
+            // è´§å¸å•ä½ä¸åŒçš„ï¼Œäº’ç›¸ç‹¬ç«‹
             // return:
             //      -1  error
             //      0   succeed
@@ -829,7 +842,7 @@ namespace DigitalPlatform.Text
             return 0;
         }
 
-        // ½«ĞÎÈç"-123.4+10.55-20.3"µÄ¼Û¸ñ×Ö·û´®ÇĞ¸îÎªµ¥¸öµÄ¼Û¸ñ×Ö·û´®£¬²¢¸÷×Ô´øÉÏÕı¸ººÅ
+        // å°†å½¢å¦‚"-123.4+10.55-20.3"çš„ä»·æ ¼å­—ç¬¦ä¸²åˆ‡å‰²ä¸ºå•ä¸ªçš„ä»·æ ¼å­—ç¬¦ä¸²ï¼Œå¹¶å„è‡ªå¸¦ä¸Šæ­£è´Ÿå·
         // return:
         //      -1  error
         //      0   succeed
@@ -840,8 +853,13 @@ namespace DigitalPlatform.Text
             strError = "";
             prices = new List<string>();
 
-            strPrices = strPrices.Replace("+", ",+").Replace("-", ",-");
-            string[] parts = strPrices.Split(new char[] { ',' });
+            if (strPrices == null)
+                strPrices = "";
+
+            // 2018/2/6
+            // è¿™é‡Œå‡å®šå­—ç¬¦ ` åœ¨æ•°æ®ä¸­ä¸å¸¸è§ã€‚æˆ–è€…å¯ä»¥è€ƒè™‘ä½¿ç”¨ä¸€ä¸ªæ›´ä¸å¸¸è§çš„å­—ç¬¦
+            strPrices = strPrices.Replace("+", "`+").Replace("-", "`-");
+            string[] parts = strPrices.Split(new char[] { '`' });
             for (int i = 0; i < parts.Length; i++)
             {
                 string strPart = parts[i].Trim();
@@ -854,10 +872,10 @@ namespace DigitalPlatform.Text
         }
 
         // 2012/3/7
-        // Ğ£Ñé½ğ¶î×Ö·û´®¸ñÊ½ÕıÈ·ĞÔ
+        // æ ¡éªŒé‡‘é¢å­—ç¬¦ä¸²æ ¼å¼æ­£ç¡®æ€§
         // return:
-        //      -1  ÓĞ´í
-        //      0   Ã»ÓĞ´í
+        //      -1  æœ‰é”™
+        //      0   æ²¡æœ‰é”™
         public static int VerifyPriceFormat(
             List<string> valid_formats,
             string strString,
@@ -865,7 +883,7 @@ namespace DigitalPlatform.Text
         {
             strError = "";
 
-            // Ã»ÓĞ¸ñÊ½¶¨Òå£¬¾Í²»×÷Ğ£Ñé
+            // æ²¡æœ‰æ ¼å¼å®šä¹‰ï¼Œå°±ä¸ä½œæ ¡éªŒ
             if (valid_formats.Count == 0)
                 return 0;
 
@@ -898,7 +916,7 @@ namespace DigitalPlatform.Text
                     && strPrefix != strPrefixFormat)
                     continue;
 
-                // ÔİÊ±²»Ğ£Ñévalue²¿·Ö
+                // æš‚æ—¶ä¸æ ¡éªŒvalueéƒ¨åˆ†
 
                 if (string.IsNullOrEmpty(strPostfixFormat) == false
     && strPostfix != strPostfixFormat)
@@ -907,15 +925,15 @@ namespace DigitalPlatform.Text
                 return 0;
             }
 
-            strError = "½ğ¶î×Ö·û´® '" + strString + "' µÄ¸ñÊ½²»·ûºÏ¶¨Òå '" + StringUtil.MakePathList(valid_formats) + "' µÄÒªÇó";
+            strError = "é‡‘é¢å­—ç¬¦ä¸² '" + strString + "' çš„æ ¼å¼ä¸ç¬¦åˆå®šä¹‰ '" + StringUtil.MakePathList(valid_formats) + "' çš„è¦æ±‚";
             return -1;
         }
 
-        // ·ÖÎö¼Û¸ñ²ÎÊı
-        // ÔÊĞíÇ°Ãæ³öÏÖ+ -ºÅ
+        // åˆ†æä»·æ ¼å‚æ•°
+        // å…è®¸å‰é¢å‡ºç°+ -å·
         // return:
-        //      -1  ³ö´í
-        //      0   ³É¹¦
+        //      -1  å‡ºé”™
+        //      0   æˆåŠŸ
         public static int ParsePriceUnit(string strString,
             out string strPrefix,
             out string strValue,
@@ -928,17 +946,17 @@ namespace DigitalPlatform.Text
             strError = "";
 
             strString = strString.Trim();
-            // È¥µô¶ººÅ 2012/9/1
+            // å»æ‰é€—å· 2012/9/1
             strString = strString.Replace(",", "");
-            strString = strString.Replace("£¬", "");
+            strString = strString.Replace("ï¼Œ", "");
 
             if (String.IsNullOrEmpty(strString) == true)
             {
-                strError = "½ğ¶î×Ö·û´®Îª¿Õ";
+                strError = "é‡‘é¢å­—ç¬¦ä¸²ä¸ºç©º";
                 return -1;
             }
 
-            bool bNegative = false; // ÊÇ·ñÎª¸ºÊı
+            bool bNegative = false; // æ˜¯å¦ä¸ºè´Ÿæ•°
             if (strString[0] == '+')
             {
                 bNegative = false;
@@ -952,24 +970,27 @@ namespace DigitalPlatform.Text
 
             if (String.IsNullOrEmpty(strString) == true)
             {
-                strError = "½ğ¶î×Ö·û´®(³ıÁËÕı¸ººÅÒÔÍâ)Îª¿Õ";
+                strError = "é‡‘é¢å­—ç¬¦ä¸²(é™¤äº†æ­£è´Ÿå·ä»¥å¤–)ä¸ºç©º";
                 return -1;
             }
 
             bool bInPrefix = true;
-
+            int nDotCount = 0;
             for (int i = 0; i < strString.Length; i++)
             {
-                if ((strString[i] >= '0' && strString[i] <= '9')
-                    || strString[i] == '.')
+                char ch = strString[i];
+                if ((ch >= '0' && ch <= '9')
+                    || ch == '.')
                 {
                     bInPrefix = false;
-                    strValue += strString[i];
+                    strValue += ch;
+                    if (ch == '.')  // 2017/9/15
+                        nDotCount++;
                 }
                 else
                 {
                     if (bInPrefix == true)
-                        strPrefix += strString[i];
+                        strPrefix += ch;
                     else
                     {
                         strPostfix = strString.Substring(i).Trim();
@@ -982,7 +1003,13 @@ namespace DigitalPlatform.Text
 
             if (string.IsNullOrEmpty(strValue) == true)
             {
-                strError = "½ğ¶î×Ö·û´® '" + strString + "' È±·¦Êı×Ö²¿·Ö";
+                strError = "é‡‘é¢å­—ç¬¦ä¸² '" + strString + "' ç¼ºä¹æ•°å­—éƒ¨åˆ†";
+                return -1;
+            }
+
+            if (nDotCount > 1)
+            {
+                strError = "é‡‘é¢å­—ç¬¦ä¸² '" + strString + "' ä¸­æ•°å€¼éƒ¨åˆ† '" + strValue + "' å°æ•°ç‚¹å¤šäºä¸€ä¸ª";
                 return -1;
             }
 
@@ -990,7 +1017,7 @@ namespace DigitalPlatform.Text
             if (strPrefix.IndexOfAny(new char[] { '+', '-' }) != -1
                 || strPostfix.IndexOfAny(new char[] { '+', '-' }) != -1)
             {
-                strError = "·ûºÅ + »ò - Ö»Ó¦³öÏÖÔÚµ¥¸ö½ğ¶î×Ö·û´®µÄµÚÒ»¸ö×Ö·ûÎ»ÖÃ";
+                strError = "é‡‘é¢å­—ç¬¦ä¸² '" + strString + "' æ ¼å¼é”™è¯¯ï¼šç¬¦å· + æˆ– - åªåº”å‡ºç°åœ¨å•ä¸ªé‡‘é¢å­—ç¬¦ä¸²çš„ç¬¬ä¸€ä¸ªå­—ç¬¦ä½ç½® (strPrefix='" + strPrefix + "' strPostfix='" + strPostfix + "')";
                 return -1;
             }
 
@@ -1002,9 +1029,9 @@ namespace DigitalPlatform.Text
         }
 
         // return:
-        //      -1  ³ö´í
-        //      0   Ã»ÓĞ·¢ÏÖ³ËºÅ¡¢³ıºÅ¡£×¢Òâ´ËÊ± strLeft ºÍ strRight ·µ»ØµÄ¶¼ÊÇ¿Õ
-        //      1   ·¢ÏÖ³ËºÅ»òÕß³ıºÅ
+        //      -1  å‡ºé”™
+        //      0   æ²¡æœ‰å‘ç°ä¹˜å·ã€é™¤å·ã€‚æ³¨æ„æ­¤æ—¶ strLeft å’Œ strRight è¿”å›çš„éƒ½æ˜¯ç©º
+        //      1   å‘ç°ä¹˜å·æˆ–è€…é™¤å·
         static int ParseMultipcation(string strText,
             out string strLeft,
             out string strRight,
@@ -1026,7 +1053,7 @@ namespace DigitalPlatform.Text
             return 1;
         }
 
-        // ½âÎöµ¥¸ö½ğ¶î×Ö·û´®¡£ÀıÈç CNY10.00 »ò -CNY100.00/7
+        // è§£æå•ä¸ªé‡‘é¢å­—ç¬¦ä¸²ã€‚ä¾‹å¦‚ CNY10.00 æˆ– -CNY100.00/7
         public static int ParseSinglePrice(string strText,
             out CurrencyItem item,
             out string strError)
@@ -1045,11 +1072,11 @@ namespace DigitalPlatform.Text
             string strLeft = "";
             string strRight = "";
             string strOperator = "";
-            // ÏÈ´¦Àí³Ë³ıºÅ
+            // å…ˆå¤„ç†ä¹˜é™¤å·
             // return:
-            //      -1  ³ö´í
-            //      0   Ã»ÓĞ·¢ÏÖ³ËºÅ¡¢³ıºÅ
-            //      1   ·¢ÏÖ³ËºÅ»òÕß³ıºÅ
+            //      -1  å‡ºé”™
+            //      0   æ²¡æœ‰å‘ç°ä¹˜å·ã€é™¤å·
+            //      1   å‘ç°ä¹˜å·æˆ–è€…é™¤å·
             int nRet = ParseMultipcation(strText,
                 out strLeft,
                 out strRight,
@@ -1065,7 +1092,7 @@ namespace DigitalPlatform.Text
                 if (String.IsNullOrEmpty(strLeft) == true
                     || String.IsNullOrEmpty(strRight) == true)
                 {
-                    strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ËºÅ»ò³ıºÅµÄÁ½±ß±ØĞë¶¼ÓĞÄÚÈİ";
+                    strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚ä¹˜å·æˆ–é™¤å·çš„ä¸¤è¾¹å¿…é¡»éƒ½æœ‰å†…å®¹";
                     return -1;
                 }
             }
@@ -1088,10 +1115,9 @@ namespace DigitalPlatform.Text
                 if (StringUtil.IsDouble(strLeft) == false
                     && StringUtil.IsDouble(strRight) == false)
                 {
-                    strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ËºÅ»ò³ıºÅµÄÁ½±ß±ØĞëÖÁÉÙÓĞÒ»±ßÊÇ´¿Êı×Ö";
+                    strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚ä¹˜å·æˆ–é™¤å·çš„ä¸¤è¾¹å¿…é¡»è‡³å°‘æœ‰ä¸€è¾¹æ˜¯çº¯æ•°å­—";
                     return -1;
                 }
-
 
                 if (StringUtil.IsDouble(strLeft) == false)
                 {
@@ -1104,13 +1130,13 @@ namespace DigitalPlatform.Text
                     strMultiper = strLeft;
                     if (strOperator == "/")
                     {
-                        strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ıºÅµÄÓÒ±ß²ÅÄÜÊÇ´¿Êı×Ö";
+                        strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚é™¤å·çš„å³è¾¹æ‰èƒ½æ˜¯çº¯æ•°å­—";
                         return -1;
                     }
                 }
                 else
                 {
-                    // Ä¬ÈÏ×ó±ßÊÇ¼Û¸ñ£¬ÓÒ±ßÊÇ±¶ÂÊ
+                    // é»˜è®¤å·¦è¾¹æ˜¯ä»·æ ¼ï¼Œå³è¾¹æ˜¯å€ç‡
                     strPrice = strLeft;
                     strMultiper = strRight;
                 }
@@ -1129,7 +1155,7 @@ namespace DigitalPlatform.Text
 
             if (string.IsNullOrEmpty(strValue) == true)
             {
-                strError = "½ğ¶î×Ö·û´® '" + strPrice + "' ÖĞÃ»ÓĞ°üº¬Êı×Ö²¿·Ö";
+                strError = "é‡‘é¢å­—ç¬¦ä¸² '" + strPrice + "' ä¸­æ²¡æœ‰åŒ…å«æ•°å­—éƒ¨åˆ†";
                 return -1;
             }
 
@@ -1140,7 +1166,7 @@ namespace DigitalPlatform.Text
             }
             catch
             {
-                strError = "½ğ¶î×Ö·û´® '" + strPrice + "' ÖĞ, Êı×Ö²¿·Ö '" + strValue + "' ¸ñÊ½²»ÕıÈ·";
+                strError = "é‡‘é¢å­—ç¬¦ä¸² '" + strPrice + "' ä¸­, æ•°å­—éƒ¨åˆ† '" + strValue + "' æ ¼å¼ä¸æ­£ç¡®";
                 return -1;
             }
 
@@ -1153,7 +1179,7 @@ namespace DigitalPlatform.Text
                 }
                 catch
                 {
-                    strError = "Êı×Ö '" + strMultiper + "' ¸ñÊ½²»ÕıÈ·";
+                    strError = "æ•°å­— '" + strMultiper + "' æ ¼å¼ä¸æ­£ç¡®";
                     return -1;
                 }
 
@@ -1167,11 +1193,12 @@ namespace DigitalPlatform.Text
 
                     if (multiper == 0)
                     {
-                        strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ı·¨ÔËËãÖĞ£¬³ıÊı²»ÄÜÎª0";
+                        strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚é™¤æ³•è¿ç®—ä¸­ï¼Œé™¤æ•°ä¸èƒ½ä¸º0";
                         return -1;
                     }
 
-                    value = (decimal)((double)value / multiper);
+                    // value = (decimal)((double)value / multiper);
+                    value = Convert.ToDecimal((double)value / multiper);
                 }
             }
 
@@ -1179,17 +1206,17 @@ namespace DigitalPlatform.Text
             item.Postfix = strPostfix.ToUpper();
             item.Value = value;
 
-            // È±Ê¡»õ±ÒÎªÈËÃñ±Ò
+            // ç¼ºçœè´§å¸ä¸ºäººæ°‘å¸
             if (item.Prefix == "" && item.Postfix == "")
                 item.Prefix = "CNY";
 
             return 0;
         }
 
-        // »ã×Ü¼Û¸ñ
-        // »õ±Òµ¥Î»²»Í¬µÄ£¬»¥Ïà¶ÀÁ¢
+        // æ±‡æ€»ä»·æ ¼
+        // è´§å¸å•ä½ä¸åŒçš„ï¼Œäº’ç›¸ç‹¬ç«‹
         // parameters:
-        //      prices  Èô¸Éµ¥Ò»¼Û¸ñ×Ö·û´®¹¹³ÉµÄÊı×é¡£²¢Î´½øĞĞ¹ıÅÅĞò
+        //      prices  è‹¥å¹²å•ä¸€ä»·æ ¼å­—ç¬¦ä¸²æ„æˆçš„æ•°ç»„ã€‚å¹¶æœªè¿›è¡Œè¿‡æ’åº
         // return:
         //      -1  error
         //      0   succeed
@@ -1202,10 +1229,14 @@ namespace DigitalPlatform.Text
 
             List<CurrencyItem> items = new List<CurrencyItem>();
 
-            // ±ä»»ÎªPriceItem
-            for (int i = 0; i < prices.Count; i++)
+            // å˜æ¢ä¸ºPriceItem
+            // for (int i = 0; i < prices.Count; i++)
+            foreach (string price in prices)
             {
-                string strText = prices[i].Trim();
+                // string strText = prices[i].Trim();
+                if (price == null)
+                    continue;
+                string strText = price.Trim();
 
                 if (String.IsNullOrEmpty(strText) == true)
                     continue;
@@ -1214,11 +1245,11 @@ namespace DigitalPlatform.Text
                 string strLeft = "";
                 string strRight = "";
                 string strOperator = "";
-                // ÏÈ´¦Àí³Ë³ıºÅ
+                // å…ˆå¤„ç†ä¹˜é™¤å·
                 // return:
-                //      -1  ³ö´í
-                //      0   Ã»ÓĞ·¢ÏÖ³ËºÅ¡¢³ıºÅ
-                //      1   ·¢ÏÖ³ËºÅ»òÕß³ıºÅ
+                //      -1  å‡ºé”™
+                //      0   æ²¡æœ‰å‘ç°ä¹˜å·ã€é™¤å·
+                //      1   å‘ç°ä¹˜å·æˆ–è€…é™¤å·
                 int nRet = ParseMultipcation(strText,
                     out strLeft,
                     out strRight,
@@ -1234,7 +1265,7 @@ namespace DigitalPlatform.Text
                     if (String.IsNullOrEmpty(strLeft) == true
                         || String.IsNullOrEmpty(strRight) == true)
                     {
-                        strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ËºÅ»ò³ıºÅµÄÁ½±ß±ØĞë¶¼ÓĞÄÚÈİ";
+                        strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚ä¹˜å·æˆ–é™¤å·çš„ä¸¤è¾¹å¿…é¡»éƒ½æœ‰å†…å®¹";
                         return -1;
                     }
                 }
@@ -1258,7 +1289,7 @@ namespace DigitalPlatform.Text
                     if (StringUtil.IsDouble(strLeft) == false
                         && StringUtil.IsDouble(strRight) == false)
                     {
-                        strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ËºÅ»ò³ıºÅµÄÁ½±ß±ØĞëÖÁÉÙÓĞÒ»±ßÊÇ´¿Êı×Ö";
+                        strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚ä¹˜å·æˆ–é™¤å·çš„ä¸¤è¾¹å¿…é¡»è‡³å°‘æœ‰ä¸€è¾¹æ˜¯çº¯æ•°å­—";
                         return -1;
                     }
 
@@ -1274,13 +1305,13 @@ namespace DigitalPlatform.Text
                         strMultiper = strLeft;
                         if (strOperator == "/")
                         {
-                            strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ıºÅµÄÓÒ±ß²ÅÄÜÊÇ´¿Êı×Ö";
+                            strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚é™¤å·çš„å³è¾¹æ‰èƒ½æ˜¯çº¯æ•°å­—";
                             return -1;
                         }
                     }
                     else
                     {
-                        // Ä¬ÈÏ×ó±ßÊÇ¼Û¸ñ£¬ÓÒ±ßÊÇ±¶ÂÊ
+                        // é»˜è®¤å·¦è¾¹æ˜¯ä»·æ ¼ï¼Œå³è¾¹æ˜¯å€ç‡
                         strPrice = strLeft;
                         strMultiper = strRight;
                     }
@@ -1300,7 +1331,7 @@ namespace DigitalPlatform.Text
                 // 2012/1/5
                 if (string.IsNullOrEmpty(strValue) == true)
                 {
-                    strError = "µ¥¸ö½ğ¶î×Ö·û´® '" + strPrice + "' ÖĞÃ»ÓĞ°üº¬Êı×Ö²¿·Ö";
+                    strError = "å•ä¸ªé‡‘é¢å­—ç¬¦ä¸² '" + strPrice + "' ä¸­æ²¡æœ‰åŒ…å«æ•°å­—éƒ¨åˆ†";
                     return -1;
                 }
 
@@ -1311,7 +1342,7 @@ namespace DigitalPlatform.Text
                 }
                 catch
                 {
-                    strError = "µ¥¸ö½ğ¶î×Ö·û´® '" + strPrice + "' ÖĞ, Êı×Ö²¿·Ö '" + strValue + "' ¸ñÊ½²»ÕıÈ·";
+                    strError = "å•ä¸ªé‡‘é¢å­—ç¬¦ä¸² '" + strPrice + "' ä¸­, æ•°å­—éƒ¨åˆ† '" + strValue + "' æ ¼å¼ä¸æ­£ç¡®";
                     return -1;
                 }
 
@@ -1324,7 +1355,7 @@ namespace DigitalPlatform.Text
                     }
                     catch
                     {
-                        strError = "Êı×Ö '" + strMultiper + "' ¸ñÊ½²»ÕıÈ·";
+                        strError = "æ•°å­— '" + strMultiper + "' æ ¼å¼ä¸æ­£ç¡®";
                         return -1;
                     }
 
@@ -1338,7 +1369,7 @@ namespace DigitalPlatform.Text
 
                         if (multiper == 0)
                         {
-                            strError = "½ğ¶î×Ö·û´®¸ñÊ½´íÎó '" + strText + "'¡£³ı·¨ÔËËãÖĞ£¬³ıÊı²»ÄÜÎª0";
+                            strError = "é‡‘é¢å­—ç¬¦ä¸²æ ¼å¼é”™è¯¯ '" + strText + "'ã€‚é™¤æ³•è¿ç®—ä¸­ï¼Œé™¤æ•°ä¸èƒ½ä¸º0";
                             return -1;
                         }
 
@@ -1351,7 +1382,7 @@ namespace DigitalPlatform.Text
                 item.Postfix = strPostfix.ToUpper();
                 item.Value = value;
 
-                // È±Ê¡»õ±ÒÎªÈËÃñ±Ò
+                // ç¼ºçœè´§å¸ä¸ºäººæ°‘å¸
                 if (item.Prefix == "" && item.Postfix == "")
                     item.Prefix = "CNY";
 #endif
@@ -1365,7 +1396,7 @@ namespace DigitalPlatform.Text
                 items.Add(item);
             }
 
-            // »ã×Ü
+            // æ±‡æ€»
             for (int i = 0; i < items.Count; i++)
             {
                 CurrencyItem item = items[i];
@@ -1385,44 +1416,139 @@ namespace DigitalPlatform.Text
                 else
                     break;
                      * */
-                    // ÕâÀïÊÇÒ»¸öBUG¡£Ã»ÓĞÅÅĞò£¬²¢²»ÖªµÀºóÃæ»¹ÓĞÃ»ÓĞÖØ¸´µÄÊÂÏîÄØ£¬²»ÄÜbreak¡£2009/10/10 changed
+                    // è¿™é‡Œæ˜¯ä¸€ä¸ªBUGã€‚æ²¡æœ‰æ’åºï¼Œå¹¶ä¸çŸ¥é“åé¢è¿˜æœ‰æ²¡æœ‰é‡å¤çš„äº‹é¡¹å‘¢ï¼Œä¸èƒ½breakã€‚2009/10/10 changed
                 }
             }
 
-            // Êä³ö
+            // è¾“å‡º
             for (int i = 0; i < items.Count; i++)
             {
                 CurrencyItem item = items[i];
                 decimal value = item.Value;
 
-                // ¸ººÅÒª·ÅÔÚ×îÇ°Ãæ
-                if (value < 0)
-                    results.Add("-" + item.Prefix + (-value).ToString() + item.Postfix);
-                else
-                    results.Add(item.Prefix + value.ToString() + item.Postfix);
-            }
+                // string fmt = "0.00";    // #.##  // æ³¨: value.ToString("#.##") é‡‡ç”¨çš„æ˜¯å››èˆäº”å…¥çš„æ–¹æ³•
+                string fmt = CurrencyItem.fmt;
 
+                // è´Ÿå·è¦æ”¾åœ¨æœ€å‰é¢
+                if (value < 0)
+                    results.Add("-" + item.Prefix + (-value).ToString(fmt) + item.Postfix);
+                else
+                    results.Add(item.Prefix + value.ToString(fmt) + item.Postfix);
+            }
+            
             return 0;
         }
 
     }
 
     /// <summary>
-    /// ½ğ¶îÊÂÏî
+    /// é‡‘é¢äº‹é¡¹
     /// </summary>
     public class CurrencyItem
     {
         /// <summary>
-        /// Ç°×º×Ö·û´®
+        /// å‰ç¼€å­—ç¬¦ä¸²
         /// </summary>
         public string Prefix = "";
         /// <summary>
-        /// ºó×º×Ö·û´®
+        /// åç¼€å­—ç¬¦ä¸²
         /// </summary>
         public string Postfix = "";
         /// <summary>
-        /// ÊıÖµ
+        /// æ•°å€¼
         /// </summary>
         public decimal Value = 0;
+
+        public static CurrencyItem Parse(string strText)
+        {
+            string strError = "";
+
+            string strPrefix = "";
+            string strValue = "";
+            string strPostfix = "";
+            int nRet = PriceUtil.ParsePriceUnit(strText,
+                out strPrefix,
+                out strValue,
+                out strPostfix,
+                out strError);
+            if (nRet == -1)
+                throw new Exception(strError);
+
+            decimal value = 0;
+            try
+            {
+                value = Convert.ToDecimal(strValue);
+            }
+            catch
+            {
+                strError = "æ•°å­— '" + strValue + "' æ ¼å¼ä¸æ­£ç¡®";
+                throw new Exception(strError);
+            }
+
+            CurrencyItem item = new CurrencyItem();
+            item.Prefix = strPrefix;
+            item.Postfix = strPostfix;
+            item.Value = value;
+
+            return item;
+        }
+
+#if NO
+        public string ToStringOrigin()
+        {
+            // è¦å»æ‰å°æ•°ç‚¹ä¸¤ä½ä»¥åçš„å¤šä½™çš„ 0
+            // https://msdn.microsoft.com/en-us/library/fzeeb5cd(v=vs.110).aspx
+            // https://docs.microsoft.com/en-us/dotnet/standard/base-types/custom-numeric-format-strings
+            return this.Prefix + this.Value.ToString("0.00##########################") + this.Postfix;
+        }
+#endif
+
+        public static string fmt = "0.00##########################";  // ä¸¤ä½å°æ•°(åŒ…æ‹¬0)ï¼Œæˆ–è€…å¤šäºä¸¤ä½(å»æ‰äº†å¤šä½™çš„0)
+
+        public override string ToString()
+        {
+            // "0.00";    // #.##
+
+            return this.Prefix + this.Value.ToString(fmt) + this.Postfix;
+            // æ³¨: value.ToString("#.##") é‡‡ç”¨çš„æ˜¯å››èˆäº”å…¥çš„æ–¹æ³•
+        }
+
+        public bool IsEqual(CurrencyItem item, string strDefaultPrefix)
+        {
+            string strThisPrefix = this.Prefix;
+            string strItemPrefix = item.Prefix;
+
+            if (string.IsNullOrEmpty(strThisPrefix) && string.IsNullOrEmpty(this.Postfix))
+                strThisPrefix = strDefaultPrefix;
+            if (string.IsNullOrEmpty(strItemPrefix) && string.IsNullOrEmpty(item.Postfix))
+                strItemPrefix = strDefaultPrefix;
+
+            if (this.Prefix != item.Prefix
+                || this.Value != item.Value
+                || this.Postfix != item.Postfix)
+                return false;
+            return true;
+        }
+
+        public static bool IsEqual(string strPrice1, string strPrice2, string strDefaultPrefix)
+        {
+            try
+            {
+                CurrencyItem item1 = CurrencyItem.Parse(strPrice1);
+                CurrencyItem item2 = CurrencyItem.Parse(strPrice2);
+                return item1.IsEqual(item2, strDefaultPrefix);
+            }
+            catch
+            {
+                return strPrice1 == strPrice2;
+            }
+        }
+
+        // ç»™ç©ºçš„ Prefix è®¾ç½®é»˜è®¤å€¼
+        public void EnsurePrefix(string strPrefix)
+        {
+            if (string.IsNullOrEmpty(this.Prefix) && string.IsNullOrEmpty(this.Postfix))
+                this.Prefix = strPrefix;
+        }
     }
 }

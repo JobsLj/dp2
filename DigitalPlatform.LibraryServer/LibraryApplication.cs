@@ -7,32 +7,24 @@ using System.Text;
 using System.Xml;
 using System.IO;
 using System.Collections;
-using System.Reflection;
 using System.Threading;
 using System.Diagnostics;
-using System.Web;
-using System.Drawing;
 using System.Runtime.Serialization;
+using System.Messaging;
+using System.Security.Principal;
+using System.Reflection;
 
 using MongoDB.Driver;
 
-// using DigitalPlatform.Drawing;
-
-using DigitalPlatform;	// Stop类
 using DigitalPlatform.rms.Client;
 using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 using DigitalPlatform.Text;
-using DigitalPlatform.Script;
-using DigitalPlatform.MarcDom;
-// using DigitalPlatform.Library;  // LoanFilterDocument
-using DigitalPlatform.Marc;
 using DigitalPlatform.Range;
 
 using DigitalPlatform.Message;
 using DigitalPlatform.rms.Client.rmsws_localhost;
-using System.Messaging;
-using System.Security.Principal;
+using DigitalPlatform.LibraryServer.Common;
 
 namespace DigitalPlatform.LibraryServer
 {
@@ -52,80 +44,31 @@ namespace DigitalPlatform.LibraryServer
     /// </summary>
     public partial class LibraryApplication : IDisposable
     {
-        //      2.1 (2012/4/5) 第一个具有版本号的版本。特点是增加了改造了GetIssueInfo() GetOrderInfo() GetCoomentInfo() 修改了第一参数名，去掉了第二参数
-        //      2.11 (2012/5/5) 为ListBiblioDbFroms() API增加了 item order issue 几个类型
-        //      2.12 (2012/5/15) SearchBiblio() API 对“出版时间”检索途径进行了特殊处理
-        //      2.13 (2012/5/16) SearchBiblio() API 通过strFromStyle中包含_time子串来识别时间检索请求
-        //      2.14 (2012/8/26) GetRes() API 的 nStart 参数从int修改为long类型
-        //      2.15 (2012/9/10) 开始进行分馆用户改造
-        //      2.16 (2012/9/19) Login() API增加out strLibraryCode参数
-        //      2.17 (2012/11/8) 为ListBiblioDbFroms() API增加了 amerce invoice 几个类型
-        //      2.18 (2013/2/13) 为了和 dp2Kernel 2.54 配套
-        //      2.19 (2013/12/21) 增加启动 log 信息
-        //      2.20 (2013/12/4) 读者 HTML 格式能接受 html:noborrowhistory 这样的用法 (局部还有错)
-        //      2.21 (2013/12/5) 读者 HTML 格式能接受 html:noborrowhistory 这样的用法
-        //      2.22 (2013/12/8) GetReaderInfo() 的 strBarcode 可以使用 "@barcode:" 引导，表示仅仅在证条码号中查找
-        //      2.23 (2013/12/8) GetSysParameters() 增加 cfgs listFileNamesEx; cfgs/get_res_timestamps
-        //      2.24 (2013/12/15) Borrow() Return() 允许 item 格式返回 xml:noborrowhistory; 读者 格式返回 summary
-        //      2.25 (2013/12/17)  GetReaderInfo() 允许 xml:noborrowhistory
-        //      2.26 (2013/12/30) SearchBiblio() 中, 对 strStyle 发来的 "class,__class" 能正确去重
-        //      2.27 (2014/1/2) SearchBiblbio() 中如果一个 formstyle 没有找到，会返回 ErrorCode.FromNotFound 错误码
-        //      2.28 (2014/1/15) GetBiblioInfos() API 允许前端发来多条 XML 记录，每条记录之间用 <!--> 间隔
-        //      2.29 (2014/3/2) GetCalendar() API 无论 strAction 是 list getcount get , strName 参数都发挥作用。为了 获得全部事项，注意 list / getcount 需要使用空值的 strName。以前版本，在 list / getcount 时候忽略 strName 参数，效果是获得全部试想；而 get 的效果是只能获得一个事项  
-        //      2.30 (2014/3/17) GetBiblioInfo() 和 GetBiblioInfos() API，可以使用 subcount:??? format
-        //      2.31 (2014/4/29) GetOperLogs() 对于 level-2 的 SetEntity SetOrder SetIssue SetComment 记录中，<oldRecord> 增加了 parent_id 属性
-        //      2.32 (2014/9/16) 个人图书馆功能，允许读者之间进行借还操作
-        //      2.33 (2014/9/24) Borrow() Return() API 允许用 @refID: 前缀的册条码号来进行借书还书
-        //      2.34 (2014/10/23) 允许各种功能使用评估模式
-        //      2.35 (2014/11/14) Borrow() API 中续借功能允许 strReaderBarcode 为空
-        //      2.36 (2014/11/15) Login() API 的 mac 参数，允许多个 MAC 地址，用竖线分割
-        //      2.37 (2014/11/17) Foregift() 和 Hire() 两个 API 都增加了两个 out 参数
-        //      2.38 (2014/11/26) ManageDatabase() API 的 refresh 功能，可以自动启动重建检索点的批处理任务
-        //      2.39 (2015/1/21) CopyBiblioInfo() API 增加了 strMergeStyle 和 strOutputBiblio 参数，SetBiblioInfo() API 增加了 onlydeletesubrecord action
-        //      2.40 (2015/1/25) Login() API 可以返回 token 字符串, VerifyReaderPassword() API 可以验证 token 字符串。dp2OPAC 借此实现了保持用户登录状态的功能，和第三方 SSO 跟随 dp2OPAC 登录的功能
-        //      2.41 (2015/1/26) Login() API 增加了对试探密码循环攻击的防范功能，每次禁止相关 IP 使用 Login() API 10 分钟
-        //      2.42 (2015/1/29) GetItemInfo() GetOrderInfo() GetIssueInfo() GetCommentInfo() API 增加了 strItemXml 参数。允许获得记录的检索点信息
-        //      2.43 (2015/1/30) GetItemInfo() API 进一步增加了 strItemDbType 参数，并包含了原先的 GetItemInfo GetOrderInfo GetIssuInfo GetCommentInfo API 的全部功能。至此，GetItemInfo() API 所取代的其他几个 API 逐渐要废止。为了保持兼容性，暂时保留一段时间这几个 API
-        //      2.44 (2015/4/30) GetSystemParameter() API 增加了 category=cfgs name=getDataDir 获得数据目录物理路径 
-        //      2.45 (2015/5/15) 文件上传和 WriteRes() API 都得到了充实，支持 dp2libraryconsole 前端进行文件上传和管理操作了 
-        //      2.46 (2015/5/18) 增加 API ListFile()
-        //      2.47 (2015/6/13) GetSystemParameter() API 增加了 category=arrived name=dbname
-        //      2.48 (2015/6/16) GetVersion() API 增加了 out uid 参数
-        //      2.49 (2015/8/23) GetRes() API 允许获得违约金库 cfgs 下的配置文件了。以前版本不允许是因为一个 bug 造成的。GetReaderInfo() API 的 strResultTypeList 参数增加了 advancexml_history_bibliosummary 这种用法
-        //      2.50 (2015/9/3) Return() API 的盘点功能，增加了 为 return_info 中返回信息的功能；WriteRes() 增加了 strStyle "delete" 删除盘点库记录功能(需要权限 inventorydelete)
-        //      2.51 (2015/9/10) SetReaderInfo() API 增加了一个新的 strAction 值 changereaderbarcode，允许在读者尚有借阅信息的情况下正确修改证件条码号
-        //      2.52 (2015/9/17) SetReaderInfo() API 允许使用用户定义的扩充字段。扩充字段在 library.xml 的 circulation 元素 patronAdditionalFields 属性中定义
-        //      2.53 (2015/9/26) Borrow() 和 Return() 增加了对总操作时间超过一秒的情况 memo 日志记录的功能。
-        //      2.54 (2015/9/28) ManageDatabase() 中刷新检索点定义功能，增加了对读者库选择刷新 keys 为普通状态和适合日志恢复状态的功能
-        //      2.55 (2015/10/16) SetReaderInfo() API 允许使用用户定义的读者同步扩充字段。扩充字段在 library.xml 的 circulation 元素 patronReplicationFields 属性中定义
-        //      2.56 (2015/10/18) GetReaderInfo() API 为 html 格式增加了 style_dark 和 style_light 风格。缺省为 style_light。light 对应于 readerhtml.css, dark 对英语 readerhtml_dark.css
-        //      2.57 (2015/11/8) Borrow() 和 Return() API 利用 dp2kernel 优化的检索式提高了运行速度
-        //      2.58 (2015/11/14) GetBrowseRecords() API 允许获取对象的 metadata 和 timestamp 了。这个版本要求 dp2kernel 为 V2.62 以上
-        //      2.59 (2015/11/16) WriteRes() API 允许通过 lTotalLength 为 -1 调用，作用是仅修改 metadata。这个版本要求 dp2kernel 为 V2.63 以上
-        //      2.60 (2015/11/25) GetOperLogs() 和 GetOperLog() API 开始支持两种日志类型。
-        //      2.61 (2015/12/9) GetReaderInfo() 允许使用 _testreader 获得测试用的读者记录信息
-        //      2.62 (2015/12/11) Login() API 增加了检查前端最低版本号的功能。如果用户权限中有 checkclientversion，就进行这项检查
-        //      2.63 (2015/12/12) Return() API，对于超期违约金因子为空的情况，现在不当作出错处理。这种情况交费信息不会写入读者记录的交费信息字段，但会进入操作日志中(便于以后进行统计)。
-        //      2.64 (2015/12/27) 借书和还书操作信息会自动写入 mongodb 的日志库。增加后台任务 "创建 MongoDB 日志库"
-        //      2.65 (2016/1/1) GetSystemParameters() API 增加 circulation/chargingOperDatabase。
-        //      2.66 (2016/1/2) GetBiblioInfos() API 中当 strBiblioRecPath 参数在使用 @path-list: 引导的时候，其后部允许出现 @itemBarcode:xxxx|@itemBarcode:xxx 这样的内容
-        //      2.67 (2016/1/6) GetItemInfo() API 的 @barcode-list:" "get-path-list" 功能允许间杂 @refID:前缀的号码。
-        //      2.68 (2016/1/9) Return() API 增加了 read action。会将动作记入操作日志。ChargingOperDatabase 库也会自动更新
-        //      2.69 (2016/1/29) 各个 API 都对读者身份加强了检查，防止出现权限漏洞。
-        //      2.70 (2016/4/10) 增加 MSMQ 消息队列功能。dp2library 失效日期从 5.1 变为 7.1。ReadersMonitor 后台任务会自动给没有 refID 元素的读者记录增加此元素
-        //      2.71 (2016/4/15) 对各个环节的密码相关功能进行加固。GetReaderInfo() API 不会返回 password 元素；GetOperLog() GetOperLogs() API 会滤除各种密码
-        //      2.72 (2016/5/14) SearchBiblio() API 支持按照馆代码筛选
-        //      2.73 (2016/5/18) MaxItemHistoryItems 和 MaxPatronHistoryItems 的默认值都修改为 10
-        //      2.74 (2016/5/21) GetOperLogs() API 返回的 amerce 操作的日志记录，无论何种详细级别，都不去除 oldReaderRecord 元素
-        //      2.75 (2016/5/30) GetMessage() API 加入了获取 MSMQ 消息的功能
-        //      2.76 (2016/6/4) 将读者记录和册记录中的借阅历史缺省个数修改为 10 
-        //      2.77 (2016/6/7) 读者身份的账户在登录时 dp2library 会给其权限值自动添加一个 patron 值(如果读者记录 state 元素有值则会从权限值中删除可能存在的 patron); 工作人员身份的账户在登录时 dp2library 会给其权限值自动添加一个 librarian 值
-        //      2.78 (2016/6/8) Return() API 在某些特殊情况下会无法清除册记录 XmlDocument 中的 borrower 和其他元素，新版本在此环节做了多种尝试，如果最后依然无法从 XmlDocument 删除元素，则(API 会)报错，并把错误情况写入 dp2library 错误日志。dp2library 失效期改为 2016.11.1
-        //      2.79 (2016/6/9) 增加放弃取书通知。优化 Reservation() API 中重复写入册记录和读者记录的情况
-        //      2.80 (2016/6/13) ChangeReaderPassword() API，即便是工作人员身份，也可以通过 strReaderOldPassword 参数决定是否验证旧密码。null 表示不验证。
-        //      2.81 (2016/6/25) SetUser() API 在创建新用户的时候允许 binding 字段使用 ip:[current] 表达自动绑定 IP 的要求
-        //                      GetSystemParameter() API system/outgoingQueue 可以获得 MSMQ 队列路径
-        public static string Version = "2.81";
+        // public static string Version = "3.4";
+        public static string Version
+        {
+            get
+            {
+                Assembly assembly = Assembly.GetAssembly(typeof(LibraryApplication));
+                Version version = assembly.GetName().Version;
+                return version.Major + "." + version.Minor;
+            }
+        }
+
+        public static string FullVersion
+        {
+            get
+            {
+                Assembly assembly = Assembly.GetAssembly(typeof(LibraryApplication));
+                Version version = assembly.GetName().Version;
+                return version.ToString();
+            }
+        }
+
+        public DailyItemCountTable DailyItemCountTable = new DailyItemCountTable();
+
+        internal static DateTime _expire = new DateTime(2019, 2, 15); // 上一个版本是 2018/11/15 2018/9/15 2018/7/15 2018/5/15 2018/3/15 2017/1/15 2017/12/1 2017/9/1 2017/6/1 2017/3/1 2016/11/1
+
 #if NO
         int m_nRefCount = 0;
         public int AddRef()
@@ -150,6 +93,9 @@ namespace DigitalPlatform.LibraryServer
 #endif
         public const string qrkey = "dpqrhello";
 
+        // (登录用的手机短信)验证码存储数组
+        public TempCodeCollection TempCodeTable = new TempCodeCollection();
+
         /// <summary>
         /// 是否为评估状态
         /// </summary>
@@ -161,9 +107,27 @@ namespace DigitalPlatform.LibraryServer
         public bool CheckClientVersion = false;
 
         /// <summary>
+        /// 在登录阶段要给所有账户都添加的权限列表。用逗号分隔的字符串
+        /// </summary>
+        public string GlobalAddRights { get; set; }
+
+        string _outgoingQueue = "";
+
+        /// <summary>
         /// dp2library 用于输出消息的队列路径。
         /// </summary>
-        public string OutgoingQueue = "";
+        public string OutgoingQueue
+        {
+            get
+            {
+                return this._outgoingQueue;
+            }
+            set
+            {
+                this._outgoingQueue = value;
+                this.MsmqInitialized = false;   // 迫使重新执行 InitialMsmq()
+            }
+        }
 
         // 存储各种参数信息
         // 为C#脚本所准备
@@ -207,6 +171,39 @@ namespace DigitalPlatform.LibraryServer
         {
             get;
             set;
+        }
+
+        static string GetFunctionDescription(string strFunction)
+        {
+            if (string.IsNullOrEmpty(strFunction) == false
+    && strFunction.IndexOf("|") != -1)
+                throw new ArgumentException("strFunction 参数值中不允许包含字符 '|'。应改用逗号");
+
+            List<string> results = new List<string>();
+            if (StringUtil.IsInList("objectRights", strFunction) == true)
+                results.Add("+下载权限");
+            else
+                results.Add("-下载权限");
+
+            if (StringUtil.IsInList("pdfPreview", strFunction) == true)
+                results.Add("+PDF预览");
+            else
+                results.Add("-PDF预览");
+
+            return StringUtil.MakePathList(results, ", ");
+        }
+
+        public string LibraryName
+        {
+            get
+            {
+                if (this.LibraryCfgDom == null || this.LibraryCfgDom.DocumentElement == null)
+                    return "";
+                XmlNode node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("libraryInfo/libraryName");
+                if (node == null)
+                    return "";
+                return node.InnerText.Trim();
+            }
         }
 
         /// <summary>
@@ -267,6 +264,8 @@ namespace DigitalPlatform.LibraryServer
 
         public string TempDir = "";  // 各种通用临时文件 2014/12/5
 
+        public string BackupDir = "";   // 大备份目录 2017/7/13
+
         public string WsUrl = "";	// dp2rms WebService URL
 
         public string ManagerUserName = "";
@@ -302,7 +301,36 @@ namespace DigitalPlatform.LibraryServer
         // 读者记录锁。避免多线程改写同一读者记录造成的故障
         public RecordLockCollection ReaderLocks = new RecordLockCollection();
 
-        public XmlDocument LibraryCfgDom = null;   // library.xml配置文件内容
+        private XmlDocument _libraryCfgDom = null;   // library.xml配置文件内容
+        internal ReaderWriterLockSlim _lockLibraryCfgDom = new ReaderWriterLockSlim();
+
+        public XmlDocument LibraryCfgDom
+        {
+            get
+            {
+                _lockLibraryCfgDom.EnterReadLock();
+                try
+                {
+                    return _libraryCfgDom;
+                }
+                finally
+                {
+                    _lockLibraryCfgDom.ExitReadLock();
+                }
+            }
+            set
+            {
+                _lockLibraryCfgDom.EnterWriteLock();
+                try
+                {
+                    _libraryCfgDom = value;
+                }
+                finally
+                {
+                    _lockLibraryCfgDom.ExitWriteLock();
+                }
+            }
+        }
 
         public Clock Clock = new Clock();
 
@@ -368,7 +396,7 @@ namespace DigitalPlatform.LibraryServer
         public RecordLockCollection BiblioLocks = new RecordLockCollection();
 
         // 本地结果集锁。避免多线程改写同一结果集
-        public RecordLockCollection ResultsetLocks = new RecordLockCollection();
+        // public RecordLockCollection ResultsetLocks = new RecordLockCollection();
 
         public Hashtable StopTable = new Hashtable();
 
@@ -390,6 +418,12 @@ namespace DigitalPlatform.LibraryServer
 
         // 访问日志每天允许创建的最多条目数
         public int AccessLogMaxCountPerDay = 10000;
+
+        // 2018/5/12
+        // 用于出纳操作的辅助性的检索途径
+        // 不要试图在运行中途修改它。它不会回写到 library.xml 中
+        public List<string> ItemAdditionalFroms = new List<string>();
+
 
         // 2013/5/24
         // 用于出纳操作的辅助性的检索途径
@@ -430,7 +464,7 @@ namespace DigitalPlatform.LibraryServer
         {
             Dispose(true);
             // This object will be cleaned up by the Dispose method.
-            // Therefore, you should call GC.SupressFinalize to
+            // Therefore, you should call GC.SuppressFinalize to
             // take this object off the finalization queue 
             // and prevent finalization code for this object
             // from executing a second time.
@@ -476,6 +510,19 @@ namespace DigitalPlatform.LibraryServer
             disposed = true;
         }
 
+        // TODO: 是否需要锁定?
+        // TODO: 同时要在错误日志里面写入一笔，以便系统管理员了解情况
+        public void AddHangup(string strText)
+        {
+            if (ContainsHangup(strText) == true)
+                return;
+            this.HangupList.Add(strText);
+
+            // 2017/11/29
+            if (strText != "Exit")
+                this.WriteErrorLog("*** 当前系统已经被挂起 " + strText);
+        }
+
         public bool ContainsHangup(string strText)
         {
             return this.HangupList.IndexOf(strText) != -1;
@@ -491,6 +538,8 @@ namespace DigitalPlatform.LibraryServer
                     i--;
                 }
             }
+
+            this.WriteErrorLog("*** 系统已解除 " + strText + " 挂起状态");
         }
 
         public int LoadCfg(
@@ -503,7 +552,8 @@ namespace DigitalPlatform.LibraryServer
             int nRet = 0;
             LibraryApplication app = this;  // new CirculationApplication();
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
 
@@ -537,46 +587,50 @@ namespace DigitalPlatform.LibraryServer
                     string strSessionDir = PathUtil.MergePath(strDataDir, "session");
                     string strColumnDir = PathUtil.MergePath(strDataDir, "column");
                     string strTempDir = PathUtil.MergePath(strDataDir, "temp");
+                    string strBackupDir = Path.Combine(strDataDir, "backup");
 
                     app.m_strFileName = strFileName;
 
                     app.CfgDir = strCfgDir;
 
                     app.CfgMapDir = strCfgMapDir;
-                    PathUtil.CreateDirIfNeed(app.CfgMapDir);	// 确保目录创建
-
+                    PathUtil.TryCreateDir(app.CfgMapDir);	// 确保目录创建
 
                     // log
                     app.LogDir = strLogDir;	// 日志存储目录
-                    PathUtil.CreateDirIfNeed(app.LogDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(app.LogDir);	// 确保目录创建
 
                     // zhengyuan 一卡通
                     app.ZhengyuanDir = strZhengyuanDir;
-                    PathUtil.CreateDirIfNeed(app.ZhengyuanDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(app.ZhengyuanDir);	// 确保目录创建
 
                     // dkyw 一卡通
                     app.DkywDir = strDkywDir;
-                    PathUtil.CreateDirIfNeed(app.DkywDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(app.DkywDir);	// 确保目录创建
 
                     // patron replication
                     app.PatronReplicationDir = strPatronReplicationDir;
-                    PathUtil.CreateDirIfNeed(app.PatronReplicationDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(app.PatronReplicationDir);	// 确保目录创建
 
 
                     // statis 统计文件
                     app.StatisDir = strStatisDir;
-                    PathUtil.CreateDirIfNeed(app.StatisDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(app.StatisDir);	// 确保目录创建
 
                     // session临时文件
                     app.SessionDir = strSessionDir;
-                    PathUtil.CreateDirIfNeed(app.SessionDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(app.SessionDir);	// 确保目录创建
 
                     if (bReload == false)
                         CleanSessionDir(this.SessionDir);
 
                     // 各种临时文件
                     app.TempDir = strTempDir;
-                    PathUtil.CreateDirIfNeed(app.TempDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(app.TempDir);
+
+                    // 大备份目录
+                    app.BackupDir = strBackupDir;
+                    PathUtil.TryCreateDir(app.BackupDir);
 
                     if (bReload == false)
                     {
@@ -616,16 +670,18 @@ namespace DigitalPlatform.LibraryServer
                     {
                         if (app.HasAppBeenKilled() == true)
                         {
-                            app.WriteErrorLog("*** 发现library application先前曾被意外终止 ***");
+                            app.WriteErrorLog("*** 发现 LibraryService 先前曾被意外终止 ***");
                         }
                     }
+
+                    this.WriteErrorLog("序列号许可的功能: '" + this.Function + "' (" + GetFunctionDescription(this.Function) + ")");
 
                     this.WriteErrorLog("*********");
 
                     if (bReload == true)
-                        app.WriteErrorLog("library (" + Version + ") application 开始重新装载 " + this.m_strFileName);
+                        app.WriteErrorLog("library (" + FullVersion + ") application 开始重新装载 " + this.m_strFileName);
                     else
-                        app.WriteErrorLog("library (" + Version + ") application 开始初始化。");
+                        app.WriteErrorLog("library (" + FullVersion + ") application 开始初始化。");
 
                     //
 #if NO
@@ -647,7 +703,6 @@ namespace DigitalPlatform.LibraryServer
                     app.WriteErrorLog("INFO: 开始装载 " + strFileName + " 到 XMLDOM");
 #endif
 
-                    //
 
                     XmlDocument dom = new XmlDocument();
                     try
@@ -661,11 +716,13 @@ namespace DigitalPlatform.LibraryServer
                     }
                     catch (Exception ex)
                     {
-                        strError = "装载配置文件-- '" + strFileName + "' 时发生错误，错误类型：" + ex.GetType().ToString() + "，原因：" + ex.Message;
+                        strError = "装载配置文件-- '" + strFileName + "' 时发生异常：" + ExceptionUtil.GetDebugText(ex);
                         app.WriteErrorLog(strError);
                         // throw ex;
                         goto ERROR1;
                     }
+
+                    // TODO: 此处可能会有并发问题。需要锁定一段时间，让使用 LibraryCfgDom 的地方暂时等待
 
                     app.LibraryCfgDom = dom;
 
@@ -830,10 +887,13 @@ namespace DigitalPlatform.LibraryServer
                         this.CheckClientVersion = DomUtil.GetBooleanParam(node,
                             "checkClientVersion",
                             false);
+                        // 2017/10/13
+                        this.GlobalAddRights = node.GetAttribute("globalAddRights");
                     }
                     else
                     {
                         this.CheckClientVersion = false;
+                        this.GlobalAddRights = "";
                     }
 
                     // <circulation>
@@ -874,6 +934,15 @@ namespace DigitalPlatform.LibraryServer
                             app.WriteErrorLog(strError);
                         this.MaxPatronHistoryItems = v;
 
+                        // 2018/5/12
+                        {
+                            string strList = DomUtil.GetAttr(node, "itemAdditionalFroms");
+                            if (string.IsNullOrEmpty(strList) == false)
+                                this.ItemAdditionalFroms = StringUtil.SplitList(strList);
+                            else
+                                this.ItemAdditionalFroms = new List<string>();
+                        }
+
                         nRet = DomUtil.GetIntegerParam(node,
         "maxItemHistoryItems",
         10, // 100,
@@ -889,11 +958,19 @@ namespace DigitalPlatform.LibraryServer
 
                         this.AcceptBlankReaderBarcode = DomUtil.GetBooleanParam(node, "acceptBlankReaderBarcode", true);
 
+                        // 2017/5/4
+                        this.UpperCaseItemBarcode = DomUtil.GetBooleanParam(node, "upperCaseItemBarcode", true);
+                        this.UpperCaseReaderBarcode = DomUtil.GetBooleanParam(node, "upperCaseReaderBarcode", true);
+
                         this.VerifyBookType = DomUtil.GetBooleanParam(node, "verifyBookType", false);
                         this.VerifyReaderType = DomUtil.GetBooleanParam(node, "verifyReaderType", false);
                         this.BorrowCheckOverdue = DomUtil.GetBooleanParam(node, "borrowCheckOverdue", true);
 
                         this.CirculationNotifyTypes = node.GetAttribute("notifyTypes");
+
+                        this.AcceptBlankRoomName = DomUtil.GetBooleanParam(node, "acceptBlankRoomName", false);
+
+                        this.VerifyRegisterNoDup = DomUtil.GetBooleanParam(node, "verifyRegisterNoDup", true);
                     }
                     else
                     {
@@ -904,21 +981,30 @@ namespace DigitalPlatform.LibraryServer
                         this.VerifyBarcode = false;
                         this.AcceptBlankItemBarcode = true;
                         this.AcceptBlankReaderBarcode = true;
+
+                        // 2017/5/4
+                        this.UpperCaseItemBarcode = true;
+                        this.UpperCaseReaderBarcode = true;
+
                         this.VerifyBookType = false;
                         this.VerifyReaderType = false;
                         this.BorrowCheckOverdue = true;
                         this.CirculationNotifyTypes = "";
+                        this.AcceptBlankRoomName = false;
+
+                        this.VerifyRegisterNoDup = true;
+
+                        this.ItemAdditionalFroms = new List<string>();
                     }
 
                     // <channel>
                     node = dom.DocumentElement.SelectSingleNode("channel") as XmlElement;
                     if (node != null)
                     {
-                        int v = 0;
                         nRet = DomUtil.GetIntegerParam(node,
                             "maxChannelsPerIP",
                             50,
-                            out v,
+                            out int v,
                             out strError);
                         if (nRet == -1)
                             app.WriteErrorLog(strError);
@@ -934,6 +1020,11 @@ namespace DigitalPlatform.LibraryServer
                             app.WriteErrorLog(strError);
                         if (this.SessionTable != null)
                             this.SessionTable.MaxSessionsLocalHost = v;
+
+                        string strList = DomUtil.GetStringParam(node,
+                            "privilegedIpList",
+                            "");
+                        this.SessionTable.SpecialIpList = StringUtil.SplitList(strList, ',');
                     }
                     else
                     {
@@ -941,6 +1032,7 @@ namespace DigitalPlatform.LibraryServer
                         {
                             this.SessionTable.MaxSessionsPerIp = 50;
                             this.SessionTable.MaxSessionsLocalHost = 150;
+                            this.SessionTable.SpecialIpList = null;
                         }
                     }
 
@@ -1002,11 +1094,10 @@ namespace DigitalPlatform.LibraryServer
                     node = dom.DocumentElement.SelectSingleNode("log") as XmlElement;
                     if (node != null)
                     {
-                        int nValue = 0;
                         DomUtil.GetIntegerParam(node,
                             "accessLogMaxCountPerDay",
                             10000,
-                            out nValue,
+                            out int nValue,
                             out strError);
                         this.AccessLogMaxCountPerDay = nValue;
                     }
@@ -1076,6 +1167,45 @@ namespace DigitalPlatform.LibraryServer
                     else
                     {
                         app.InvoiceDbName = "";
+                    }
+
+                    // 拼音
+                    // 元素<pinyin>
+                    // 属性dbname
+                    node = dom.DocumentElement.SelectSingleNode("pinyin") as XmlElement;
+                    if (node != null)
+                    {
+                        app.PinyinDbName = DomUtil.GetAttr(node, "dbname");
+                    }
+                    else
+                    {
+                        app.PinyinDbName = "";
+                    }
+
+                    // GCAT
+                    // 元素<gcat>
+                    // 属性dbname
+                    node = dom.DocumentElement.SelectSingleNode("gcat") as XmlElement;
+                    if (node != null)
+                    {
+                        app.GcatDbName = DomUtil.GetAttr(node, "dbname");
+                    }
+                    else
+                    {
+                        app.GcatDbName = "";
+                    }
+
+                    // 词
+                    // 元素<word>
+                    // 属性dbname
+                    node = dom.DocumentElement.SelectSingleNode("word") as XmlElement;
+                    if (node != null)
+                    {
+                        app.WordDbName = DomUtil.GetAttr(node, "dbname");
+                    }
+                    else
+                    {
+                        app.WordDbName = "";
                     }
 
                     // *** 进入内存的参数结束
@@ -1218,7 +1348,8 @@ namespace DigitalPlatform.LibraryServer
                     // 必须在ReadersMonitor以前启动。否则其中用到脚本代码时会出错。2007/10/10 changed
                     // return:
                     //		-1	出错
-                    //		0	成功
+                    //		0	脚本代码没有找到
+                    //      1   成功
                     nRet = this.InitialLibraryHostAssembly(out strError);
                     if (nRet == -1)
                     {
@@ -1245,84 +1376,22 @@ namespace DigitalPlatform.LibraryServer
                     app.WriteErrorLog("INFO: Message Queue");
 #endif
 
-                    if (string.IsNullOrEmpty(this.OutgoingQueue) == false)
+                    ///
+                    app.InitialMsmq();
+                    if (string.IsNullOrEmpty(this.OutgoingQueue))
                     {
-                        try
-                        {
-#if NO
-                            if (MessageQueue.Exists(this.OutgoingQueue))
-                            {
-                                MessageQueue.Delete(this.OutgoingQueue);
-                            }
+#if LOG_INFO
+                        app.WriteErrorLog("INFO: Message Queue 未被启用");
 #endif
-
-                            if (!MessageQueue.Exists(this.OutgoingQueue))
-                            {
-                                MessageQueue queue = MessageQueue.Create(this.OutgoingQueue);
-
-#if NO
-                                // Create an AccessControlList.
-                                AccessControlList list = new AccessControlList();
-
-                                // Create a new trustee to represent the "Everyone" user group.
-                                Trustee tr = new Trustee("Everyone");
-
-                                // Create an AccessControlEntry, granting the trustee read access to
-                                // the queue.
-                                AccessControlEntry entry = new AccessControlEntry(
-                                    tr, GenericAccessRights.Read,
-                         StandardAccessRights.Read,
-                                    AccessControlEntryType.Allow);
-
-                                // Add the AccessControlEntry to the AccessControlList.
-                                list.Add(entry);
-
-
-                                // Apply the AccessControlList to the queue.
-                                queue.SetPermissions(list);
-#endif
-
-                                var wi = WindowsIdentity.GetCurrent();
-                                if (wi.IsSystem == true)
-                                {
-                                    // 当前用户已经是 LocalSystem 了，需要额外给 Everyone 添加权限，以便让 dp2Capo 的控制台方式运行能访问这个 Queue
-                                    queue.SetPermissions(@"Everyone",
-                MessageQueueAccessRights.ReceiveMessage
-                | MessageQueueAccessRights.DeleteMessage
-                | MessageQueueAccessRights.PeekMessage
-                | MessageQueueAccessRights.GenericRead);
-                                }
-
-                                // 如果当前是 Administrator，表示可能是 dp2libraryxe 启动的方式，那么需要专门给 LocalSystem 操作 Queue 的权限，以便 Windows Service 方式的 dp2Capo 能访问 Queue
-                                var wp = new WindowsPrincipal(wi);
-                                if (wp.IsInRole(WindowsBuiltInRole.Administrator))
-                                {
-                                    queue.SetPermissions(@"NT AUTHORITY\System",
-                                        MessageQueueAccessRights.FullControl);
-                                }
-
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            app.HangupList.Add("MessageQueueCreateFail");
-                            app.WriteErrorLog("*** 创建 MSMQ 队列 '" + this.OutgoingQueue + "' 失败: " + ex.Message
-                                + " 系统被挂起。");
-                        }
                     }
-                    else
-                    {
-
-                    }
-
 
                     // 初始化 mongodb 相关对象
                     nRet = InitialMongoDatabases(out strError);
                     if (nRet == -1)
                     {
                         // app.HangupReason = LibraryServer.HangupReason.StartingError;
-                        app.HangupList.Add("ERR002");
                         app.WriteErrorLog("ERR002 首次初始化 mongodb database 失败: " + strError);
+                        app.AddHangup("ERR002");
                     }
 
 #if LOG_INFO
@@ -1545,11 +1614,12 @@ namespace DigitalPlatform.LibraryServer
                             }
                             catch (Exception ex)
                             {
-                                app.WriteErrorLog("启动批处理任务PatronReplication时出错：" + ex.Message);
+                                app.WriteErrorLog("启动批处理任务 PatronReplication 时出错：" + ex.Message);
                                 goto ERROR1;
                             }
                         }
 
+#if NO  // 暂时不允许使用这个验证性的功能 2017/6/8
                         // 启动 LibraryReplication
 
 #if LOG_INFO
@@ -1601,6 +1671,8 @@ namespace DigitalPlatform.LibraryServer
                             }
                         }
 
+#endif
+
                         // 启动 RebuildKeys
 
 #if LOG_INFO
@@ -1646,6 +1718,54 @@ namespace DigitalPlatform.LibraryServer
                                 goto ERROR1;
                             }
                         }
+
+
+                        // 启动 BackupTask
+
+#if LOG_INFO
+                        app.WriteErrorLog("INFO: BackupTask ReadBatchTaskBreakPointFile");
+#endif
+                        // 从断点记忆文件中读出信息
+                        // return:
+                        //      -1  error
+                        //      0   file not found
+                        //      1   found
+                        nRet = ReadBatchTaskBreakPointFile("大备份",
+                            out strBreakPoint,
+                            out strError);
+                        if (nRet == -1)
+                        {
+                            app.WriteErrorLog("ReadBatchTaskBreakPointFile() 时出错：" + strError);
+                        }
+                        // 如果nRet == 0，表示没有断点文件存在，也就不必自动启动这个任务
+
+                        // strBreakPoint 并未被使用。而是断点文件是否存在，这一信息有价值。
+
+                        if (nRet == 1)
+                        {
+#if LOG_INFO
+                            app.WriteErrorLog("INFO: BackupTask");
+#endif
+                            try
+                            {
+
+                                // 从断点文件中取出断点字符串
+                                BackupTask backup = new BackupTask(this, null);
+                                this.BatchTasks.Add(backup);
+
+                                if (backup.StartInfo == null)
+                                    backup.StartInfo = new BatchTaskStartInfo();   // 按照缺省值来
+                                backup.StartInfo.Start = "dbnamelist=continue";  // 从断点开始做
+                                backup.ClearProgressFile();   // 清除进度文件内容
+                                backup.StartWorkerThread();
+                            }
+                            catch (Exception ex)
+                            {
+                                app.WriteErrorLog("启动批处理任务时出错：" + ex.Message);
+                                goto ERROR1;
+                            }
+                        }
+
                     }
 
                     // 公共查询最大命中数
@@ -1680,7 +1800,7 @@ namespace DigitalPlatform.LibraryServer
             }
 #endif
 
-                    // 升级library.xml文件版本
+                    // 升级 library.xml 文件版本
                     if (bReload == false)
                     {
 #if LOG_INFO
@@ -1694,14 +1814,14 @@ namespace DigitalPlatform.LibraryServer
                     }
 
                     if (bReload == true)
-                        app.WriteErrorLog("library application结束重新装载 " + this.m_strFileName);
+                        app.WriteErrorLog("LibraryService 结束重新装载 " + this.m_strFileName);
                     else
                     {
                         TimeSpan delta = DateTime.Now - start;
-                        app.WriteErrorLog("library application成功初始化。初始化操作耗费时间 " + delta.TotalSeconds.ToString() + " 秒");
+                        app.WriteErrorLog("LibraryService 成功初始化。初始化操作耗费时间 " + delta.TotalSeconds.ToString() + " 秒");
 
                         // 写入down机检测文件
-                        app.WriteAppDownDetectFile("library application成功初始化。");
+                        app.WriteAppDownDetectFile("LibraryService 成功初始化。");
 
                         if (this.watcher == null)
                         {
@@ -1721,13 +1841,26 @@ namespace DigitalPlatform.LibraryServer
 #endif
                     }
 
-                    if (DateTime.Now > new DateTime(2016, 11, 1))
+                    if (this.MaxClients != 255) // 255 通道情况下不再检查版本失效日期 2016/11/3
                     {
-                        // 通知系统挂起
-                        // this.HangupReason = HangupReason.Expire;
-                        app.HangupList.Add("Expire");
-                        this.WriteErrorLog("*** 当前 dp2library 版本因为长期没有升级，已经失效。系统被挂起。请立即升级 dp2library 到最新版本");
+                        // DateTime expire = new DateTime(2018, 9, 15); // 上一个版本是 2018/7/15 2018/5/15 2018/3/15 2017/1/15 2017/12/1 2017/9/1 2017/6/1 2017/3/1 2016/11/1
+                        if (DateTime.Now > _expire)
+                        {
+                            if (this.MaxClients == 255)
+                            {
+                                this.WriteErrorLog("*** 当前 dp2library 版本已于 " + _expire.ToLongDateString() + " 失效。请系统管理员注意主动升级 dp2library");
+                            }
+                            else
+                            {
+                                // 通知系统挂起
+                                // this.HangupReason = HangupReason.Expire;
+                                this.WriteErrorLog("*** 当前 dp2library 版本因为长期没有升级，已经失效。系统被挂起。请立即升级 dp2library 到最新版本");
+                                app.AddHangup("Expire");
+                            }
+                        }
                     }
+                    else
+                        this.WriteErrorLog("*** 特殊版本不检查失效日期。请系统管理员注意每隔半年主动升级一次 dp2library");
 
                     // 2013/4/10
                     if (this.Changed == true)
@@ -1743,10 +1876,11 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
-        // 2008/10/13 
-        ERROR1:
+            // 2008/10/13 
+            ERROR1:
             if (bReload == false)
             {
                 if (this.watcher == null)
@@ -1768,12 +1902,12 @@ namespace DigitalPlatform.LibraryServer
             }
 
             if (bReload == true)
-                app.WriteErrorLog("library application重新装载 " + this.m_strFileName + " 的过程发生严重错误 [" + strError + "]，服务处于残缺状态，请及时排除故障后重新启动");
+                app.WriteErrorLog("LibraryService 重新装载 " + this.m_strFileName + " 的过程发生严重错误 [" + strError + "]，服务处于残缺状态，请及时排除故障后重新启动");
             else
             {
                 // app.HangupReason = LibraryServer.HangupReason.StartingError;
-                app.HangupList.Add("StartingError");
-                app.WriteErrorLog("library application初始化过程发生严重错误 [" + strError + "]，当前此服务处于残缺状态，请及时排除故障后重新启动");
+                app.WriteErrorLog("LibraryService 初始化过程发生严重错误 [" + strError + "]，当前此服务处于残缺状态，请及时排除故障后重新启动");
+                app.AddHangup("StartingError");
             }
             return -1;
         }
@@ -1821,10 +1955,10 @@ namespace DigitalPlatform.LibraryServer
             try
             {
                 Version version = new Version(strVersion);
-                Version base_version = new Version("2.65");
-                if (version.CompareTo(base_version) < 0)
+                Version dp2kernel_base_version = new Version("3.1");
+                if (version.CompareTo(dp2kernel_base_version) < 0)
                 {
-                    strError = "当前 dp2Library 版本需要和 dp2Kernel " + base_version + " 以上版本配套使用(然而当前 dp2Kernel 版本号为 " + version + ")。请立即升级 dp2Kernel 到最新版本。";
+                    strError = "当前 dp2Library 版本需要和 dp2Kernel " + dp2kernel_base_version + " 以上版本配套使用(然而当前 dp2Kernel 版本号为 " + version + ")。请立即升级 dp2Kernel 到最新版本。";
                     return -1;
                 }
 #if NO
@@ -2080,12 +2214,15 @@ namespace DigitalPlatform.LibraryServer
                 // 升级 library.xml 中的用户账户相关信息
                 // 文件格式 0.03-->0.04
                 // accounts/account 中 password 存储方式改变
+                XmlDocument temp = this.LibraryCfgDom;
                 int nRet = LibraryServerUtil.UpgradeLibraryXmlUserInfo(
                     EncryptKey,
-                    ref this.LibraryCfgDom,
+                    ref temp,
                     out strError);
                 if (nRet == -1)
                     WriteErrorLog("自动升级 library.xml v2.00(或以下)到v2.01 时出错: " + strError + "。为了修复这个问题，请系统管理员重设所有工作人员账户的密码");
+
+                this.LibraryCfgDom = temp;
 
                 // 升级完成后，修改版本号
                 nodeVersion.InnerText = "2.01";
@@ -2111,7 +2248,8 @@ namespace DigitalPlatform.LibraryServer
             RmsChannelCollection Channels,
             out string strError)
         {
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
 #if NO
@@ -2158,12 +2296,113 @@ namespace DigitalPlatform.LibraryServer
                     out infos,
                     out strError);
                 this.ArrivedDbFroms = infos;
-
                 return 0;
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
+            }
+        }
+
+        // MSMQ 环境是否初始化成功过至少一次
+        internal bool MsmqInitialized = false;
+
+        // 尝试初始化 MSMQ 环境
+        public void InitialMsmq()
+        {
+            if (MsmqInitialized == true)
+                return;
+
+            if (string.IsNullOrEmpty(this.OutgoingQueue) == true)
+            {
+                // 清除 Hangup 状态
+                if (this.ContainsHangup("MessageQueueCreateFail") == true)
+                {
+                    this.ClearHangup("MessageQueueCreateFail");
+                    //this.WriteErrorLog("*** 系统已解除 MessageQueueCreateFail 挂起状态");
+                }
+                return;
+            }
+
+            try
+            {
+#if NO
+                            if (MessageQueue.Exists(this.OutgoingQueue))
+                            {
+                                MessageQueue.Delete(this.OutgoingQueue);
+                            }
+#endif
+
+                if (!MessageQueue.Exists(this.OutgoingQueue))
+                {
+                    MessageQueue queue = MessageQueue.Create(this.OutgoingQueue);
+
+#if NO
+                                // Create an AccessControlList.
+                                AccessControlList list = new AccessControlList();
+
+                                // Create a new trustee to represent the "Everyone" user group.
+                                Trustee tr = new Trustee("Everyone");
+
+                                // Create an AccessControlEntry, granting the trustee read access to
+                                // the queue.
+                                AccessControlEntry entry = new AccessControlEntry(
+                                    tr, GenericAccessRights.Read,
+                         StandardAccessRights.Read,
+                                    AccessControlEntryType.Allow);
+
+                                // Add the AccessControlEntry to the AccessControlList.
+                                list.Add(entry);
+
+
+                                // Apply the AccessControlList to the queue.
+                                queue.SetPermissions(list);
+#endif
+
+                    var wi = WindowsIdentity.GetCurrent();
+                    if (wi.IsSystem == true)
+                    {
+                        // 当前用户已经是 LocalSystem 了，需要额外给 Everyone 添加权限，以便让 dp2Capo 的控制台方式运行能访问这个 Queue
+                        queue.SetPermissions(@"Everyone",
+    MessageQueueAccessRights.ReceiveMessage
+    | MessageQueueAccessRights.DeleteMessage
+    | MessageQueueAccessRights.PeekMessage
+    | MessageQueueAccessRights.GenericRead);
+                    }
+
+                    // 如果当前是 Administrator，表示可能是 dp2libraryxe 启动的方式，那么需要专门给 LocalSystem 操作 Queue 的权限，以便 Windows Service 方式的 dp2Capo 能访问 Queue
+                    var wp = new WindowsPrincipal(wi);
+                    if (wp.IsInRole(WindowsBuiltInRole.Administrator))
+                    {
+                        queue.SetPermissions(@"NT AUTHORITY\System",
+                            MessageQueueAccessRights.FullControl);
+                    }
+
+                    this.WriteErrorLog("首次创建 MSMQ 队列 '" + this.OutgoingQueue + "' 成功");
+                }
+
+                MsmqInitialized = true;
+                // 清除 Hangup 状态
+                if (this.ContainsHangup("MessageQueueCreateFail") == true)
+                {
+                    this.ClearHangup("MessageQueueCreateFail");
+                    //this.WriteErrorLog("*** 系统已解除 MessageQueueCreateFail 挂起状态");
+                }
+            }
+            catch (Exception ex)
+            {
+                if (this.ContainsHangup("MessageQueueCreateFail") == true)
+                {
+                    this.WriteErrorLog("*** 重试探测和尝试创建 MSMQ 队列 '" + this.OutgoingQueue + "' 失败: " + ExceptionUtil.GetExceptionMessage(ex)
+    + " 系统仍处于挂起状态。");
+                }
+                else
+                {
+                    this.WriteErrorLog("*** 探测和尝试创建 MSMQ 队列 '" + this.OutgoingQueue + "' 时出现异常: " + ExceptionUtil.GetDebugText(ex)
+                        + " 系统已被挂起。");
+                    this.AddHangup("MessageQueueCreateFail");
+                }
             }
         }
 
@@ -2194,7 +2433,8 @@ namespace DigitalPlatform.LibraryServer
             if (string.IsNullOrEmpty(this.MongoDbConnStr) == true)
                 return 0;
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
                 try
@@ -2267,7 +2507,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
         }
 
@@ -2494,7 +2735,7 @@ namespace DigitalPlatform.LibraryServer
             // this.WriteErrorLog("file1='"+this.m_strFileName+"' file2='" + e.FullPath + "'");
             if (PathUtil.IsEqual(this.m_strFileName, e.FullPath) == true)
             {
-                string strError = "";
+                // string strError = "";
 
                 // 稍微延时一下，避免很快地重装、正好和 尚在改写library.xml文件的的进程发生冲突
                 Thread.Sleep(500);
@@ -2503,7 +2744,7 @@ namespace DigitalPlatform.LibraryServer
                     true,
                     this.DataDir,
                     this.HostDir,
-                    out strError);
+                    out string strError);
                 if (nRet == -1)
                 {
                     strError = "reload " + this.m_strFileName + " error: " + strError;
@@ -2521,26 +2762,6 @@ namespace DigitalPlatform.LibraryServer
             {
                 this.Filters.ClearFilter(e.FullPath);
             }
-
-#if NO
-            // 监视webui.xml
-            if (PathUtil.IsEqual(this.m_strWebuiFileName, e.FullPath) == true)
-            {
-                string strError = "";
-                nRet = this.LoadWebuiCfgDom(out strError);
-                if (nRet == -1)
-                {
-                    strError = "reload " + this.m_strWebuiFileName + " error: " + strError;
-                    this.WriteErrorLog(strError);
-                    this.GlobalErrorInfo = strError;
-                }
-                else
-                {
-                    this.GlobalErrorInfo = "";
-                }
-            }
-#endif
-
         }
 
         // 读入<readerdbgroup>相关配置
@@ -2563,13 +2784,11 @@ namespace DigitalPlatform.LibraryServer
 
                 item.DbName = DomUtil.GetAttr(node, "name");
 
-                bool bValue = true;
-                string strError = "";
                 int nRet = DomUtil.GetBooleanParam(node,
                     "inCirculation",
                     true,
-                    out bValue,
-                    out strError);
+                    out bool bValue,
+                    out string strError);
                 if (nRet == -1)
                 {
                     this.WriteErrorLog("元素<//readerdbgroup/database>属性inCirculation读入时发生错误: " + strError);
@@ -2752,35 +2971,96 @@ namespace DigitalPlatform.LibraryServer
         }
          */
 
-
         // 检查全局配置参数是否基本正常
         public int Verify(out string strError)
         {
             strError = "";
-            bool bError = false;
-            if (this.WsUrl == "")
-            {
-                if (strError != "")
-                    strError += ", ";
 
-                strError += "<root>元素中wsurl属性未定义";
-                bError = true;
-            }
+            List<string> errors = new List<string>();
+            if (this.WsUrl == "")
+                errors.Add("root/@wsurl 属性未定义");
 
             if (this.ManagerUserName == "")
+                errors.Add("root/@managerusername 属性未定义");
+
+            // 2018/10/26
+            // 检查 unique 元素是否多于一个
+            //XmlNodeList nodes = this.LibraryCfgDom.DocumentElement.SelectNodes("unique");
+            //if (nodes.Count > 1)
+            //    errors.Add("根元素下 unique 元素定义超过一个。请删除多余的，只保留一个即可");
+
+            // 2018/11/5
+            // 检查 unique 元素是否多于一个
+            // 检查 maps_856u 元素是否多于一个
+            string[] unique_containers = new string[]{
+                            "rightsTable",
+                            "locationTypes",
+                            "accounts",
+                            "browseformats",
+                            "foregift",
+                            "virtualDatabases",
+                            "valueTables",
+                            "calendars",
+                            "traceDTLP",
+                            "zhengyuan",
+                            "dkyw",
+                            "patronReplication",
+                            "clientFineInterface",
+                            "yczb",
+                            "script",
+                            "mailTemplates",
+                            "smtpServer",
+                            "externalMessageInterface",
+                            "zhongcihao",
+                            "callNumber",
+                            "monitors",
+                            "dup",
+                            "unique",
+                            "utilDb",
+                            "libraryInfo",
+                            "login",
+                            "circulation",
+                            "channel",
+                            "cataloging",
+                            "serverReplication",
+                            "authdbgroup",
+                            "maps_856u",
+                        };
+
+            foreach (string element_name in unique_containers)
             {
-                if (strError != "")
-                    strError += ", ";
-                strError += "<root>元素中managerusername属性未定义";
-                bError = true;
+                XmlNodeList nodes = this.LibraryCfgDom.DocumentElement.SelectNodes(element_name);
+                if (nodes.Count > 1)
+                    errors.Add("根元素下 " + element_name + " 元素定义超过一个。请删除多余的，只保留一个即可");
             }
 
-            if (bError == true)
+            // 对 maps_856u 的特殊检查
+            // 序列号允许的功能如果不含有 maps856u，则 maps_856u/item@type 属性值不允许重复
+            if (StringUtil.IsInList("maps856u", this.Function) == false)
+            {
+                List<string> types = new List<string>();
+                XmlNodeList nodes = this.LibraryCfgDom.DocumentElement.SelectNodes("maps_856u/item");
+                foreach (XmlElement item in nodes)
+                {
+                    string type = item.GetAttribute("type");
+                    if (types.IndexOf(type) != -1)
+                        errors.Add("序列号未许可 maps856u 功能的情况下，maps_856u/item@type 属性值不允许重复(出现了重复值'" + type + "')");
+
+                    types.Add(type);
+                }
+            }
+
+            if (errors.Count > 0)
+            {
+                strError = "library.xml 发现下列配置错误: " + StringUtil.MakePathList(errors, "; ");
+                strError = "LibraryService 初始化过程发生严重错误 [" + strError + "]，当前此服务处于残缺状态，请及时排除故障后重新启动";
+                this.WriteErrorLog(strError);
+                this.AddHangup("StartingError");
                 return -1;
+            }
 
             return 0;
         }
-
 
         public void RestartApplication()
         {
@@ -2795,11 +3075,11 @@ namespace DigitalPlatform.LibraryServer
 
                 // stream.Close();
 
-                this.WriteErrorLog("library application 被重新初始化。");
+                this.WriteErrorLog("LibraryService 被重新初始化。");
             }
             catch (Exception ex)
             {
-                this.WriteErrorLog("library application 重新初始化时发生错误：" + ExceptionUtil.GetDebugText(ex));
+                this.WriteErrorLog("LibraryService 重新初始化时发生错误：" + ExceptionUtil.GetDebugText(ex));
             }
         }
 
@@ -2935,7 +3215,7 @@ namespace DigitalPlatform.LibraryServer
             }
             catch (Exception ex)
             {
-                this.WriteErrorLog("Flush()中俘获异常 " + ex.Message);
+                this.WriteErrorLog("Flush()中俘获异常 " + ExceptionUtil.GetDebugText(ex));
             }
         }
 
@@ -2946,10 +3226,10 @@ namespace DigitalPlatform.LibraryServer
         public void Save(string strFileName,
             bool bFlush)
         {
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
-
                 if (this.m_bChanged == false)
                 {
                     /*
@@ -2960,7 +3240,6 @@ namespace DigitalPlatform.LibraryServer
                     return;
                 }
 
-
                 // 关闭文件跟踪
                 bool bOldState = false;
                 if (this.watcher != null)
@@ -2968,7 +3247,6 @@ namespace DigitalPlatform.LibraryServer
                     bOldState = watcher.EnableRaisingEvents;
                     watcher.EnableRaisingEvents = false;
                 }
-
 
                 if (strFileName == null)
                     strFileName = m_strFileName;
@@ -3107,6 +3385,27 @@ namespace DigitalPlatform.LibraryServer
                         writer.WriteAttributeString("defaultQueue", this.OutgoingQueue);
                     writer.WriteEndElement();
 
+                    // 拼音
+                    // 元素<pinyin>
+                    // 属性dbname
+                    writer.WriteStartElement("pinyin");
+                    writer.WriteAttributeString("dbname", this.PinyinDbName);
+                    writer.WriteEndElement();
+
+                    // GCAT
+                    // 元素<gcat>
+                    // 属性dbname
+                    writer.WriteStartElement("gcat");
+                    writer.WriteAttributeString("dbname", this.GcatDbName);
+                    writer.WriteEndElement();
+
+                    // 词
+                    // 元素<word>
+                    // 属性dbname
+                    writer.WriteStartElement("word");
+                    writer.WriteAttributeString("dbname", this.WordDbName);
+                    writer.WriteEndElement();
+
                     /*
                     // 图书馆业务服务器
                     // 元素<libraryserver>
@@ -3142,9 +3441,49 @@ namespace DigitalPlatform.LibraryServer
 
                     WriteItemDbGroupParam(writer);
 
+                    // TODO: 把这些语句都写入一个函数
                     // 没有进入内存属性的其他XML片断
                     if (this.LibraryCfgDom != null)
                     {
+                        string[] elements = new string[]{
+                            "//rightsTable",       // 0.02以前为rightstable
+                            "//locationTypes",  // 0.02以前为locationtypes
+                            "//accounts",
+                            "//browseformats",
+                            "//foregift",
+                            "//virtualDatabases",
+                            "//valueTables",
+                            "//calendars",
+                            "traceDTLP",
+                            "zhengyuan",
+                            "dkyw",
+                            "patronReplication",  // "//patronReplication", 2018/9/5
+                            "//clientFineInterface",
+                            "yczb",
+                            "script",
+                            "mailTemplates",
+                            "smtpServer",
+                            "externalMessageInterface",
+                            "zhongcihao",
+                            "callNumber",
+                            "monitors",
+                            "dup",
+                            "unique",
+                            "utilDb",
+                            "libraryInfo",
+                            "login",
+                            "circulation",
+                            "channel",
+                            "cataloging",
+                            "serverReplication",
+                            "authdbgroup",  // 2018/9/2
+                            "maps_856u",    // 2018/10/24
+                            "globalResults",    // 2018/12/3
+                        };
+
+                        RestoreElements(writer, elements);
+
+#if NO
                         // <rightsTable>
                         XmlNode node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("//rightsTable");    // 0.02以前为rightstable
                         if (node != null)
@@ -3191,7 +3530,6 @@ namespace DigitalPlatform.LibraryServer
                         {
                             node.WriteTo(writer);
                         }
-
 
                         // <foregift>
                         node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("//foregift");
@@ -3336,6 +3674,14 @@ namespace DigitalPlatform.LibraryServer
                             node.WriteTo(writer);
                         }
 
+                        // 2016/12/14
+                        // <unique>
+                        node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("unique");
+                        if (node != null)
+                        {
+                            node.WriteTo(writer);
+                        }
+
                         // <utilDb>
                         node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("utilDb");
                         if (node != null)
@@ -3378,6 +3724,14 @@ namespace DigitalPlatform.LibraryServer
                         {
                             node.WriteTo(writer);
                         }
+
+                        // <serverReplication>
+                        node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("serverReplication");
+                        if (node != null)
+                        {
+                            node.WriteTo(writer);
+                        }
+#endif
                     }
 
                     // 时钟
@@ -3394,6 +3748,13 @@ namespace DigitalPlatform.LibraryServer
 
                 this.m_bChanged = false;
 
+                // 2017/11/25
+                {
+                    if (this.LibraryCfgDom == null)
+                        this.LibraryCfgDom = new XmlDocument();
+                    this.LibraryCfgDom.Load(strFileName);
+                }
+
                 if (this.watcher != null)
                 {
                     watcher.EnableRaisingEvents = bOldState;
@@ -3402,11 +3763,22 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
-
         }
 
+        void RestoreElements(XmlTextWriter writer, string[] elements)
+        {
+            foreach (string element in elements)
+            {
+                XmlNode node = this.LibraryCfgDom.DocumentElement.SelectSingleNode(element);
+                if (node != null)
+                    node.WriteTo(writer);
+            }
+        }
+
+#if OLD_CODE
         public void StopAll()
         {
             // 停止所有长操作
@@ -3484,25 +3856,32 @@ namespace DigitalPlatform.LibraryServer
                 return stop;
             }
         }
+#endif
 
         internal CancellationTokenSource _app_down = new CancellationTokenSource();
 
         public void Close()
         {
+            // 切断所有正在请求中的 RmsChannel
+            _slowChannelList.Disabled = true;   // 先禁用
+            _slowChannelList.Abort();
+
             _app_down.Cancel();
 
             this.EndWather();
 
             //this.HangupReason = LibraryServer.HangupReason.Exit;    // 阻止后继 API 访问
-            this.HangupList.Add("Exit");
 
-            this.WriteErrorLog("LibraryApplication 开始下降");
+            this.WriteErrorLog("LibraryService 开始下降");
+            this.AddHangup("Exit");
 
             DateTime start = DateTime.Now;
             try
             {
+#if OLD_CODE
                 // 停止所有长操作
                 this.StopAll();
+#endif
 
                 // 2014/12/3
                 this.Flush();
@@ -3539,7 +3918,7 @@ namespace DigitalPlatform.LibraryServer
             }
             catch (Exception ex)
             {
-                this.WriteErrorLog("LibraryApplication Close()俘获异常: " + ExceptionUtil.GetDebugText(ex));
+                this.WriteErrorLog("LibraryApplication Close() 捕获异常: " + ExceptionUtil.GetDebugText(ex));
             }
 
             TimeSpan delta = DateTime.Now - start;
@@ -3550,17 +3929,39 @@ namespace DigitalPlatform.LibraryServer
             disposed = true;
         }
 
+        // 兼容以前用法
+        public int InitialVdbs(
+    RmsChannelCollection Channels,
+    out string strError)
+        {
+            string strWarning = "";
+            int nRet = InitialVdbs(
+    Channels,
+    out strWarning,
+    out strError);
+            if (string.IsNullOrEmpty(strWarning) == false)
+            {
+                strError = strWarning;
+                return -1;
+            }
+
+            return nRet;
+        }
+
         // 初始化虚拟库集合定义对象
         public int InitialVdbs(
             RmsChannelCollection Channels,
+            out string strWarning,
             out string strError)
         {
             strError = "";
+            strWarning = "";
 
             if (this.vdbs != null)
                 return 0;   // 优化
 
-            this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            // this.m_lock.AcquireWriterLock(m_nLockTimeout);
+            this.LockForWrite();    // 2016/10/16
             try
             {
                 XmlNode root = this.LibraryCfgDom.DocumentElement.SelectSingleNode(
@@ -3580,12 +3981,12 @@ namespace DigitalPlatform.LibraryServer
                     return -1;
                 }
                  * */
-
                 this.vdbs = new VirtualDatabaseCollection();
                 int nRet = vdbs.Initial(root,
                     Channels,
                     this.WsUrl,
                     biblio_dbs_root,
+                    out strWarning,
                     out strError);
                 if (nRet == -1)
                 {
@@ -3597,7 +3998,8 @@ namespace DigitalPlatform.LibraryServer
             }
             finally
             {
-                this.m_lock.ReleaseWriterLock();
+                // this.m_lock.ReleaseWriterLock();
+                this.UnlockForWrite();
             }
         }
 
@@ -3676,6 +4078,10 @@ namespace DigitalPlatform.LibraryServer
         {
             IsInCirculation = false;
             strLibraryCode = "";
+
+            // 2016/11/7
+            if (string.IsNullOrEmpty(strReaderDbName))
+                return false;
 
             for (int i = 0; i < this.ReaderDbs.Count; i++)
             {
@@ -3848,33 +4254,12 @@ namespace DigitalPlatform.LibraryServer
             return false;
         }
 
-        // 是否为实用库名
-        // 实用库包括 publisher / zhongcihao / dictionary 类型
-        public bool IsUtilDbName(string strUtilDbName)
-        {
-            XmlNode node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("utilDb/database[@name='" + strUtilDbName + "']");
-            if (node == null)
-                return false;
-
-            return true;
-        }
-
-        public bool IsUtilDbName(string strUtilDbName, string strType)
-        {
-            XmlNode node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("utilDb/database[@name='" + strUtilDbName + "' and @type='" + strType + "']");
-            if (node == null)
-                return false;
-
-            return true;
-        }
-
         // 是否在配置的书目库名之列?
         public ItemDbCfg GetBiblioDbCfg(string strBiblioDbName)
         {
             // 2008/10/16 
             if (String.IsNullOrEmpty(strBiblioDbName) == true)
                 return null;
-
 
             for (int i = 0; i < this.ItemDbs.Count; i++)
             {
@@ -3883,6 +4268,33 @@ namespace DigitalPlatform.LibraryServer
                     return cfg;
             }
             return null;
+        }
+
+        // 是否在配置的书目库名之列?
+        public ItemDbCfg GetAuthorityDbCfg(string strBiblioDbName)
+        {
+            if (String.IsNullOrEmpty(strBiblioDbName) == true)
+                return null;
+
+            XmlElement database = this.LibraryCfgDom.DocumentElement.SelectSingleNode("authdbgroup/database[@name='" + strBiblioDbName + "']") as XmlElement;
+            if (database == null)
+                return null;
+            return new ItemDbCfg
+            {
+                DbName = database.GetAttribute("name"),
+                BiblioDbSyntax = database.GetAttribute("syntax")
+            };
+        }
+
+        public List<string> GetAuthorityDbNames()
+        {
+            List<string> results = new List<string>();
+            XmlNodeList databases = this.LibraryCfgDom.DocumentElement.SelectNodes("authdbgroup/database");
+            foreach (XmlElement database in databases)
+            {
+                results.Add(database.GetAttribute("name"));
+            }
+            return results;
         }
 
         // 是否具有orderWork角色
@@ -4003,6 +4415,40 @@ namespace DigitalPlatform.LibraryServer
             return true;
         }
 
+        // (通过其他语言的书目库名)获得配置文件中所使用的那个规范库名
+        public string GetCfgAuthorityDbName(string strAuthorityDbName)
+        {
+            XmlNode node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("authdbgroup/database[@name='" + strAuthorityDbName + "']");
+
+            if (node != null)
+                return strAuthorityDbName;
+
+            // 然后关注别名
+            if (this.kdbs == null)
+                return null;
+
+            KernelDbInfo db = this.kdbs.FindDb(strAuthorityDbName);
+            if (db != null)
+            {
+                foreach (Caption caption in db.Captions)
+                {
+                    node = this.LibraryCfgDom.DocumentElement.SelectSingleNode("authdbgroup/database[@name='" + caption.Value + "']");
+                    if (node != null)
+                        return caption.Value;
+                }
+            }
+
+            return null;
+        }
+
+        // 判断一个数据库名是不是合法的规范库名
+        public bool IsAuthorityDbName(string strAuthorityDbName)
+        {
+            if (GetCfgAuthorityDbName(strAuthorityDbName) == null)
+                return false;
+            return true;
+        }
+
 #if NO
         // 判断一个数据库名是不是合法的书目库名
         public bool IsBiblioDbName(string strBiblioDbName)
@@ -4057,7 +4503,7 @@ namespace DigitalPlatform.LibraryServer
             strError = "没有找到名为 '" + strChildDbName + "' 的种下属库";
             return 0;
 
-        FOUND:
+            FOUND:
             strBiblioDbName = DomUtil.GetAttr(node, "biblioDbName");
             return 1;
         }
@@ -4100,7 +4546,7 @@ namespace DigitalPlatform.LibraryServer
                 return 0;
             }
 
-        FOUND:
+            FOUND:
             strBiblioDbName = DomUtil.GetAttr(node, "biblioDbName");
             return 1;
 
@@ -4170,7 +4616,7 @@ namespace DigitalPlatform.LibraryServer
                 return 0;
             }
 
-        FOUND:
+            FOUND:
             strBiblioDbName = DomUtil.GetAttr(node, "biblioDbName");
             return 1;
         }
@@ -4213,7 +4659,7 @@ namespace DigitalPlatform.LibraryServer
                 return 0;
             }
 
-        FOUND:
+            FOUND:
             strBiblioDbName = DomUtil.GetAttr(node, "biblioDbName");
             return 1;
         }
@@ -4256,7 +4702,7 @@ namespace DigitalPlatform.LibraryServer
                 return 0;
             }
 
-        FOUND:
+            FOUND:
             strBiblioDbName = DomUtil.GetAttr(node, "biblioDbName");
             return 1;
         }
@@ -4832,12 +5278,12 @@ namespace DigitalPlatform.LibraryServer
             XmlElement node = root.SelectSingleNode("account[@name='" + strUserID + "']") as XmlElement;
             if (node == null)
             {
-                strError = "用户 '" + strUserID + "' 不存在";
+                strError = "用户 '" + strUserID + "' 不存在 (5)";
                 return 0;
             }
 
             account = new Account();
-            account.XmlNode = node;
+            account._xmlNode = node;
             account.LoginName = node.GetAttribute("name");
             account.UserID = node.GetAttribute("name");
 
@@ -4871,6 +5317,9 @@ namespace DigitalPlatform.LibraryServer
             account.Access = DomUtil.GetAttr(node, "access");
             account.RmsUserName = DomUtil.GetAttr(node, "rmsUserName");
 
+            // 2016/10/26
+            account.Binding = node.GetAttribute("binding");
+
             try
             {
                 strText = DomUtil.GetAttr(node, "rmsPassword");
@@ -4895,7 +5344,9 @@ namespace DigitalPlatform.LibraryServer
         // TODO：判断strItemBarcode是否为空
         // 获得预约到书队列记录
         // parameters:
-        //      strItemBarcodeParam  册条码号。可以使用 @refID: 前缀
+        //      strItemBarcodeParam  册条码号。可以使用 @itemRefID: 前缀表示册参考ID。
+        //                          @notifyID: 是通知记录本身的参考ID
+        //                          @patronRefID: 是读者记录的参考ID
         // return:
         //      -1  error
         //      0   not found
@@ -4915,14 +5366,18 @@ namespace DigitalPlatform.LibraryServer
             strError = "";
             timestamp = null;
 
+            // 2016/12/4
+            // 兼容以前的用法。以前曾经有一段 @refID: 表示册参考ID
+            strItemBarcodeParam = strItemBarcodeParam.Replace("@refID:", "@itemRefID:");
+
             LibraryApplication app = this;
             string strFrom = "册条码";
 
-            // 注：旧的，也就是 2015/5/7 以前的 预约到书队列库里面并没有 参考ID 检索点，所以直接用带着 @refID 前缀的字符串进行检索即可。
+            // 注：旧的，也就是 2015/5/7 以前的 预约到书队列库里面并没有 册参考ID 检索点，所以直接用带着 @refID 前缀的字符串进行检索即可。
             // 等队列库普遍刷新检索点以后，改为使用下面一段代码
             if (this.ArrivedDbKeysContainsRefIDKey() == true)
             {
-                string strHead = "@refID:";
+                string strHead = "@itemRefID:";
 
                 if (StringUtil.HasHead(strItemBarcodeParam, strHead, true) == true)
                 {
@@ -4934,6 +5389,17 @@ namespace DigitalPlatform.LibraryServer
                         return -1;
                     }
                 }
+            }
+
+            if (strItemBarcodeParam.StartsWith("@notifyID:"))
+            {
+                strFrom = "参考ID";
+                strItemBarcodeParam = strItemBarcodeParam.Substring("@notifyID:".Length);
+            }
+            else if (strItemBarcodeParam.StartsWith("@patronRefID:"))
+            {
+                strFrom = "读者参考ID";
+                strItemBarcodeParam = strItemBarcodeParam.Substring("@patronRefID:".Length);
             }
 
             // 构造检索式
@@ -4968,14 +5434,13 @@ namespace DigitalPlatform.LibraryServer
 
             long lHitCount = lRet;
 
-            List<string> aPath = null;
             lRet = channel.DoGetSearchResult(
                 "default",
                 0,
                 1,
                 "zh",
                 null,
-                out aPath,
+                out List<string> aPath,
                 out strError);
             if (lRet == -1)
                 goto ERROR1;
@@ -4997,7 +5462,7 @@ namespace DigitalPlatform.LibraryServer
                 goto ERROR1;
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5010,7 +5475,6 @@ namespace DigitalPlatform.LibraryServer
         //      1   命中1条
         //      >1  命中多于1条
         public int GetRecXml(
-            // RmsChannelCollection channels,
             RmsChannel channel,
             string strQueryXml,
             out string strXml,
@@ -5019,7 +5483,7 @@ namespace DigitalPlatform.LibraryServer
             out byte[] timestamp,
             out string strError)
         {
-            aPath = null;
+            aPath = new List<string>();
 
             strXml = "";
             strError = "";
@@ -5052,7 +5516,6 @@ namespace DigitalPlatform.LibraryServer
 
             long lHitCount = lRet;
 
-            // List<string> aPath = null;
             lRet = channel.DoGetSearchResult(
                 "default",
                 0,
@@ -5085,7 +5548,7 @@ namespace DigitalPlatform.LibraryServer
                 goto ERROR1;
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5128,7 +5591,7 @@ namespace DigitalPlatform.LibraryServer
             out byte[] timestamp,
             out string strError)
         {
-            aPath = null;
+            aPath = new List<string>();
 
             strXml = "";
             strError = "";
@@ -5220,7 +5683,7 @@ namespace DigitalPlatform.LibraryServer
                 goto ERROR1;
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5338,7 +5801,7 @@ namespace DigitalPlatform.LibraryServer
             strXml = records[0].Xml;
             timestamp = records[0].baTimestamp;
             strOutputPath = records[0].Path;
-#else 
+#else
 
             List<string> aPath = null;
             lRet = channel.DoGetSearchResult(
@@ -5411,7 +5874,7 @@ namespace DigitalPlatform.LibraryServer
 
             // 再尝试检索全部读者库一次
             nRet = GetReaderRecXml(
-                // channels,
+// channels,
 channel,
 strBarcode,
 1,
@@ -5440,7 +5903,7 @@ out strError);
             strOutputPath = "";
             List<string> recpaths = null;
             int nRet = GetReaderRecXml(
-                // channels,
+            // channels,
             channel,
             strBarcode,
             1,
@@ -5628,7 +6091,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -5650,7 +6113,7 @@ out strError);
             out string strError)
         {
             return GetReaderRecXmlByFrom(
-                // channels,
+            // channels,
             channel,
             strDisplayName,
             "显示名",
@@ -5672,7 +6135,7 @@ out strError);
     out string strError)
         {
             return GetReaderRecXmlByFrom(
-                // channels,
+    // channels,
     channel,
     null,
     strWord,
@@ -6128,7 +6591,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -6173,7 +6636,6 @@ out strError);
         //      -1  error
         //      其他    命中记录条数(不超过nMax规定的极限)
         public int SearchReaderRecDup(
-            // RmsChannelCollection channels,
             RmsChannel channel,
             string strBarcode,
             int nMax,
@@ -6181,7 +6643,7 @@ out strError);
             out string strError)
         {
             strError = "";
-            aPath = null;
+            aPath = new List<string>();
 
             Debug.Assert(String.IsNullOrEmpty(strBarcode) == false, "");
 
@@ -6264,7 +6726,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -6285,7 +6747,7 @@ out strError);
             out string strError)
         {
             strError = "";
-            aPath = null;
+            aPath = new List<string>();
 
             LibraryApplication app = this;
 
@@ -6369,7 +6831,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -6501,7 +6963,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -6830,7 +7292,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -7002,7 +7464,6 @@ out strError);
         //      1   命中1条
         //      >1  命中多于1条
         public int GetItemRecXml(
-            // RmsChannelCollection channels,
             RmsChannel channel,
             string strBarcodeParam,
             string strStyle,
@@ -7219,7 +7680,6 @@ out strError);
         //      1   命中1条
         //      >1  命中多于1条
         public int GetOneItemRec(
-            // RmsChannelCollection channels,
             RmsChannel channel,
             string strDbType,
             string strBarcode,
@@ -7231,7 +7691,7 @@ out strError);
             out byte[] timestamp,
             out string strError)
         {
-            aPath = null;
+            aPath = new List<string>();
 
             strXml = "";
             strError = "";
@@ -7318,13 +7778,18 @@ out strError);
             if (channel == null)
                 throw new ArgumentException("channel 参数不应为空", "channel");
 
+            string strBrowseStyle = strStyle + ",id";
+            if (strStyle == "parent")
+                strBrowseStyle = "id,cols,format:@coldef://parent";
+
+
             Record[] records = null;
             long lRet = channel.DoSearchEx(strQueryXml,
                 "default",
                 "", // strOuputStyle
                 1,
                 "zh",
-                strStyle + ",id",    // "id,xml,timestamp",
+                strBrowseStyle,    // "id,xml,timestamp",
                 out records,
                 out strError);
             if (lRet == -1)
@@ -7355,16 +7820,20 @@ out strError);
 
             aPath = new List<string>();
             aPath.Add(records[0].Path);
+
             if (records[0].RecordBody != null)
             {
                 strXml = records[0].RecordBody.Xml;
                 timestamp = records[0].RecordBody.Timestamp;
             }
 
-            // 如果命中结果多余一条，则继续获得第一条以后的各条的path
+            // 2018/10/21
+            if (strStyle == "parent")
+                strXml = records[0].Cols[0];
+
+            // 如果命中结果多于一条，则继续获得第一条以后的各条的path
             if (lHitCount > 1)  // TODO: && nMax > 1
             {
-                // List<string> aPath = null;
                 lRet = channel.DoGetSearchResult(
                     "default",
                     0,
@@ -7386,7 +7855,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -7451,6 +7920,11 @@ out strError);
                     if (String.IsNullOrEmpty(strBiblioDbName) == false)
                         dbnames.Add(strBiblioDbName);
                 }
+            }
+            else if (strDbType == "authority")
+            {
+                // 2018/9/26
+                dbnames = this.GetAuthorityDbNames();
             }
             else if (strDbType == "item")
             {
@@ -7826,7 +8300,7 @@ out strError);
             info_list.CopyTo(infos);
 
             return infos.Length;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -8036,7 +8510,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -8146,14 +8620,13 @@ out strError);
 
             long lHitCount = lRet;
 
-            List<string> aPath = null;
             lRet = channel.DoGetSearchResult(
                 "default",
                 0,
                 1,
                 "zh",
                 null,
-                out aPath,
+                out List<string> aPath,
                 out strError);
             if (lRet == -1)
                 goto ERROR1;
@@ -8174,26 +8647,31 @@ out strError);
                 goto ERROR1;
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
         // TODO: 判断strBarcode是否为空
         // 根据册条码号对实体库进行查重
         // 本函数只负责查重, 并不获得记录体
+        // parameters:
+        //      strFrom 检索途径
         // return:
         //      -1  error
         //      其他    命中记录条数(不超过nMax规定的极限)
         public int SearchItemRecDup(
-            // RmsChannelCollection channels,
             RmsChannel channel,
             string strBarcode,
+            string strFrom,
             int nMax,
             out List<string> aPath,
             out string strError)
         {
             strError = "";
-            aPath = null;
+            aPath = new List<string>();
+
+            if (strFrom == "册条码号")
+                strFrom = "册条码";    // 兼容最老的 keys 定义。可考虑在适当时候全部修改为 "册条码号"
 
             LibraryApplication app = this;
 
@@ -8202,8 +8680,8 @@ out strError);
 	<operator value='OR'/>
 	<target list='图书编目实体:册条码'>
 		<item><word>0000001</word><match>exact</match><relation>=</relation><dataType>string</dataType><maxCount>-1</maxCount></item>
-<lang>zh</lang>
-</target>
+        <lang>zh</lang>
+    </target>
 </group>             * */
 
             // 构造检索式
@@ -8220,7 +8698,8 @@ out strError);
 
                 // 2007/4/5 改造 加上了 GetXmlStringSimple()
                 string strOneDbQuery = "<target list='"
-                    + StringUtil.GetXmlStringSimple(strDbName + ":" + "册条码")       // 2007/9/14 
+                    + StringUtil.GetXmlStringSimple(strDbName + ":"
+                    + strFrom/*"册条码"*/)       // 2007/9/14 
                     + "'><item><word>"
                     + StringUtil.GetXmlStringSimple(strBarcode)
                     + "</word><match>exact</match><relation>=</relation><dataType>string</dataType><maxCount>" + nMax.ToString() + "</maxCount></item><lang>zh</lang></target>";
@@ -8264,7 +8743,7 @@ out strError);
             // not found
             if (lRet == 0)
             {
-                strError = "册条码号 '" + strBarcode + "' 没有找到";
+                strError = strFrom + " '" + strBarcode + "' 没有找到";
                 return 0;
             }
 
@@ -8291,7 +8770,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -8324,7 +8803,7 @@ out strError);
             out string strError)
         {
             strError = "";
-            aPath = null;
+            aPath = new List<string>();
 
             string strInventoryDbName = GetInventoryDbName();
 
@@ -8391,7 +8870,7 @@ out strError);
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -8890,14 +9369,13 @@ out strError);
 
             lHitCount = Math.Min(lHitCount, 100);
 
-            List<string> aPath = null;
             lRet = channel.DoGetSearchResult(
                 "default",
                 0,
                 lHitCount,
                 "zh",
                 null,
-                out aPath,
+                out List<string> aPath,
                 out strError);
             if (lRet == -1)
                 goto ERROR1;
@@ -9017,7 +9495,7 @@ out strError);
                 output_timestamp = aTimestamp[nIndex];
             }
             return aPathNew.Count;
-        ERROR1:
+            ERROR1:
             return -1;
             /*
         LOADONE:
@@ -9164,6 +9642,12 @@ out strError);
             return false;
         }
 
+        // 临时密码重发最短周期
+        static TimeSpan _tempPasswordRetryPeriod = new TimeSpan(0, 5, 0); // 五分钟
+
+        // 临时密码失效周期
+        static TimeSpan _tempPasswordExpirePeriod = new TimeSpan(1, 0, 0); // 一小时
+
         // 重设密码
         // parameters:
         //      strParameters   参数字符串。如果 queryword 使用 NB: 形态，注意要这样使用 NB:姓名|，因为这是采用前方一致检索的，如果没有竖线部分，可能会匹配上不该命中的较长的名字
@@ -9204,9 +9688,9 @@ out strError);
             }
             else
             {
-                if (external_interface == null)
+                if (string.IsNullOrEmpty(this.OutgoingQueue) == true && external_interface == null)
                 {
-                    strError = "当前系统尚未配置短消息 (sms) 接口，无法进行重设密码的操作";
+                    strError = "当前系统尚未配置短消息 (sms) 接口，也没有配置 MSMQ 消息队列，无法进行重设密码的操作";
                     return -1;
                 }
             }
@@ -9245,8 +9729,6 @@ out strError);
                     return -1;
                 }
 
-                List<KernelRecord> records = null;
-
                 // 获得读者记录
                 // return:
                 //      -2  当前没有配置任何读者库，或者可以操作的读者库
@@ -9260,7 +9742,7 @@ out strError);
                     strQueryWord,
                     nMaxHitCount,
                     "id,xml,timestamp",
-                    out records,
+                    out List<KernelRecord> records,
                     out strError);
                 if (nRet == -1 || nRet == -2)
                 {
@@ -9279,7 +9761,6 @@ out strError);
                     return 0;
                 }
 #endif
-                List<KernelRecord> results = null;
 
                 // 筛选读者记录
                 // return:
@@ -9290,7 +9771,7 @@ out strError);
             strNameParam,
             strPatronBarcodeParam,
             strTelParam,
-            out results,
+            out List<KernelRecord> results,
             out strError);
                 if (nRet == -1)
                     return -1;
@@ -9312,14 +9793,13 @@ out strError);
 
                 foreach (KernelRecord record in results)
                 {
-                    string strLibraryCode = "";
                     // 获得读者库的馆代码
                     // return:
                     //      -1  出错
                     //      0   成功
                     nRet = GetLibraryCode(
                         record.RecPath,
-                        out strLibraryCode,
+                        out string strLibraryCode,
                         out strError);
                     if (nRet == -1)
                         return -1;
@@ -9335,7 +9815,7 @@ out strError);
                     }
 
                     // 观察 password 元素的 lastResetTime 属性，需在规定的时间长度以外才能再次进行重设
-                    DateTime end;
+#if NO
                     // 观察在 password 元素 tempPasswordExpire 属性中残留的失效期，必须在这个时间以后才能进行本次操作
                     // parameters:
                     //      now 当前时间。本地时间
@@ -9347,11 +9827,21 @@ out strError);
                         this.Clock.Now,
                         out end,
                         out strError);
+#endif
+
+                    // return:
+                    //      -1  出错
+                    //      0   已经过了禁止期，可以重试了
+                    //      1   还在重试禁止期以内
+                    nRet = CheckRetryStartTime(readerdom,
+    DateTime.Now,
+    out DateTime end,
+    out strError);
                     if (nRet == -1)
                         return -1;
                     if (nRet == 1)
                     {
-                        strError = "本次重设密码的操作距离上次操作间隔不足一小时，操作被拒绝。请在 " + end.ToShortTimeString() + " 以后再进行操作";
+                        strError = "本次重设密码的操作距离上次操作间隔不足" + _tempPasswordRetryPeriod.TotalMinutes + "分钟，操作被拒绝。请在 " + end.ToShortTimeString() + " 以后再进行操作";
                         return 0;
                     }
 
@@ -9363,7 +9853,7 @@ out strError);
                     Random rnd = new Random();
                     string strReaderTempPassword = rnd.Next(1, 999999).ToString();
 
-                    DateTime expire = this.Clock.Now + new TimeSpan(1, 0, 0);   // 本地时间
+                    DateTime expire = DateTime.Now + _tempPasswordExpirePeriod;    // new TimeSpan(1, 0, 0);   // 本地时间
                     string strExpireTime = DateTimeUtil.Rfc1123DateTimeStringEx(expire);
 
                     if (bReturnMessage == true)
@@ -9378,7 +9868,10 @@ out strError);
                         DomUtil.SetElementText(node, "name", strName);
                         DomUtil.SetElementText(node, "tempPassword", strReaderTempPassword);
                         DomUtil.SetElementText(node, "expireTime", expire.ToLongTimeString());
-                        DomUtil.SetElementText(node, "period", "一小时");
+                        DomUtil.SetElementText(node, "period",
+                            _tempPasswordExpirePeriod.TotalMinutes.ToString() + "分钟"
+                            // "一小时"
+                            );
                         DomUtil.SetElementText(node, "refID", strRefID);    // 在所提供的姓名或者电话号码命中不止一条读者记录的情形，调用者后面使用读者记录的 refID 来绑定特别重要。
                     }
                     else
@@ -9390,9 +9883,50 @@ out strError);
                             .Replace("%name%", strName)
                             .Replace("%temppassword%", strReaderTempPassword)
                             .Replace("%expiretime%", expire.ToLongTimeString())
-                            .Replace("%period%", "一小时");
+                            .Replace("%period%", _tempPasswordExpirePeriod.TotalMinutes.ToString() + "分钟"
+                            //"一小时"
+                            );
                         // string strBody = "读者(证条码号) " + strBarcode + " 的帐户密码已经被重设为 " + strReaderNewPassword + "";
 
+                        if (string.IsNullOrEmpty(this.OutgoingQueue) == false)
+                        {
+                            // 2018/11/8
+                            // 通过 MSMQ 发送手机短信
+                            // parameters:
+                            //      strUserName 账户名，或者读者证件条码号，或者 "@refID:xxxx"
+                            nRet = SendSms(
+                            sessioninfo.Account == null ? "[none]" : sessioninfo.Account.UserID,
+                            strTelParam,
+                            strBody,
+                            out strError);
+                            if (nRet == -1)
+                            {
+                                strError = "向读者 '" + strBarcode + "' 发送 SMS 时出错: " + strError;
+                                if (this.Statis != null)
+                                    this.Statis.IncreaseEntryValue(
+                                    strLibraryCode,
+                                    "重设密码通知",
+                                    "SMS message 重设密码通知消息发送错误数",
+                                    1);
+                                this.WriteErrorLog(strError);
+                                return -1;
+                            }
+                            else
+                            {
+                                if (this.Statis != null)
+                                    this.Statis.IncreaseEntryValue(
+                strLibraryCode,
+                "重设密码通知",
+                "SMS message 重设密码通知消息发送数",
+                nRet);  // 短信条数可能多于次数
+                                if (this.Statis != null)
+                                    this.Statis.IncreaseEntryValue(strLibraryCode,
+                                    "重设密码通知",
+                                    "SMS message 重设密码通知人数",
+                                    1);
+                            }
+                        }
+                        else
                         // 向手机号码发送短信
                         {
                             // 发送消息
@@ -9449,15 +9983,14 @@ out strError);
                         }
                     }
 
-                    byte[] output_timestamp = null;
                     nRet = ChangeReaderTempPassword(
             sessioninfo,
             record.RecPath,
             readerdom,
             strReaderTempPassword,
-            strExpireTime,
+            // strExpireTime,
             record.Timestamp,
-            out output_timestamp,
+            out byte[] output_timestamp,
             out strError);
                     if (nRet == -1)
                         return -1;  // 此时短信已经发出，但临时密码并未修改成功
@@ -9490,6 +10023,50 @@ out strError);
             }
 
             return dom.DocumentElement.OuterXml;
+        }
+
+        // 观察在 password 元素 tempPasswordCreateTime 属性中的时间加上重发周期长度，必须在这个时间以后才能进行本次操作
+        // parameters:
+        //      now 当前时间。本地时间
+        //      retry_start  可以重发的最早时间。本地时间
+        // return:
+        //      -1  出错
+        //      0   已经过了禁止期，可以重试了
+        //      1   还在重试禁止期以内
+        static int CheckRetryStartTime(XmlDocument readerdom,
+            DateTime now,
+            out DateTime retry_start,
+            out string strError)
+        {
+            strError = "";
+            retry_start = new DateTime(0);
+
+            XmlNode node = readerdom.DocumentElement.SelectSingleNode("password");
+            if (node == null)
+                return 0;
+
+            string strCreateTime = DomUtil.GetAttr(node,
+"tempPasswordCreateTime");
+            if (string.IsNullOrEmpty(strCreateTime) == true)
+                return 0;
+
+            try
+            {
+                retry_start = DateTimeUtil.FromRfc1123DateTimeString(strCreateTime).ToLocalTime();
+
+                if (now > retry_start + _tempPasswordRetryPeriod)
+                {
+                    // 禁止期已经过了
+                    return 0;
+                }
+            }
+            catch (Exception)
+            {
+                strError = "临时密码创建时间字符串 '" + strCreateTime + "' 格式不正确，应为 RFC1123 格式";
+                return -1;
+            }
+
+            return 1;   // 尚在禁止期以内
         }
 
         // 观察在 password 元素 tempPasswordExpire 属性中残留的失效期，必须在这个时间以后才能进行本次操作
@@ -9740,6 +10317,7 @@ out strError);
         //      nIndex  如果有多个匹配的读者记录，此参数表示要选择其中哪一个。
         //              如果为-1，表示首次调用此函数，还不知如何选择。如此时命中多个，函数会返回>1的值
         //      strGetToken 是否要获得 token ，和有效期。 空 / day / month / year
+        //      alter_type_list 已经实施的绑定验证类型和尚未实施的类型列表
         //      strOutputUserName   返回读者证条码号
         // return:
         //      -1  error
@@ -9753,6 +10331,7 @@ out strError);
             string strLibraryCodeList,
             int nIndex,
             string strGetToken,
+            out List<string> alter_type_list,
             out string strOutputUserName,
             out string strRights,
             out string strLibraryCode,
@@ -9766,6 +10345,7 @@ out strError);
             strRights = "";
             strOutputUserName = "";
             strLibraryCode = "";
+            alter_type_list = new List<string>();
 
             // 2009/9/22 
             if (String.IsNullOrEmpty(strLoginName) == true)
@@ -9806,7 +10386,7 @@ out strError);
                 }
             }
 
-        DO_LOGIN:
+            DO_LOGIN:
 
             bool bTempPassword = false;
             string strToken = "";
@@ -9920,6 +10500,59 @@ out strError);
 
             if (nRet == 0)
                 accountref = null;
+            else
+            {
+                // 匹配 IP 地址
+                if (string.IsNullOrEmpty(sessioninfo.ClientIP) == false)    // 2016/11/2
+                {
+                    List<string> temp = new List<string>();
+
+                    bool bRet = accountref.MatchClientIP(sessioninfo.ClientIP,
+                        ref temp,
+                        out strError);
+                    if (bRet == false)
+                    {
+                        if (temp.Count == 0)
+                            return -1;
+
+                        // 不允许，又没有可以替代的方式，就要返回出错了
+                        if (Account.HasAlterBindingType(temp) == false)
+                            return -1;
+
+                        // 有替代的验证方式，先继续完成登录
+                        alter_type_list.AddRange(temp);
+                    }
+                    else
+                        alter_type_list.Add("ip");
+                }
+
+                // 星号表示不进行 router client ip 检查
+                if (sessioninfo.RouterClientIP != "*"
+                    // && alter_type_list.Count == 0
+                    )
+                {
+                    List<string> temp = new List<string>();
+
+                    // 匹配 dp2Router 前端的 IP 地址
+                    bool bRet = accountref.MatchRouterClientIP(sessioninfo.RouterClientIP,
+                        ref temp,
+                        out strError);
+                    if (bRet == false)
+                    {
+                        if (temp.Count == 0)
+                            return -1;
+
+                        // 不允许，又没有可以替代的方式，就要返回出错了
+                        if (Account.HasAlterBindingType(temp) == false)
+                            return -1;
+
+                        // 否则继续完成登录
+                        alter_type_list.AddRange(temp);
+                    }
+                    else
+                        alter_type_list.Add("router_ip");
+                }
+            }
 
             Account account = new Account();
             account.LoginName = strLoginName;
@@ -9994,7 +10627,7 @@ out strError);
 
 
             // 2007/2/15 
-            account.ReaderDom = readerdom;
+            account.PatronDom = readerdom;
             account.ReaderDomLastTime = DateTime.Now;
 
 
@@ -10025,7 +10658,7 @@ out strError);
                     return -1;
                 timestamp = output_timestamp;
 
-                account.ReaderDom = readerdom;
+                account.PatronDom = readerdom;
                 account.ReaderDomTimestamp = timestamp;
             }
 
@@ -10078,7 +10711,7 @@ out strError);
                 // 遇到错误，如何报错?
             }
 
-            sessioninfo.Account.ReaderDom = null;
+            sessioninfo.Account.PatronDom = null;
         }
 
 
@@ -10133,7 +10766,7 @@ out strError);
             if (sessioninfo.Account.ReaderDomChanged == false)
                 return 0;
 
-            XmlDocument readerdom = sessioninfo.Account.ReaderDom;
+            XmlDocument readerdom = sessioninfo.Account.PatronDom;
 
             RmsChannel channel = sessioninfo.Channels.GetChannel(this.WsUrl);
             if (channel == null)
@@ -10244,7 +10877,7 @@ out strError);
                 strError = "装载读者记录进入XML DOM时发生错误: " + strError;
                 return -1;
             }
-            sessioninfo.Account.ReaderDom = readerdom;
+            sessioninfo.Account.PatronDom = readerdom;
             RefreshReaderAccount(ref sessioninfo.Account, readerdom);
 
             sessioninfo.Account.ReaderDomChanged = false;
@@ -10288,7 +10921,7 @@ out strError);
             if (sessioninfo.Account.ReaderDomChanged == false)
                 return 0;
 
-            XmlDocument readerdom = sessioninfo.Account.ReaderDom;
+            XmlDocument readerdom = sessioninfo.Account.PatronDom;
 
             RmsChannel channel = sessioninfo.Channels.GetChannel(this.WsUrl);
             if (channel == null)
@@ -10398,7 +11031,7 @@ out strError);
                 strError = "装载读者记录进入XML DOM时发生错误: " + strError;
                 return -1;
             }
-            sessioninfo.Account.ReaderDom = readerdom;
+            sessioninfo.Account.PatronDom = readerdom;
             RefreshReaderAccount(ref sessioninfo.Account, readerdom);
 
             sessioninfo.Account.ReaderDomChanged = false;
@@ -10448,10 +11081,10 @@ out strError);
             if (delta.TotalSeconds > 60
                 && sessioninfo.Account.ReaderDomChanged == false)
             {
-                sessioninfo.Account.ReaderDom = null;
+                sessioninfo.Account.PatronDom = null;
             }
 
-            if (sessioninfo.Account.ReaderDom == null)
+            if (sessioninfo.Account.PatronDom == null)
             {
                 string strBarcode = "";
 
@@ -10501,16 +11134,16 @@ out strError);
 
                 sessioninfo.Account.ReaderDomPath = strOutputPath;
                 sessioninfo.Account.ReaderDomTimestamp = timestamp;
-                sessioninfo.Account.ReaderDom = readerdom;
+                sessioninfo.Account.PatronDom = readerdom;
                 sessioninfo.Account.ReaderDomLastTime = DateTime.Now;
             }
             else
             {
-                readerdom = sessioninfo.Account.ReaderDom;  // 沿用cache中的
+                readerdom = sessioninfo.Account.PatronDom;  // 沿用cache中的
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -10551,10 +11184,10 @@ out strError);
             if (delta.TotalSeconds > 60
                 && sessioninfo.Account.ReaderDomChanged == false)
             {
-                sessioninfo.Account.ReaderDom = null;
+                sessioninfo.Account.PatronDom = null;
             }
 
-            if (sessioninfo.Account.ReaderDom == null
+            if (sessioninfo.Account.PatronDom == null
                 || sessioninfo.Account.ReaderDomBarcode != strReaderBarcode)
             {
                 string strBarcode = "";
@@ -10606,17 +11239,17 @@ out strError);
                 sessioninfo.Account.ReaderDomBarcode = strReaderBarcode;
                 sessioninfo.Account.ReaderDomPath = strOutputPath;
                 sessioninfo.Account.ReaderDomTimestamp = timestamp;
-                sessioninfo.Account.ReaderDom = readerdom;
+                sessioninfo.Account.PatronDom = readerdom;
                 sessioninfo.Account.ReaderDomLastTime = DateTime.Now;
             }
             else
             {
                 Debug.Assert(strReaderBarcode == sessioninfo.Account.ReaderDomBarcode, "");
-                readerdom = sessioninfo.Account.ReaderDom;  // 沿用cache中的
+                readerdom = sessioninfo.Account.PatronDom;  // 沿用cache中的
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -10880,7 +11513,7 @@ out strError);
         public static int ChangeReaderTempPassword(
             XmlDocument readerdom,
             string strTempPassword,
-            string strExpireTime,
+            // string strExpireTime,
             ref XmlDocument domOperLog,
             out string strError)
         {
@@ -10896,15 +11529,19 @@ out strError);
                 return -1;
             }
 
-            XmlNode node = readerdom.DocumentElement.SelectSingleNode("password");
+            XmlElement node = readerdom.DocumentElement.SelectSingleNode("password") as XmlElement;
             if (node == null)
             {
                 node = readerdom.CreateElement("password");
                 readerdom.DocumentElement.AppendChild(node);
             }
 
+            string strCreateTime = DateTimeUtil.Rfc1123DateTimeStringEx(DateTime.Now);
+            string strExpireTime = DateTimeUtil.Rfc1123DateTimeStringEx(DateTime.Now + _tempPasswordExpirePeriod); // 本地时间
+
             DomUtil.SetAttr(node,
                 "tempPassword", strTempPassword);
+            node.SetAttribute("tempPasswordCreateTime", strCreateTime); // 2017/10/27
             DomUtil.SetAttr(node,
                 "tempPasswordExpire", strExpireTime);
 
@@ -11002,7 +11639,6 @@ out strError);
             }
             else // 普通条码号
             {
-                List<string> aPath = null;
 
                 // 获得册记录
                 // return:
@@ -11016,7 +11652,7 @@ out strError);
                     strItemBarcode,
                     out strItemXml,
                     100,
-                    out aPath,
+                    out List<string> aPath,
                     out item_timestamp,
                     out strError);
                 if (nRet == 0)
@@ -11124,7 +11760,7 @@ out strError);
                 }
             }
 
-        GET_BIBLIO:
+            GET_BIBLIO:
 
             string strItemDbName = "";  // 实体库名
             string strBiblioRecID = ""; // 种记录id
@@ -11752,7 +12388,7 @@ out strError);
             }
 
             return result;
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorInfo = strError;
             result.ErrorCode = ErrorCode.SystemError;
@@ -11814,7 +12450,7 @@ strLibraryCode);    // 读者所在的馆代码
             }
 
             int nRedoCount = 0;
-        REDO:
+            REDO:
 
             // 修改读者密码
             // return:
@@ -11908,7 +12544,7 @@ strLibraryCode);    // 读者所在的馆代码
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -11921,7 +12557,7 @@ strLibraryCode);    // 读者所在的馆代码
             string strReaderRecPath,
             XmlDocument readerdom,
             string strReaderTempPassword,
-            string strExpireTime,
+            // string strExpireTime,
             byte[] timestamp,
             out byte[] output_timestamp,
             out string strError)
@@ -11931,7 +12567,6 @@ strLibraryCode);    // 读者所在的馆代码
 
             int nRet = 0;
 
-            string strLibraryCode = "";
 
             // 获得读者库的馆代码
             // return:
@@ -11939,7 +12574,7 @@ strLibraryCode);    // 读者所在的馆代码
             //      0   成功
             nRet = GetLibraryCode(
                 strReaderRecPath,
-                out strLibraryCode,
+                out string strLibraryCode,
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -11962,7 +12597,7 @@ strLibraryCode);    // 读者所在的馆代码
             }
 
             int nRedoCount = 0;
-        REDO:
+            REDO:
 
             // 修改读者临时密码
             // return:
@@ -11971,7 +12606,7 @@ strLibraryCode);    // 读者所在的馆代码
             nRet = LibraryApplication.ChangeReaderTempPassword(
                 readerdom,
                 strReaderTempPassword,
-                strExpireTime,
+                // strExpireTime,
                 ref domOperLog,
                 out strError);
             if (nRet == -1)
@@ -12054,14 +12689,14 @@ strLibraryCode);    // 读者所在的馆代码
                 out strError);
             if (nRet == -1)
             {
-                strError = "ChangeReaderPassword() API 写入日志时发生错误: " + strError;
+                strError = "ResetPassword() API 写入日志时发生错误: " + strError;
                 goto ERROR1;
             }
 
             // this.LoginCache.Remove(strReaderBarcode);   // 及时失效登录缓存
             this.ClearLoginCache(strReaderBarcode);   // 及时失效登录缓存
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -12852,6 +13487,10 @@ strLibraryCode);    // 读者所在的馆代码
                 strFilter = "[count(ancestor::library) = 0]";
             }
 
+            // 2017/1/20 允许 item 元素的文本为空
+            if (string.IsNullOrEmpty(strPureName) == true)
+                return (XmlElement)root.SelectSingleNode("item[not(text())]" + strFilter);
+
             return (XmlElement)root.SelectSingleNode("item[text()='" + strPureName + "']" + strFilter);
         }
 
@@ -12950,6 +13589,41 @@ strLibraryCode);    // 读者所在的馆代码
                 results.Add(strValue);
             }
             return results;
+        }
+
+        // 2016/12/31
+        // 获得当前已经定义的全部图书馆代码。不包括 ""
+        public List<string> GetLibraryCodes()
+        {
+            List<string> librarycodes = new List<string>();
+            if (this.LibraryCfgDom == null || this.LibraryCfgDom.DocumentElement == null)
+                return librarycodes;
+
+            XmlNodeList nodes = this.LibraryCfgDom.DocumentElement.SelectNodes("readerdbgroup/database");
+            foreach (XmlElement node in nodes)
+            {
+                string strLibraryCode = node.GetAttribute("libraryCode");
+                if (string.IsNullOrEmpty(strLibraryCode) == true)
+                    continue;
+                librarycodes.Add(strLibraryCode);
+            }
+
+            return librarycodes;
+        }
+
+        // 检查一个馆代码是否为合法的馆代码
+        public bool IsValidLibraryCode(string strLibraryCode)
+        {
+            if (string.IsNullOrEmpty(strLibraryCode))
+                return true;
+
+            // 目前本函数仅支持判断一个馆代码
+            if (strLibraryCode.IndexOf(",") != -1)
+                throw new ArgumentException("strLibraryCode 参数中不允许包含逗号", "strLibraryCode");
+
+            if (GetLibraryCodes().IndexOf(strLibraryCode) != -1)
+                return true;
+            return false;
         }
 
         // 获得library.xml中配置的dtlp帐户信息
@@ -13092,7 +13766,7 @@ strLibraryCode);    // 读者所在的馆代码
                 return 1;   // 为.fltx文件
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -13646,9 +14320,35 @@ strLibraryCode);    // 读者所在的馆代码
                 out strError);
         }
 
+        public bool ClearCacheCfgs(string strResPath)
+        {
+            // 2016/12/27
+            if (string.IsNullOrEmpty(strResPath) == true)
+            {
+                this.CfgsMap.Clear();
+                this.Filters.Clear();
+                this.AssemblyCache.Clear();
+                return true;
+            }
 
+            string strPath = strResPath;
+
+            string strDbName = StringUtil.GetFirstPartPath(ref strPath);
+            string strFirstPart = StringUtil.GetFirstPartPath(ref strPath);
+
+            if (strDbName == "cfgs" || strFirstPart == "cfgs")
+            {
+                string strLocalPath = this.CfgsMap.Clear(strResPath);
+                this.Filters.ClearFilter(strLocalPath);
+                this.AssemblyCache.Clear(strLocalPath);
+                return true;
+            }
+
+            return false;
+        }
 
         // 检查用户使用 WriteRes API 的权限
+        // TODO: 需要把写入和删除的权限分开处理
         // 注： 
         //      writetemplate 写入模板配置文件 template 所需要的权限; 
         //      writeobject 写入对象所需要的权限; 
@@ -13683,16 +14383,39 @@ strLibraryCode);    // 读者所在的馆代码
                 string strFilePath = Path.Combine(strTargetDir, strPath);
 
                 string strFirstLevel = StringUtil.GetFirstPartPath(ref strPath);
-                if (string.Compare(strFirstLevel, "upload", true) != 0)
+
+                if (string.Compare(strFirstLevel, "backup", true) == 0
+                    || string.Compare(strFirstLevel, "cfgs", true) == 0)
                 {
-                    strError = "第一级目录名必须为 'upload'";
+                    if (StringUtil.IsInList("backup,managedatabase", strRights) == false)
+                    {
+                        strError = "写入文件 " + strResPath + " 被拒绝。不具备 backup 或 managedatabase 权限";
+                        return 0;
+                    }
+                }
+                else if (string.Compare(strFirstLevel, "upload", true) == 0)
+                {
+                    if (StringUtil.IsInList("upload,managedatabase", strRights) == false)
+                    {
+                        strError = "写入文件 " + strResPath + " 被拒绝。不具备 upload 或 managedatabase 权限";
+                        return 0;
+                    }
+                }
+                else if (string.Compare(strFirstLevel, "library.xml", true) == 0
+                    && string.IsNullOrEmpty(strPath))
+                {
+                    if (StringUtil.IsInList("managedatabase", strRights) == false)
+                    {
+                        strError = "写入文件 " + strResPath + " 被拒绝。不具备 managedatabase 权限";
+                        return 0;
+                    }
+                }
+                else
+                {
+                    strError = "第一级目录名必须为 'upload' 或者 'backup'";
                     return -1;
                 }
-                if (StringUtil.IsInList("upload", strRights) == false)
-                {
-                    strError = "写入文件 " + strResPath + " 被拒绝。不具备 upload 权限";
-                    return 0;
-                }
+
                 // 用于限定的根目录
                 string strLimitDir = Path.Combine(strTargetDir, strFirstLevel);
                 if (PathUtil.IsChildOrEqual(strFilePath, strLimitDir) == false)
@@ -13702,6 +14425,9 @@ strLibraryCode);    // 读者所在的馆代码
                 }
                 return 1;
             }
+
+            if (StringUtil.IsInList("managedatabase", strRights))
+                return 1;
 
             string strDbName = StringUtil.GetFirstPartPath(ref strPath);
 
@@ -13869,7 +14595,7 @@ strLibraryCode);    // 读者所在的馆代码
                     // 只到记录ID这一层
                     if (strPath == "")
                     {
-                        strError = "不允许使用WriteRes()写入评注库记录";
+                        strError = "不允许使用WriteRes()写入评注库(等类型的书目下级)记录";
                         return 0;
                     }
 
@@ -13895,7 +14621,7 @@ strLibraryCode);    // 读者所在的馆代码
             }
 
             // 实用库 2013/10/30
-            if (this.IsUtilDbName(strDbName) == true)
+            if (ServerDatabaseUtility.IsUtilDbName(this.LibraryCfgDom, strDbName) == true)
             {
                 string strFirstPart = StringUtil.GetFirstPartPath(ref strPath);
 
@@ -13928,7 +14654,6 @@ strLibraryCode);    // 读者所在的馆代码
                             return 0;
                         }
                         return 1;   // 如果有了writerecord权限，就不再需要writeres权限
-
                     }
 
                     strFirstPart = StringUtil.GetFirstPartPath(ref strPath);
@@ -13992,11 +14717,15 @@ strLibraryCode);    // 读者所在的馆代码
 
                 // 注意： strPath 中的斜杠应该是 '/'
                 string strFirstLevel = StringUtil.GetFirstPartPath(ref strPath);
-                if (string.Compare(strFirstLevel, "upload", true) != 0)
+                if (StringUtil.IsInList("managedatabase", strRights) == false)
                 {
-                    strError = "第一级目录名必须为 'upload'";
-                    return -1;
+                    if (string.Compare(strFirstLevel, "upload", true) != 0)
+                    {
+                        strError = "因当前用户不具备权限 managedatabase，能列出的第一级目录名被限定为 'upload'";
+                        return -1;
+                    }
                 }
+
                 if (StringUtil.IsInList("download", strRights) == false)
                 {
                     strError = "读取文件 " + strResPath + " 被拒绝。不具备 download 权限";
@@ -14046,10 +14775,14 @@ strLibraryCode);    // 读者所在的馆代码
                     if (strObject == "object")
                     {
                         string strObjectID = StringUtil.GetFirstPartPath(ref strPath);
+
+                        string strPartCmd = "";
+                        if (string.IsNullOrEmpty(strPath) == false)
+                            strPartCmd = strPath;
+
                         // 根据 ID 得到权限定义进行判断
                         string strXmlRecordPath = strDbName + "/" + strRecordID;
 
-                        string strObjectRights = "";
                         // 获得对象的 rights 属性
                         // 需要先获得元数据 XML，然后从中得到 file 元素的 rights 属性
                         // return:
@@ -14060,20 +14793,42 @@ strLibraryCode);    // 读者所在的馆代码
             sessioninfo,
             strXmlRecordPath,
             strObjectID,
-            out strObjectRights,
+            out string strObjectRights,
             out strError);
                         if (nRet == -1)
                             return -1;
                         if (nRet == 0)
-                            return 1;   // TODO: 此时是否允许访问?
-                        if (string.IsNullOrEmpty(strObjectRights) == true)
-                            return 1;   // 没有定义 rights 的对象是允许任何访问者来获取的
+                            goto ALLOW_ACCESS;   // TODO: 此时是否允许访问?
 
-                        if (CanGet(strRights, strObjectRights) == true)
-                            return 1;
+                        // 2018/9/15
+                        if (StringUtil.IsInList("objectRights", this.Function) == false)
+                            goto ALLOW_ACCESS;   // 如果 dp2library 没有许可 objectRights 功能，是允许任何访问者来获取的。即，不限制任何下载权限
+
+                        if (string.IsNullOrEmpty(strObjectRights) == true)
+                            goto ALLOW_ACCESS;   // 没有定义 rights 的对象是允许任何访问者来获取的
+
+                        string strOperation = "download";
+                        if (string.IsNullOrEmpty(strPartCmd) == false)
+                            strOperation = "preview";
+                        if (CanGet(strOperation, strRights, strObjectRights) == true)
+                            goto ALLOW_ACCESS;
 
                         strError = "读取资源 " + strResPath + " 被拒绝。不具备相应的权限";
                         return 0;
+                        ALLOW_ACCESS:
+                        // 2018/8/12
+                        // 判断 dp2library 序列号是否许可进行下载
+                        if (string.IsNullOrEmpty(strPartCmd) == false)
+                        {
+                            // 没有许可 pdfPreiew 功能时，允许前面若干页，不允许后面的页。要解析 strCmd
+                            if (StringUtil.IsInList("pdfPreview", this.Function) == false
+                                && PageInRange(strPartCmd) == false)
+                            {
+                                strError = "PDF 预览功能需要设置序列号并许可此功能，才允许查看后面的页";
+                                return 0;
+                            }
+                        }
+                        return 1;
                     }
                 }
 
@@ -14161,18 +14916,53 @@ strLibraryCode);    // 读者所在的馆代码
 #endif
         }
 
-        // 对象是否允许被获取?
-        public static bool CanGet(string strUserRights, string strObjectRights)
+        static bool PageInRange(string strPartCmd)
         {
-            string[] users = strUserRights.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-            string[] objects = strObjectRights.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            // page:1
+            Hashtable parameters = StringUtil.ParseParameters(strPartCmd, ',', ':', "");
+            string strPage = (string)parameters["page"];
+
+            if (Int32.TryParse(strPage, out int nPageNo) == false)
+                return true;
+            if (nPageNo >= 1 && nPageNo <= 10)
+                return true;
+            return false;
+        }
+
+        // 对象是否允许执行某个操作?
+        // parameters:
+        //      strOperation   要查询的操作。为 download preview write 之一。默认 download
+        //      strObjectRights 对象权限定义。原始定义
+        //              简单用法: user1,user2   代表 user1 和 user2 同时具备所有操作(例如 download 和 preview 等)权限
+        //              详尽用法: download:user1,user2;preview:user3,user4
+        public static bool CanGet(string strOperation,
+            string strGroupOrLevels,
+            string strObjectRights)
+        {
+            // strRights 存放(从原始定义)过滤以后的权限，即针对特定操作的权限
+            string strRights = strObjectRights;
+            // 如果是详尽用法，要
+            // 把权限字符串中其它无关 strOperation 的部分滤除，只剩下需要关注的部分
+            if (strRights.IndexOf(":") != -1)
+            {
+                // return:
+                //      null    没有找到前缀
+                //      ""      找到了前缀，并且值部分为空
+                //      其他     返回值部分
+                strRights = StringUtil.GetParameterByPrefixEnvironment(strObjectRights, strOperation, ":", ';');
+                if (strRights == null)
+                    strRights = "";
+            }
+
+            string[] groups = strGroupOrLevels.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] objects = strRights.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (string o in objects)
             {
-                if (IndexOf(users, o) != -1)
+                if (IndexOf(groups, o) != -1)
                     return true;
                 if (StringUtil.HasHead(o, "level-") == true)
                 {
-                    if (HasLevel(o, users) == true)
+                    if (HasLevel(o, groups) == true)
                         return true;
                 }
             }
@@ -14246,15 +15036,11 @@ strLibraryCode);    // 读者所在的馆代码
                 return -1;
             }
 
-            string strXml = "";
-            string strMetaData = "";
-            byte[] timestamp = null;
-            string strTempOutputPath = "";
             long lRet = channel.GetRes(strXmlRecordPath,
-                out strXml,
-                out strMetaData,
-                out timestamp,
-                out strTempOutputPath,
+                out string strXml,
+                out string strMetaData,
+                out byte[] timestamp,
+                out string strTempOutputPath,
                 out strError);
             if (lRet == -1)
             {
@@ -14276,9 +15062,8 @@ strLibraryCode);    // 读者所在的馆代码
             XmlNamespaceManager nsmgr = new XmlNamespaceManager(new NameTable());
             nsmgr.AddNamespace("dprms", DpNs.dprms);
 
-            var node = dom.DocumentElement.SelectSingleNode("//dprms:file[@id='" + strObjectID + "']",
-                nsmgr) as XmlElement;
-            if (node == null)
+            if (!(dom.DocumentElement.SelectSingleNode("//dprms:file[@id='" + strObjectID + "']",
+                nsmgr) is XmlElement node))
                 return 0;
             strRights = node.GetAttribute("rights");
             return 1;
@@ -14334,6 +15119,68 @@ strLibraryCode);    // 读者所在的馆代码
 
             return ResPathType.None;
         }
+
+        // 通过 MSMQ 发送手机短信
+        // parameters:
+        //      strUserName 账户名，或者读者证件条码号，或者 "@refID:xxxx"
+        public int SendSms(
+            string strUserName,
+            string strPhoneNumber,
+            string strText,
+            out string strError)
+        {
+            strError = "";
+
+            if (string.IsNullOrEmpty(this.OutgoingQueue))
+            {
+                strError = "消息队列尚未被 dp2library 启用";
+                return -1;
+            }
+
+            try
+            {
+                MessageQueue queue = new MessageQueue(this.OutgoingQueue);
+
+                XmlDocument dom = new XmlDocument();
+                dom.LoadXml("<root />");
+                /* 元素名
+ * type 消息类型。登录验证码
+ * userName 用户名
+ * phoneNumber 手机号码
+ * text 短信消息内容
+ */
+                DomUtil.SetElementText(dom.DocumentElement, "type", "登录验证码");
+                DomUtil.SetElementText(dom.DocumentElement, "userName", strUserName);
+                DomUtil.SetElementText(dom.DocumentElement, "phoneNumber", strPhoneNumber);
+                DomUtil.SetElementText(dom.DocumentElement, "text", strText);
+
+                // 向 MSMQ 消息队列发送消息
+                int nRet = ReadersMonitor.SendToQueue(queue,
+                    strUserName + "@LUID:" + this.UID,
+                    "xml",
+                    dom.DocumentElement.OuterXml,
+                    out strError);
+                if (nRet == -1)
+                {
+                    strError = "发送 MQ 消息时出错: " + strError;
+                    return -1;
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                strError += "创建路径为 '" + this.OutgoingQueue + "' 的 MessageQueue 对象失败: " + ExceptionUtil.GetDebugText(ex);
+                return -1;
+            }
+        }
+
+        // 2018/6/21
+        // 为了兼容旧的脚本文件 table_unimarc.fltx。时间长了以后可以考虑删除本函数
+        public static string BuildTableXml(List<NameValueLine> lines)
+        {
+            return NameValueLine.BuildTableXml(lines);
+        }
     }
 
 #if NO
@@ -14361,7 +15208,7 @@ strLibraryCode);    // 读者所在的馆代码
         ItemBarcodeNotFound = 4,  // 册条码号不存在
         Overdue = 5,    // 还书过程发现有超期情况（已经按还书处理完毕，并且已经将超期信息记载到读者记录中，但是需要提醒读者及时履行超期违约金等手续）
         NotLogin = 6,   // 尚未登录
-        DupItemBarcode = 7, // 预约中本次提交的某些册条码号被本读者先前曾预约过
+        DupItemBarcode = 7, // 预约中本次提交的某些册条码号被本读者先前曾预约过 TODO: 这个和 ItemBarcodeDup 是否要合并?
         InvalidParameter = 8,   // 不合法的参数
         ReturnReservation = 9,    // 还书操作成功, 因属于被预约图书, 请放入预约保留架
         BorrowReservationDenied = 10,    // 借书操作失败, 因属于被预约(到书)保留的图书, 非当前预约者不能借阅
@@ -14383,6 +15230,13 @@ strLibraryCode);    // 读者所在的馆代码
         OutofSession = 26,   // 通道达到配额上限
         InvalidReaderBarcode = 27,  // 读者证条码号不合法
         InvalidItemBarcode = 28,    // 册条码号不合法
+        NeedSmsLogin = 29,  // 需要改用短信验证码方式登录
+        RetryLogin = 30,    // 需要补充验证码再次登录
+        TempCodeMismatch = 31,  // 验证码不匹配
+        BiblioDup = 32,     // 书目记录发生重复
+        Borrowing = 33,    // 图书尚未还回(盘点前需修正此问题)
+        ClientVersionTooOld = 34, // 前端版本太旧
+        NotBorrowed = 35,   // 册记录处于未被借出状态 2017/6/20
 
         // 以下为兼容内核错误码而设立的同名错误码
         AlreadyExist = 100, // 兼容
@@ -14399,8 +15253,7 @@ strLibraryCode);    // 读者所在的馆代码
         RequestError = 111,
         RequestTimeOut = 112,
         TimestampMismatch = 113,
-        Borrowing = 114,    // 图书尚未还回(盘点前需修正此问题)
-        ClientVersionTooOld = 115, // 前端版本太旧
+        Compressed = 114,   // 2017/10/7
     }
 
     // API函数结果
@@ -14418,19 +15271,40 @@ strLibraryCode);    // 读者所在的馆代码
             other.ErrorInfo = this.ErrorInfo;
             return other;
         }
+
+        // 把内核错误码转换为 dp2library 错误码
+        public static ErrorCode FromErrorValue(DigitalPlatform.rms.Client.rmsws_localhost.ErrorCodeValue error_code,
+            bool throw_exception = false)
+        {
+            string text = error_code.ToString();
+            if (Enum.TryParse<ErrorCode>(text, out ErrorCode result) == false)
+            {
+                if (throw_exception == true)
+                    throw new Exception("无法将字符串 '" + text + "' 转换为 LibraryServer.ErrorCode 类型");
+                else
+                    return ErrorCode.SystemError;
+            }
+            return result;
+        }
     }
 
     // 帐户信息
     public class Account
     {
-        public string Location = "";
+        private string location = "";
+        public string Location { get => location; set => location = value; }
 
-        public XmlElement XmlNode = null;  // library.xml 配置文件中相关小节
+        internal XmlElement _xmlNode = null;  // library.xml 配置文件中相关小节
 
-        public string LoginName = "";   // 登录名 带有前缀的各种渠道的登录名字
+        private string loginName = "";
+        // 登录名 带有前缀的各种渠道的登录名字
+        public string LoginName { get => loginName; set => loginName = value; }
 
-        public string Password = "";
-        public string Type = "";
+        private string password = "";
+        public string Password { get => password; set => password = value; }
+
+        private string type = "";
+        public string Type { get => type; set => type = value; }
 
         string m_strRights = "";
         public string Rights
@@ -14457,30 +15331,194 @@ strLibraryCode);    // 读者所在的馆代码
             }
         }
 
-        public string AccountLibraryCode = ""; // 2007/12/15 
-        public string Access = "";  // 存取权限代码 2008/2/28 
+        private string accountLibraryCode = "";
+        // 2007/12/15 
+        public string AccountLibraryCode { get => accountLibraryCode; set => accountLibraryCode = value; }
 
-        public string UserID = "";  // 用户唯一标识。对于读者，这就是证条码号
+        private string access = "";
+        // 存取权限代码 2008/2/28 
+        public string Access { get => access; set => access = value; }
 
-        public string RmsUserName = "";
-        public string RmsPassword = "";
+        private string userID = "";
+        // 用户唯一标识。对于读者，这就是证条码号
+        public string UserID { get => userID; set => userID = value; }
 
-        public string Barcode = ""; // 证条码号。对于读者型的帐户有意义
+        private string rmsUserName = "";
+        public string RmsUserName { get => rmsUserName; set => rmsUserName = value; }
 
-        public string Name = "";    // 姓名。对于读者型的帐户有意义
+        private string rmsPassword = "";
+        public string RmsPassword { get => rmsPassword; set => rmsPassword = value; }
 
-        public string DisplayName = ""; // 显示名。对于读者型的帐户有意义
+        private string binding = ""; // 2016/10/26
+        public string Binding { get => binding; set => binding = value; }
 
-        public string PersonalLibrary;  // 书斋名。对于读者型的帐户有意义
+        private string barcode = ""; // 证条码号。对于读者型的帐户有意义
+        public string Barcode { get => barcode; set => barcode = value; }
 
-        public string Token = "";   // 随机创建的标记
+        private string name = "";    // 姓名。对于读者型的帐户有意义
+        public string Name { get => name; set => name = value; }
 
-        public XmlDocument ReaderDom = null;    // 如果是读者帐户，这里是读者记录DOM
-        public string ReaderDomBarcode = "";   // 缓冲的DOM代表的读者证条码号
-        public byte[] ReaderDomTimestamp = null;    // 读者记录时间戳
-        public string ReaderDomPath = "";   // 读者记录路径
-        public DateTime ReaderDomLastTime = new DateTime((long)0);  // 最近装载的时间
-        public bool ReaderDomChanged = false;
+        private string displayName = ""; // 显示名。对于读者型的帐户有意义
+        public string DisplayName { get => displayName; set => displayName = value; }
+
+        private string personalLibrary;  // 书斋名。对于读者型的帐户有意义
+        public string PersonalLibrary { get => personalLibrary; set => personalLibrary = value; }
+
+        private string token = "";   // 随机创建的标记
+        public string Token { get => token; set => token = value; }
+
+        private XmlDocument patronDom = null;    // 如果是读者帐户，这里是读者记录DOM
+        public XmlDocument PatronDom { get => patronDom; set => patronDom = value; }
+
+        private string readerDomBarcode = "";   // 缓冲的DOM代表的读者证条码号
+        public string ReaderDomBarcode { get => readerDomBarcode; set => readerDomBarcode = value; }
+
+        private byte[] readerDomTimestamp = null;    // 读者记录时间戳
+        public byte[] ReaderDomTimestamp { get => readerDomTimestamp; set => readerDomTimestamp = value; }
+
+        private string readerDomPath = "";   // 读者记录路径
+        public string ReaderDomPath { get => readerDomPath; set => readerDomPath = value; }
+
+        private DateTime readerDomLastTime = new DateTime((long)0);  // 最近装载的时间
+        public DateTime ReaderDomLastTime { get => readerDomLastTime; set => readerDomLastTime = value; }
+
+        private bool readerDomChanged = false;
+        public bool ReaderDomChanged { get => readerDomChanged; set => readerDomChanged = value; }
+
+        #region 手机短信验证码
+
+        // 竖线间隔的手机号码列表
+        // return:
+        //      null    没有找到前缀
+        //      ""      找到了前缀，并且值部分为空
+        //      其他     返回值部分
+        public string GetPhoneNumberBindingString()
+        {
+            // 看看绑定信息里面是否有对应的手机号码
+            // 注: email 元素内容，现在是存储 email 和微信号等多种绑定途径 2016/4/16
+            // return:
+            //      null    没有找到前缀
+            //      ""      找到了前缀，并且值部分为空
+            //      其他     返回值部分
+            return StringUtil.GetParameterByPrefix(this.Binding,
+    "sms",
+    ":");
+        }
+
+        // 验证码多长时间过期
+        public static TimeSpan TempCodeExpireLength = TimeSpan.FromHours(48);   // TimeSpan.FromMinutes(10);   // 10 分钟
+
+        // 准备手机短信验证登录的第一阶段：产生验证码
+        // return:
+        //      -1  出错
+        //      0   沿用以前的验证码
+        //      1   用新的验证码
+        public int PrepareTempPassword(
+            TempCodeCollection table,
+            string strClientIP,
+            string strPhoneNumber,
+            out TempCode code,
+            out string strError)
+        {
+            strError = "";
+            code = null;
+
+            if (string.IsNullOrEmpty(strPhoneNumber))
+            {
+                strError = "strPhoneNumber 参数值不应为空";
+                return -1;
+            }
+
+            strPhoneNumber = strPhoneNumber.Trim();
+            if (string.IsNullOrEmpty(strPhoneNumber))
+            {
+                strError = "strPhoneNumber 参数值不应为空(1)";
+                return -1;
+            }
+
+            string strList = GetPhoneNumberBindingString();
+            if (string.IsNullOrEmpty(strList))
+            {
+                strError = "当前账号未曾做过手机短信方式(sms:)绑定";
+                return -1;   // 没有做过 sms: 绑定
+            }
+
+            List<string> list = StringUtil.SplitList(strList, '|');
+            if (list.IndexOf(strPhoneNumber) == -1)
+            {
+                strError = "所提供的电话号码 '" + strPhoneNumber + "' 不在手机绑定号码列表中";
+                return -1;   // 电话号码没有在列表中
+            }
+
+            // 检索看看是否有已经存在的密码
+            bool bExist = false;
+            DateTime now = DateTime.Now;
+            string strKey = this.UserID + "|" + strPhoneNumber + "|" + strClientIP;
+            code = table.FindTempCode(strKey);
+            if (code != null)
+            {
+                if (code.ExpireTime < now)
+                    code = null;    // 迫使重新取号
+                else
+                {
+                    // 失效期还没有到。主动延长一次失效期
+                    code.ExpireTime = DateTime.Now + TempCodeExpireLength;
+                    bExist = true;
+                }
+            }
+
+            if (code == null)
+            {
+                // 重新设定一个密码
+                Random rnd = new Random();
+                code = new TempCode();
+                code.Key = strKey;
+                code.Code = rnd.Next(1, 999999).ToString();
+                code.ExpireTime = DateTime.Now + TempCodeExpireLength;
+            }
+
+            table.SetTempCode(code.Key, code);
+            // strTempCode = code.Code;
+            if (bExist)
+                return 0;
+            return 1;
+        }
+
+        // 准备手机短信验证登录的第二阶段：匹配验证码
+        public bool MatchTempPassword(
+            TempCodeCollection table,
+            string strPhoneNumber,
+            string strClientIP,
+            string strPassword,
+            out string strError)
+        {
+            strError = "";
+
+            string strKey = this.UserID + "|" + strPhoneNumber + "|" + strClientIP;
+
+            TempCode code = table.FindTempCode(strKey);
+            if (code == null)
+            {
+                strError = "当前用户的验证码尚未初始化";
+                return false;
+            }
+
+            if (DateTime.Now > code.ExpireTime)
+            {
+                strError = "验证码已经过期失效";
+                return false;
+            }
+
+            if (strPassword != code.Code)
+            {
+                strError = "验证码匹配失败";
+                return false;
+            }
+
+            return true;
+        }
+
+        #endregion
 
         public Account()
         {
@@ -14497,6 +15535,310 @@ strLibraryCode);    // 读者所在的馆代码
             {
                 return LibraryApplication.ExpandRightString(this.Rights);
             }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        // 匹配 IP 地址
+        // parameters:
+        //      alter_type_list 返回处理结果列表。只有当 alter_type_list != null 并且没有匹配上真实 IP 地址时，才在本参数中返回值
+        // return:
+        //      true    允许
+        //      false   禁止
+        public bool MatchClientIP(string strClientIP,
+            ref List<string> alter_type_list,
+            out string strError)
+        {
+            strError = "";
+
+            if (string.IsNullOrEmpty(this.Binding) == true)
+                return true;
+            string list = StringUtil.GetParameterByPrefix(this.Binding, "ip");
+            if (string.IsNullOrEmpty(list))
+                return true;    // 没有绑定 ip: ，表示不进行任何 IP 限制
+
+            if (StringUtil.MatchIpAddressList(list, strClientIP) == false)
+            {
+                if (alter_type_list != null)
+                {
+                    alter_type_list.Add("!ip"); // 表示虽然处理了，但是没有匹配
+                    alter_type_list.AddRange(GetAlterBinding(list));
+                }
+
+                strError = "前端 IP 地址 '" + strClientIP + "' 不在当前账户的 ip: 白名单中，访问被拒绝";
+                return false;
+            }
+
+            if (alter_type_list != null)
+                alter_type_list.Add("ip"); // 表示已经验证了 ip: 绑定
+            return true;
+        }
+
+        // 匹配 dp2Router 的前端 IP 地址
+        // parameters:
+        //      alter_type_list 返回替代类型列表。只有当 alter_type_list != null 并且没有匹配上真实 IP 地址时，才在本参数中返回值
+        // return:
+        //      true    允许
+        //      false   禁止
+        public bool MatchRouterClientIP(string strRouterClientIP,
+            ref List<string> alter_type_list,
+            out string strError)
+        {
+            strError = "";
+
+            if (strRouterClientIP == null)
+                return true;
+
+            if (string.IsNullOrEmpty(this.Binding) == true)
+            {
+                strError = "当前账户未绑定 router_ip，不允许前端经由 dp2Router 访问";
+                return false;
+            }
+
+            string list = StringUtil.GetParameterByPrefix(this.Binding, "router_ip");
+            if (string.IsNullOrEmpty(list))
+            {
+                strError = "当前账户未绑定 router_ip，不允许前端经由 dp2Router 访问 .";
+                return false;
+            }
+
+            if (list == "*")
+                goto END1;
+            if (strRouterClientIP != "*" && StringUtil.MatchIpAddressList(list, strRouterClientIP) == false)
+            {
+                if (alter_type_list != null)
+                {
+                    alter_type_list.Add("!router_ip"); // 表示虽然处理了，但是没有匹配
+                    alter_type_list.AddRange(GetAlterBinding(list));    // 加入替代的绑定类型
+                }
+
+                strError = "前端 IP 地址 '" + strRouterClientIP + "' 不在当前账户的 router_ip: 白名单中，访问被拒绝";
+                return false;
+            }
+
+            END1:
+            if (alter_type_list != null)
+                alter_type_list.Add("router_ip"); // 表示已经验证了 router_ip: 绑定
+            return true;
+        }
+
+        // 合并抵消带有星号和和不带星号的同类 type。返回剩下的(曾经)带有星号的类型。这样可以报错给用户，说哪些绑定类型不满足
+        // 注: 返回的时候已经去掉了星号
+        public static List<string> MergeBindingType(List<string> alter_type_list)
+        {
+            List<string> results = new List<string>();
+
+            List<string> type_list1 = new List<string>();   // 没有星号的
+            List<string> type_list2 = new List<string>();   // 有星号的
+
+            // 取出没有星号和有星号的两个 list
+            foreach (string name in alter_type_list)
+            {
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                if (name[0] == '!')
+                    continue;
+                if (name[0] == '*')
+                    type_list2.Add(name.Substring(1));
+                else
+                    type_list1.Add(name);
+            }
+
+            if (type_list2.Count == 0)
+                return results;
+
+            StringUtil.RemoveDupNoSort(ref type_list1);
+            StringUtil.RemoveDupNoSort(ref type_list2);
+
+            foreach (string name in type_list1)
+            {
+                // name 为没有星号的类型
+
+                if (type_list2.IndexOf(name) != -1)
+                    type_list2.Remove(name);
+            }
+
+            return type_list2;
+        }
+
+        public static bool RemoveAlertBindingType(ref List<string> alter_type_list,
+            string type)
+        {
+            if (alter_type_list == null)
+                return false;
+
+            bool bChanged = false;
+            for (int i = 0; i < alter_type_list.Count; i++)
+            {
+                string name = alter_type_list[i];
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                if (name[0] != '*')
+                    continue;
+                if (name.Substring(1) == type)
+                {
+                    alter_type_list.RemoveAt(i);
+                    i--;
+                    bChanged = true;
+                }
+            }
+
+            return bChanged;
+        }
+
+        public static bool HasAlterBindingType(List<string> alter_type_list)
+        {
+            if (alter_type_list == null)
+                return false;
+            foreach (string s in alter_type_list)
+            {
+                if (string.IsNullOrEmpty(s) == false && s[0] == '*')
+                    return true;
+            }
+
+            return false;
+        }
+
+        // 从 IP 列表中获得(不满足时)替代绑定类型列表。注意第一字符为 *
+        // '192.168.0.1|*sms' 中 *sms 就是替代绑定类型。
+        static List<string> GetAlterBinding(string strText)
+        {
+            List<string> results = new List<string>();
+            List<string> list = StringUtil.SplitList(strText, '|');
+            foreach (string s in list)
+            {
+                if (string.IsNullOrEmpty(s) == false && s[0] == '*')
+                {
+#if NO
+                    string name = s.Substring(1);
+                    if (string.IsNullOrEmpty(name) == false)
+                        results.Add(name);
+#endif
+                    results.Add(s); // 注意第一字符为 *
+                }
+            }
+
+            return results;
+        }
+
+        // 从绑定字符串中解析出所有需要登录时候验证的绑定类型
+        public static List<string> GetBindingTypes(string strText)
+        {
+            List<string> results = new List<string>();
+            List<string> list = StringUtil.SplitList(strText, ',');
+            foreach (string s in list)
+            {
+                List<string> parts = StringUtil.ParseTwoPart(s, ":");
+                string type = parts[0];
+                if (type == "ip" || type == "router_ip" || type == "sms")
+                    results.Add(type);
+            }
+
+            return results;
+        }
+
+        // 从 list1 中减去 list2
+        public static List<string> Sub(List<string> list1, List<string> list2)
+        {
+            List<string> results = new List<string>();
+            foreach (string s in list1)
+            {
+                if (list2.IndexOf(s) == -1)
+                    results.Add(s);
+            }
+
+            return results;
+        }
+
+        // 获得处理过的元素。也就是 !ip 和 ip 这样的类型。(即，不是 *ip 这样的类型)
+        public static List<string> GetProcessed(List<string> list)
+        {
+            List<string> results = new List<string>();
+            foreach (string s in list)
+            {
+                if (string.IsNullOrEmpty(s))
+                    continue;
+                if (s[0] != '*')
+                {
+                    if (s[0] == '!')
+                        results.Add(s.Substring(1));
+                    else
+                        results.Add(s);
+                }
+            }
+
+            return results;
+        }
+
+        // 获得匹配过的元素。也就是 ip 这样的类型。(即，不是 *ip !ip 这样的类型)
+        public static List<string> GetMatched(List<string> list)
+        {
+            List<string> results = new List<string>();
+            foreach (string s in list)
+            {
+                if (string.IsNullOrEmpty(s))
+                    continue;
+                if (s[0] != '*' && s[0] != '!')
+                    results.Add(s);
+            }
+
+            return results;
+        }
+
+        // 从 types 列表中移走那些验证过的可以替代的类型
+        // parameters:
+        //      types   需要检查的类型
+        //      matched   已经验证过的类型
+        public static void RemoveAlterTypes(ref List<string> types,
+            List<string> matched,
+            string strBinding)
+        {
+            if (matched.Count == 0)
+                return;
+            List<string> results = new List<string>();
+            foreach (string type in types)
+            {
+                string list = StringUtil.GetParameterByPrefix(strBinding, type);
+                if (string.IsNullOrEmpty(list))
+                    continue;
+                {
+                    List<string> alters = GetAlterBinding(list);
+                    foreach (string alter in alters)
+                    {
+                        string name = alter;
+                        if (string.IsNullOrEmpty(alter) == false && alter[0] == '*')
+                            name = alter.Substring(1);
+                        if (matched.IndexOf(name) != -1)
+                            goto FOUND;
+                    }
+                }
+
+                results.Add(type);  // 没有替代
+                continue;
+                FOUND:
+                // 发现了可以替代的
+                continue;
+            }
+
+            types = results;
         }
     }
 
@@ -14655,7 +15997,7 @@ strLibraryCode);    // 读者所在的馆代码
                 nDayCount++;
 
 
-            CONTINUE:
+                CONTINUE:
                 TimeSpan delta = new TimeSpan(24, 0, 0);    // 24小时
                 curDay = curDay + delta;
             }
@@ -14722,7 +16064,47 @@ strLibraryCode);    // 读者所在的馆代码
         public string Name = ""; // 文件(或目录)名
         [DataMember]
         public string CreateTime = "";   // 创建时间。本地时间 "u" 字符串
+
+        // 2017/4/8
+        [DataMember]
+        public string LastWriteTime = "";   // 本地时间 "u" 字符串
+        [DataMember]
+        public string LastAccessTime = "";   // 本地时间 "u" 字符串
+
         [DataMember]
         public long Size = 0;   // 尺寸。-1 表示这是目录对象
     }
+
+    public class RemoteAddress
+    {
+        public string ClientIP { get; set; }
+        public string Via { get; set; }
+        public string Type { get; set; }
+
+        public RemoteAddress()
+        {
+
+        }
+
+        public RemoteAddress(string ip, string via, string type)
+        {
+            this.ClientIP = StringUtil.CanonicalizeIP(ip);
+            this.Via = via;
+            this.Type = type;
+        }
+
+        public static RemoteAddress FindClientAddress(List<RemoteAddress> list, string type)
+        {
+            if (list == null)
+                return null;
+            foreach (RemoteAddress address in list)
+            {
+                if (address.Type == type)
+                    return address;
+            }
+
+            return null;
+        }
+    }
+
 }

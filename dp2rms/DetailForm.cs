@@ -412,8 +412,8 @@ namespace dp2rms
 
         private void DetailForm_Load(object sender, System.EventArgs e)
         {
-            this.MainForm.AppInfo.LoadMdiSize += new EventHandler(AppInfo_LoadMdiSize);
-            this.MainForm.AppInfo.SaveMdiSize += new EventHandler(AppInfo_SaveMdiSize);
+            this.MainForm.AppInfo.LoadMdiLayout += new EventHandler(AppInfo_LoadMdiLayout);
+            this.MainForm.AppInfo.SaveMdiLayout += new EventHandler(AppInfo_SaveMdiLayout);
 
             // 设置窗口尺寸状态
             if (MainForm.AppInfo != null)
@@ -714,12 +714,12 @@ namespace dp2rms
 
             this.XmlEditor.GenerateData -= new GenerateDataEventHandler(XmlEditor_GenerateData);
 
-            this.MainForm.AppInfo.LoadMdiSize -= new EventHandler(AppInfo_LoadMdiSize);
-            this.MainForm.AppInfo.SaveMdiSize -= new EventHandler(AppInfo_SaveMdiSize);
+            this.MainForm.AppInfo.LoadMdiLayout -= new EventHandler(AppInfo_LoadMdiLayout);
+            this.MainForm.AppInfo.SaveMdiLayout -= new EventHandler(AppInfo_SaveMdiLayout);
 
         }
 
-        public void AppInfo_LoadMdiSize(object sender, EventArgs e)
+        public void AppInfo_LoadMdiLayout(object sender, EventArgs e)
         {
             if (sender != this)
                 return;
@@ -737,7 +737,7 @@ namespace dp2rms
             }
         }
 
-        void AppInfo_SaveMdiSize(object sender, EventArgs e)
+        void AppInfo_SaveMdiLayout(object sender, EventArgs e)
         {
             if (sender != this)
                 return;
@@ -2370,7 +2370,7 @@ namespace dp2rms
                 ResPath respath = new ResPath(textBox_recPath.Text);
 
                 // 向backup文件中保存第一个 res
-                ExportUtil.ChangeMetaData(ref this.m_strMetaData, // ResFileList
+                StringUtil.ChangeMetaData(ref this.m_strMetaData, // ResFileList
                     null,
                     null,
                     null,
@@ -2575,9 +2575,9 @@ namespace dp2rms
 									Environment.CurrentDirectory + "\\digitalplatform.marceditor.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.marckernel.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.marcfixedfieldcontrol.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
+									//Environment.CurrentDirectory + "\\digitalplatform.gcatclient.dll",
 									Environment.CurrentDirectory + "\\digitalplatform.library.dll",
-									Environment.CurrentDirectory + "\\Interop.SHDocVw.dll",
+									// Environment.CurrentDirectory + "\\Interop.SHDocVw.dll",
 									Environment.CurrentDirectory + "\\dp2rms.exe"
 								};
 
@@ -2872,13 +2872,12 @@ namespace dp2rms
                     if (nRet == 0)
                         return 0;	// not found
 
-                    List<string> aPath = null;
                     nRet = channel.DoGetSearchResult(
                         "default",
                         1,
                         this.Lang,
                         stop,
-                        out aPath,
+                        out List<string> aPath,
                         out strError);
                     if (nRet == -1)
                     {
@@ -3553,24 +3552,27 @@ namespace dp2rms
             public object ControlChanged = null;
         }
 
-
         static string ConvertSinglePinyinByStyle(string strPinyin,
             PinyinStyle style)
         {
-            if (style == PinyinStyle.None)
-                return strPinyin;
+            if (strPinyin == null)
+                return "";
+
+            //if (style == PinyinStyle.None)
+            //    return strPinyin;
             if (style == PinyinStyle.Upper)
                 return strPinyin.ToUpper();
             if (style == PinyinStyle.Lower)
                 return strPinyin.ToLower();
-            if (style == PinyinStyle.UpperFirst)
+            if (style == PinyinStyle.None
+                || style == PinyinStyle.UpperFirst)
             {
                 if (strPinyin.Length > 1)
                 {
                     return strPinyin.Substring(0, 1).ToUpper() + strPinyin.Substring(1).ToLower();
                 }
 
-                return strPinyin;
+                return strPinyin.ToUpper();
             }
 
             Debug.Assert(false, "未定义的拼音风格");

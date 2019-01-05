@@ -98,7 +98,10 @@ namespace DigitalPlatform.LibraryServer
 
             if (string.IsNullOrEmpty(volume) == false
                 && string.IsNullOrEmpty(itemBarcode) == true)   // 只有 itemBarcode 为空的时候，才匹配 volume
-                and_items.Add(Query.EQ("No", volume));
+            {
+                // and_items.Add(Query.EQ("No", volume));
+                and_items.Add(Query.EQ("Volume", volume));
+            }
 
             {
                 List<IMongoQuery> action_items = new List<IMongoQuery>();
@@ -252,8 +255,10 @@ namespace DigitalPlatform.LibraryServer
             if (collection == null)
                 return -1;
 
-            var keyFunction = (BsonJavaScript)@"{}";
-
+            // var keyFunction = (BsonJavaScript)@"{}";
+            var keyFunction = (BsonJavaScript)@"function(doc) {
+return { None : '' };
+}"; // mongodb v3.4
             var document = new BsonDocument("count", 0);
             var result = collection.Group(
                 query,
@@ -298,6 +303,22 @@ namespace DigitalPlatform.LibraryServer
             return collection.Find(query);
             // return collection.Find(query).Count() > 0;
         }
+
+        public void ChangePatronBarcode(string strOldBarcode, string strNewBarcode)
+        {
+            if (strOldBarcode == strNewBarcode)
+                return; // 没有必要修改
+            MongoCollection<ChargingOperItem> collection = this._collection;
+            if (collection == null)
+                return;
+
+            var query = new QueryDocument("PatronBarcode", strOldBarcode);
+            var update = Update.Set("PatronBarcode", strNewBarcode);
+            collection.Update(
+    query,
+    update,
+    UpdateFlags.Multi);
+        }
     }
 
     public class ChargingOperItem
@@ -317,6 +338,9 @@ namespace DigitalPlatform.LibraryServer
 
         public string Period { get; set; }  // 期限
         public string No { get; set; }  // 续借次，序号
+
+        // 2017/5/22
+        public string Volume { get; set; }  // 卷册
 
         public string ClientAddress { get; set; }  // 访问者的IP地址
 

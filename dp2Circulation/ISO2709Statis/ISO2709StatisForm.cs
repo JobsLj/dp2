@@ -1,16 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
 using System.IO;
 using System.Xml;
 using System.Reflection;
 using System.Diagnostics;
-using System.Runtime.Remoting;
-using System.Web;   // HttpUtility
 
 using DigitalPlatform;
 using DigitalPlatform.Script;
@@ -18,10 +12,6 @@ using DigitalPlatform.IO;
 using DigitalPlatform.Xml;
 using DigitalPlatform.Marc;
 using DigitalPlatform.Text;
-
-using DigitalPlatform.dp2.Statis;
-
-using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient.localhost;
 
 namespace dp2Circulation
@@ -58,28 +48,6 @@ namespace dp2Circulation
         }
 #endif
 
-#if NO
-        public MainForm MainForm
-        {
-            get
-            {
-                return (MainForm)this.MdiParent;
-            }
-        }
-
-        int AssemblyVersion
-        {
-            get
-            {
-                return MainForm.Iso2709StatisAssemblyVersion;
-            }
-            set
-            {
-                MainForm.Iso2709StatisAssemblyVersion = value;
-            }
-        }
-#endif
-
         /// <summary>
         /// 用于输出信息的控制台(浏览器控件)
         /// </summary>
@@ -108,15 +76,15 @@ namespace dp2Circulation
 
         private void Iso2709StatisForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 
 
 
 #if NO
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -126,14 +94,14 @@ namespace dp2Circulation
 #endif
 
             ScriptManager.CfgFilePath = Path.Combine(
-    this.MainForm.UserDir,
+    Program.MainForm.UserDir,
     "iso2709_statis_projects.xml");
 
 #if NO
-            ScriptManager.applicationInfo = this.MainForm.AppInfo;
+            ScriptManager.applicationInfo = Program.MainForm.AppInfo;
             ScriptManager.CfgFilePath =
-                this.MainForm.DataDir + "\\iso2709_statis_projects.xml";
-            ScriptManager.DataDir = this.MainForm.DataDir;
+                Program.MainForm.DataDir + "\\iso2709_statis_projects.xml";
+            ScriptManager.DataDir = Program.MainForm.DataDir;
 
             ScriptManager.CreateDefaultContent -= new CreateDefaultContentEventHandler(scriptManager_CreateDefaultContent);
             ScriptManager.CreateDefaultContent += new CreateDefaultContentEventHandler(scriptManager_CreateDefaultContent);
@@ -153,29 +121,29 @@ namespace dp2Circulation
 #endif
 
             // 输入的ISO2709文件名
-            this._openMarcFileDialog.FileName = this.MainForm.AppInfo.GetString(
+            this._openMarcFileDialog.FileName = Program.MainForm.AppInfo.GetString(
                 "iso2709statisform",
                 "input_iso2709_filename",
                 "");
 
             // 编码方式
-            this._openMarcFileDialog.EncodingName = this.MainForm.AppInfo.GetString(
+            this._openMarcFileDialog.EncodingName = Program.MainForm.AppInfo.GetString(
     "iso2709statisform",
     "input_iso2709_file_encoding",
     "");
 
-            this._openMarcFileDialog.MarcSyntax = this.MainForm.AppInfo.GetString(
+            this._openMarcFileDialog.MarcSyntax = Program.MainForm.AppInfo.GetString(
     "iso2709statisform",
     "input_marc_syntax",
     "unimarc");
 
-            this._openMarcFileDialog.Mode880 = this.MainForm.AppInfo.GetBoolean(
+            this._openMarcFileDialog.Mode880 = Program.MainForm.AppInfo.GetBoolean(
     "iso2709statisform",
     "input_mode880",
     false);
 
             // 方案名
-            this.textBox_projectName.Text = this.MainForm.AppInfo.GetString(
+            this.textBox_projectName.Text = Program.MainForm.AppInfo.GetString(
                 "iso2709statisform",
                 "projectname",
                 "");
@@ -208,32 +176,32 @@ namespace dp2Circulation
                 stop = null;
             }
 #endif
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
                 // 输入的ISO2709文件名
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "iso2709statisform",
                     "input_iso2709_filename",
                     this._openMarcFileDialog.FileName);
 
                 // 编码方式
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
         "iso2709statisform",
         "input_iso2709_file_encoding",
         this._openMarcFileDialog.EncodingName);
 
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
     "iso2709statisform",
     "input_marc_syntax",
     this._openMarcFileDialog.MarcSyntax);
 
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
     "iso2709statisform",
     "input_mode880",
     this._openMarcFileDialog.Mode880);
 
                 // 方案名
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "iso2709statisform",
                     "projectname",
                     this.textBox_projectName.Text);
@@ -305,8 +273,8 @@ namespace dp2Circulation
             dlg.ProjectsUrl = "http://dp2003.com/dp2circulation/projects/projects.xml";
             dlg.HostName = "Iso2709StatisForm";
             dlg.scriptManager = this.ScriptManager;
-            dlg.AppInfo = this.MainForm.AppInfo;
-            dlg.DataDir = this.MainForm.DataDir;
+            dlg.AppInfo = Program.MainForm.AppInfo;
+            dlg.DataDir = Program.MainForm.DataDir;
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog(this);
         }
@@ -327,10 +295,14 @@ namespace dp2Circulation
             this.button_projectManage.Enabled = bEnable;
         }
 
-        int RunScript(string strProjectName,
-            string strProjectLocate,
-            out string strError)
+        public override int RunScript(string strProjectName,
+    string strProjectLocate,
+    string strInitialParamString,
+    out string strError,
+    out string strWarning)
         {
+            strWarning = "";
+
             EnableControls(false);
 
             stop.OnStop += new StopEventHandler(this.DoStop);
@@ -338,7 +310,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             _dllPaths.Clear();
             _dllPaths.Add(strProjectLocate);
@@ -361,6 +333,9 @@ namespace dp2Circulation
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;
+
+                if (strInitialParamString == "test_compile")
+                    return 0;
 
                 objStatis.ProjectDir = strProjectLocate;
                 objStatis.Console = this.Console;
@@ -458,7 +433,7 @@ namespace dp2Circulation
             string strWarning = "";
             string strMainCsDllName = PathUtil.MergePath(this.InstanceDir, "\\~iso2709_statis_main_" + Convert.ToString(AssemblyVersion++) + ".dll");    // ++
 
-            string strLibPaths = "\"" + this.MainForm.DataDir + "\""
+            string strLibPaths = "\"" + Program.MainForm.DataDir + "\""
                 + ","
                 + "\"" + strProjectLocate + "\"";
 
@@ -640,9 +615,6 @@ namespace dp2Circulation
                             }
                         }
 
-
-                        string strMARC = "";
-
                         // 从ISO2709文件中读入一条MARC记录
                         // return:
                         //	-2	MARC格式错
@@ -654,7 +626,7 @@ namespace dp2Circulation
                             encoding,
                             true,	// bRemoveEndCrLf,
                             true,	// bForce,
-                            out strMARC,
+                            out string strMARC,
                             out strError);
                         if (nRet == -2 || nRet == -1)
                         {
@@ -861,13 +833,13 @@ namespace dp2Circulation
             HtmlPrintForm printform = new HtmlPrintForm();
 
             printform.Text = "打印统计结果";
-            printform.MainForm = this.MainForm;
+            // printform.MainForm = Program.MainForm;
 
             Debug.Assert(this.objStatis != null, "");
             printform.Filenames = this.objStatis.OutputFileNames;
-            this.MainForm.AppInfo.LinkFormState(printform, "printform_state");
+            Program.MainForm.AppInfo.LinkFormState(printform, "printform_state");
             printform.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(printform);
+            Program.MainForm.AppInfo.UnlinkFormState(printform);
 
         }
 
@@ -881,9 +853,9 @@ namespace dp2Circulation
             dlg.ProjectName = this.textBox_projectName.Text;
             dlg.NoneProject = false;
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "GetProjectNameDlg_state");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "GetProjectNameDlg_state");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
 
             if (dlg.DialogResult != DialogResult.OK)
@@ -931,7 +903,7 @@ namespace dp2Circulation
 
         private void Iso2709StatisForm_Activated(object sender, EventArgs e)
         {
-            // this.MainForm.stopManager.Active(this.stop);
+            // Program.MainForm.stopManager.Active(this.stop);
 
         }
 

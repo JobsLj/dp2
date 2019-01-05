@@ -40,22 +40,27 @@ namespace DigitalPlatform.LibraryServer
             if (_createLocationResultsetCount == 0)
             {
                 this.App.StartCreateLocationResultset("");
+                this.App.StartCreateBiblioResultset("");
                 _locationResultsetLastTime = DateTime.Now;
                 _createLocationResultsetCount++;
             }
             else
             {
+                DateTime now = DateTime.Now;
                 // 每隔 24 小时自动启动执行一次
                 // TODO: 有可能每次都在每天的同一小时开始执行，如果这正好是每日繁忙时段就不理想了。一个办法是可以定义每日定时时间；另外一个做法是增加一点随机性，不是正好 24 小时间隔
-                if (DateTime.Now - _locationResultsetLastTime > new TimeSpan(25,0,0)
+                if (now - _locationResultsetLastTime > new TimeSpan(25, 0, 0)
+                    || now.Day != _locationResultsetLastTime.Day    // 跨越了一天。2018/5/10
                     || this.App.NeedRebuildResultset() == true)
                 {
                     this.App.StartCreateLocationResultset("");
+                    this.App.StartCreateBiblioResultset("");
                     _locationResultsetLastTime = DateTime.Now;
                 }
 
                 // 促使累积的请求执行
                 this.App.StartCreateLocationResultset(null);
+                this.App.StartCreateBiblioResultset(null);
                 _createLocationResultsetCount++;
             }
 
@@ -84,6 +89,20 @@ namespace DigitalPlatform.LibraryServer
                 catch (Exception ex)
                 {
                     string strErrorText = "DefaultTread中 this.App.Statis.Flush() 出现异常: " + ExceptionUtil.GetDebugText(ex);
+                    this.App.WriteErrorLog(strErrorText);
+                }
+            }
+
+            // 清除文件 Stream
+            if (this.App._physicalFileCache != null)
+            {
+                try
+                {
+                    this.App._physicalFileCache.ClearIdle(TimeSpan.FromMinutes(5));
+                }
+                catch (Exception ex)
+                {
+                    string strErrorText = "DefaultTread中 this.App._physicalFileCache.ClearIdle() 出现异常: " + ExceptionUtil.GetDebugText(ex);
                     this.App.WriteErrorLog(strErrorText);
                 }
             }
@@ -169,9 +188,12 @@ namespace DigitalPlatform.LibraryServer
                     {
                         this.App.WriteErrorLog("ERR006 初始化 mongodb database 失败: " + strError);
                     }
-                    // 清除 Hangup 状态
-                    if (this.App.ContainsHangup("ERR002"))
-                        this.App.ClearHangup("ERR002");
+                    else
+                    {
+                        // 清除 Hangup 状态
+                        if (this.App.ContainsHangup("ERR002"))
+                            this.App.ClearHangup("ERR002");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -196,6 +218,31 @@ namespace DigitalPlatform.LibraryServer
                 catch (Exception ex)
                 {
                     string strErrorText = "DefaultTread中 压缩 OperLog.Cache 出现异常: " + ExceptionUtil.GetDebugText(ex);
+                    this.App.WriteErrorLog(strErrorText);
+                }
+            }
+
+            // 2016/11/6
+            try
+            {
+                this.App.InitialMsmq();
+            }
+            catch (Exception ex)
+            {
+                string strErrorText = "DefaultTread中 InitialMsmq() 出现异常: " + ExceptionUtil.GetDebugText(ex);
+                this.App.WriteErrorLog(strErrorText);
+            }
+
+            // 2016/11/13
+            if (this.App.TempCodeTable != null)
+            {
+                try
+                {
+                    this.App.TempCodeTable.CleanExpireItems();
+                }
+                catch (Exception ex)
+                {
+                    string strErrorText = "DefaultTread中 清除验证码集合 出现异常: " + ExceptionUtil.GetDebugText(ex);
                     this.App.WriteErrorLog(strErrorText);
                 }
             }

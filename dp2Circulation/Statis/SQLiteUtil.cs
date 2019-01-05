@@ -12,6 +12,7 @@ using System.Data.SQLite;
 using DigitalPlatform.IO;
 using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
+using DigitalPlatform;
 
 namespace dp2Circulation
 {
@@ -337,7 +338,7 @@ DbType.Int64);
         public string OperTime = "";
         public string Operator = "";    // 2014/4/20
 
-        public static MainForm MainForm = null;
+        // public static MainForm MainForm = null;
 
         // 根据日志 XML 记录填充数据
         // 本函数负责填充基类的数据成员
@@ -980,15 +981,15 @@ this.Operator);
             if (nRet == -1)
                 return -1;
 
-            XmlNode record = dom.DocumentElement.SelectSingleNode("record");
+            XmlElement record = dom.DocumentElement.SelectSingleNode("record") as XmlElement;
             if (record == null)
-                record = dom.DocumentElement.SelectSingleNode("oldRecord");
+                record = dom.DocumentElement.SelectSingleNode("oldRecord") as XmlElement;
 
             if (record != null)
             {
                 this.ItemRecPath = DomUtil.GetAttr(record,
                     "recPath");
-                string strParentID = (record as XmlElement).GetAttribute("parent_id");
+                string strParentID = record.GetAttribute("parent_id");
                 if (string.IsNullOrEmpty(strParentID) == true)
                 {
                     string strRecord = record.InnerText.Trim();
@@ -1001,9 +1002,12 @@ this.Operator);
                             strParentID = DomUtil.GetElementText(reader_dom.DocumentElement,
                                 "parent");
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            Debug.Assert(false, "");
+                            // 2016/12/6 返回 -1
+                            strError = "ItemOperLogLine.SetData() 内部出现异常: " + ExceptionUtil.GetExceptionText(ex);
+                            MainForm.TryWriteErrorLog(strError + "\r\nXML记录: " + dom.OuterXml);
+                            return -1;
                         }
                     }
                 }
@@ -1016,7 +1020,7 @@ this.Operator);
                     string strDbType = this.TableName.Substring("operlog".Length);
 
                     // 根据实体库名得到书目库名
-                    this.BiblioRecPath = MainForm.BuildBiblioRecPath(strDbType, // "item",
+                    this.BiblioRecPath = Program.MainForm.BuildBiblioRecPath(strDbType, // "item",
                         this.ItemRecPath,
                         strParentID);
                 }
@@ -1131,6 +1135,7 @@ this.OperTime);
         public string Unit = "";
         public long Price = 0;  // 分
         public string Reason = "";
+        public string ID = "";  // 2016/12/6
 
         static string TableName
         {
@@ -1163,13 +1168,16 @@ this.OperTime);
             if (nRet == -1)
                 return -1;
 
+            StringBuilder debugInfo = new StringBuilder();
+
             this.ReaderBarcode = DomUtil.GetElementText(dom.DocumentElement, "readerBarcode");
 
             string strAction = DomUtil.GetElementText(dom.DocumentElement, "action");
 
             // 建立交费记录
             int i = 0;
-            if (strAction == "amerce")
+            if (strAction == "amerce"
+                || strAction == "undo") // 2016/12/6 增加
             {
                 XmlNodeList records = dom.DocumentElement.SelectNodes("amerceRecord");
 #if NO
@@ -1214,10 +1222,10 @@ this.OperTime);
                 }
             }
 #endif
-                foreach (XmlNode record in records)
+                foreach (XmlElement record in records)
                 {
                     if (i == 0)
-                        FillRecord(record, this);
+                        FillRecord(strAction, record, this, debugInfo);
                     else
                     {
                         if (lines == null)
@@ -1225,7 +1233,7 @@ this.OperTime);
                         AmerceOperLogLine line = new AmerceOperLogLine();
                         (this as OperLogLineBase).CopyTo(line);
                         line.SubNo = i;
-                        FillRecord(record, line);
+                        FillRecord(strAction, record, line, debugInfo);
                         lines.Add(line);
                     }
 
@@ -1263,7 +1271,7 @@ this.OperTime);
                         // strError = "amerce 类型的日志记录要求具备 oldReaderRecord 元素文本内容，需要用详细级获取日志信息";
                         // return -1;
                         strError = "ReportForm SetData(): amerce 类型的日志记录要求具备 oldReaderRecord 元素文本内容，此日志记录并不具备(可能属于早期的不完备的日志记录)。因此无法计算修改金额的差值。strDate=" + strDate + ", lIndex=" + lIndex;
-                        Program.MainForm.WriteErrorLog(strError);
+                        MainForm.WriteErrorLog(strError);
                     }
                     else
                     {
@@ -1295,7 +1303,8 @@ this.OperTime);
                                 FillRecordByOverdue(overdue,
                         strReaderBarcode,
                         strNewPrice,
-                        this);
+                        this,
+                        debugInfo);
                             else
                             {
                                 if (lines == null)
@@ -1306,7 +1315,8 @@ this.OperTime);
                                 FillRecordByOverdue(overdue,
                         strReaderBarcode,
                         strNewPrice,
-                        line);
+                        line,
+                        debugInfo);
                                 lines.Add(line);
                             }
 
@@ -1316,6 +1326,9 @@ this.OperTime);
                 }
             }
 
+            // 2016/12/6
+            if (debugInfo.Length > 0)
+                strError = debugInfo.ToString();
             return 0;
         }
 
@@ -1324,7 +1337,8 @@ this.OperTime);
         static void FillRecordByOverdue(XmlElement overdue,
             string strReaderBarcode,
             string strNewPrice,
-            AmerceOperLogLine line)
+            AmerceOperLogLine line,
+            StringBuilder debugInfo)
         {
             if (overdue == null)
                 return;
@@ -1336,6 +1350,7 @@ this.OperTime);
             {
                 line.ReaderBarcode = strReaderBarcode;
                 line.ItemBarcode = overdue.GetAttribute("barcode");
+                line.ID = overdue.GetAttribute("id");   // 2016/12/6
 
                 // 变化的金额
                 string strOldPrice = overdue.GetAttribute("price");
@@ -1352,6 +1367,8 @@ this.OperTime);
                 if (nRet == -1)
                 {
                     // return -1;
+                    if (debugInfo != null)
+                        debugInfo.Append("FillRecordByOverdue() TotalPrice() 解析金额字符串 '" + StringUtil.MakePathList(prices) + "' 时出错(已被当作 0 处理): " + strError + "\r\n");
                     return;
                 }
 
@@ -1363,6 +1380,9 @@ this.OperTime);
         out strError);
                 if (nRet == -1)
                 {
+                    if (debugInfo != null)
+                        debugInfo.Append("FillRecordByOverdue() 解析金额字符串 '" + strResult + "' 时出错(已被当作 0 处理): " + strError + "\r\n");
+
                     line.Unit = "";
                     line.Price = 0;
                 }
@@ -1374,13 +1394,21 @@ this.OperTime);
 
                 line.Reason = overdue.GetAttribute("reason");
             }
-            catch
+            catch (Exception ex)
             {
+                if (debugInfo != null)
+                    debugInfo.Append("FillRecordByOverdue() 出现异常: " + ExceptionUtil.GetExceptionText(ex) + "\r\n");
             }
         }
 
         // 根据 amerceRecord 元素内容填充 line 的各个成员
-        static void FillRecord(XmlNode record, AmerceOperLogLine line)
+        // parameters:
+        //      strAction   amerce / undo
+        static void FillRecord(
+            string strAction,
+            XmlElement record,
+            AmerceOperLogLine line,
+            StringBuilder debugInfo)
         {
             if (record == null)
                 return;
@@ -1388,18 +1416,20 @@ this.OperTime);
             string strError = "";
             line.AmerceRecPath = DomUtil.GetAttr(record,
                 "recPath");
-            line.Action = "amerce";
+            line.Action = strAction;    //  "amerce"; 2016/12/6 修改为 strAction
             string strRecord = record.InnerText;
-            XmlDocument reader_dom = new XmlDocument();
+            XmlDocument amerce_dom = new XmlDocument();
             try
             {
-                reader_dom.LoadXml(strRecord);
-                line.ReaderBarcode = DomUtil.GetElementText(reader_dom.DocumentElement,
+                amerce_dom.LoadXml(strRecord);
+                line.ReaderBarcode = DomUtil.GetElementText(amerce_dom.DocumentElement,
                     "readerBarcode");
-                line.ItemBarcode = DomUtil.GetElementText(reader_dom.DocumentElement,
+                line.ItemBarcode = DomUtil.GetElementText(amerce_dom.DocumentElement,
                     "itemBarcode");
+                line.ID = DomUtil.GetElementText(amerce_dom.DocumentElement,
+                    "id");
 
-                string strPrice = DomUtil.GetElementText(reader_dom.DocumentElement,
+                string strPrice = DomUtil.GetElementText(amerce_dom.DocumentElement,
                     "price");
                 long value = 0;
                 string strUnit = "";
@@ -1409,6 +1439,9 @@ this.OperTime);
         out strError);
                 if (nRet == -1)
                 {
+                    if (debugInfo != null)
+                        debugInfo.Append("FillRecord() 解析金额字符串 '" + strPrice + "' 时出错(已被当作 0 处理): " + strError + "\r\n");
+
                     line.Unit = "";
                     line.Price = 0;
                 }
@@ -1418,11 +1451,13 @@ this.OperTime);
                     line.Price = value;
                 }
 
-                line.Reason = DomUtil.GetElementText(reader_dom.DocumentElement,
+                line.Reason = DomUtil.GetElementText(amerce_dom.DocumentElement,
                     "reason");
             }
-            catch
+            catch (Exception ex)
             {
+                if (debugInfo != null)
+                    debugInfo.Append("FillRecord() 出现异常: " + ExceptionUtil.GetExceptionText(ex) + "\r\n");
             }
         }
 
@@ -1919,7 +1954,7 @@ this.OperTime);
     class PassGateOperLogLine : OperLogLineBase
     {
         // 馆代码
-        public string LibraryCode = "";
+        // public string LibraryCode = "";
 
         // 读者证条码号
         public string ReaderBarcode = "";
@@ -2905,6 +2940,14 @@ line.ReturningTime);
             line.ItemRecPath = strItemRecPath;
             line.ItemBarcode = DomUtil.GetElementText(dom.DocumentElement,
                 "barcode");
+
+            // 2016/9/26
+            if (string.IsNullOrEmpty(line.ItemBarcode))
+            {
+                string strRefID = DomUtil.GetElementText(dom.DocumentElement, "refID");
+                line.ItemBarcode = "@refID:" + strRefID;
+            }
+
             line.Location = StringUtil.GetPureLocationString(
                 DomUtil.GetElementText(dom.DocumentElement,
                 "location"));    // 要变为纯净的地点信息，即不包含 #reservation 之类

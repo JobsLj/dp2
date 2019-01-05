@@ -17,6 +17,10 @@ namespace DigitalPlatform.LibraryServer
     // 批处理任务
     public class BatchTask : IDisposable
     {
+        public Stop _stop = new Stop();
+
+        internal List<string> _pendingCommands = new List<string>();
+
         public bool ManualStart = false;    // 本轮是否为手动启动？
 
         public bool Loop = false;
@@ -43,6 +47,8 @@ namespace DigitalPlatform.LibraryServer
 
         internal bool m_bClosed = true;
 
+        public string ErrorInfo { get; set; }   // 线程结束的出错原因。如果为空，表示线程正常结束
+
         internal LibraryApplication App = null;
         internal RmsChannelCollection RmsChannels = new RmsChannelCollection();
 
@@ -55,7 +61,22 @@ namespace DigitalPlatform.LibraryServer
         internal AutoResetEvent eventActive = new AutoResetEvent(false);	// 激活信号
         internal AutoResetEvent eventFinished = new AutoResetEvent(false);	// true : initial state is signaled 
 
+        internal AutoResetEvent eventStarted = new AutoResetEvent(false);	// 首次启动起来
+
         public int PerTime = 60 * 60 * 1000;	// 1小时
+
+#if NO
+        internal List<string> _errors = new List<string>();
+        public void AddError(string strText)
+        {
+            _errors.Add(strText);
+        }
+
+        public void ClearErrors()
+        {
+            this._errors.Clear();
+        }
+#endif
 
         public virtual void Dispose()
         {
@@ -66,6 +87,7 @@ namespace DigitalPlatform.LibraryServer
             eventClose.Dispose();
             eventActive.Dispose();
             eventFinished.Dispose();
+            eventStarted.Dispose();
         }
 
         public void Activate()
@@ -86,7 +108,20 @@ namespace DigitalPlatform.LibraryServer
 
                 if (this.App.PauseBatchTask == true)
                     return true;
+
                 return this.m_bClosed;
+            }
+            set
+            {
+                this.m_bClosed = value;
+
+                if (_stop != null)
+                {
+                    if (value == true)
+                        _stop.DoStop();
+                    else
+                        _stop.Continue();
+                }
             }
         }
 
@@ -165,7 +200,7 @@ namespace DigitalPlatform.LibraryServer
             strError = "";
             strStartTimeDef = "";
 
-            XmlNode node = this.App.LibraryCfgDom.DocumentElement.SelectSingleNode("//monitors/" + strMonitorName);
+            XmlNode node = this.App.LibraryCfgDom.DocumentElement.SelectSingleNode("monitors/" + strMonitorName);
             if (node == null)
             {
                 bRet = false;
@@ -361,13 +396,17 @@ namespace DigitalPlatform.LibraryServer
             {
                 this.eventActive.Set();
                 this.eventClose.Reset();    // 2006/11/24
+                this.eventStarted.Reset();  // 2017/8/23
                 return;
             }
 
+            this.ErrorInfo = "";
+            // this.ClearErrors();
             this.m_bClosed = false;
 
             this.eventActive.Set();
             this.eventClose.Reset();    // 2006/11/24
+            this.eventStarted.Reset();  // 2017/8/23
 
             this.threadWorker =
                 new Thread(new ThreadStart(this.ThreadMain));
@@ -456,18 +495,30 @@ namespace DigitalPlatform.LibraryServer
 
             if (String.IsNullOrEmpty(this.ProgressFileName) == false)
             {
-                File.Delete(this.ProgressFileName);
+                // File.Delete(this.ProgressFileName);
+                this.App._physicalFileCache.FileDelete(this.ProgressFileName);
                 this.ProgressFileVersion++;
             }
         }
 
         public void Stop()
         {
-            this.eventClose.Set();
-            this.m_bClosed = true;
+            // this.eventStarted.Reset();
 
-            this.m_nPrevLoop = this.Loop == true ? 1: 0;   // 记忆前一次的Loop值
+            this.eventClose.Set();
+
+            //this.m_bClosed = true;
+            this.Stopped = true;
+
+            this.m_nPrevLoop = this.Loop == true ? 1 : 0;   // 记忆前一次的Loop值
             this.Loop = false;  // 防止过一会继续循环
+        }
+
+        // 清除断点信息，避免下次 dp2library 启动时候自动从断点位置开始处理
+        public virtual void ClearTask()
+        {
+            if (this.App != null && string.IsNullOrEmpty(this.Name) == false)
+                this.App.RemoveBatchTaskBreakPointFile(this.Name);
         }
 
         // 设置进度文本
@@ -484,6 +535,12 @@ namespace DigitalPlatform.LibraryServer
             {
                 this.m_lock.ReleaseWriterLock();
             }
+        }
+
+        // 2017/11/28
+        internal void AppendErrorText(string strText)
+        {
+            AppendResultText("{error}"+ strText);
         }
 
         // 追加结果文本
@@ -519,6 +576,7 @@ namespace DigitalPlatform.LibraryServer
                 byte[] buffer = Encoding.UTF8.GetBytes(strText);
 
                 m_stream.Write(buffer, 0, buffer.Length);
+                m_stream.Flush();   // 如果不用此句，则另一个 Stream 就感受不到增加的文件长度部分
             }
             finally
             {
@@ -569,6 +627,8 @@ namespace DigitalPlatform.LibraryServer
 
         }
 
+#if NO
+        // TODO: 这里要使用不同的文件指针
         // 获得输出结果文本
         // parameters:
         //      lEndOffset  本次获取的末尾偏移
@@ -608,6 +668,87 @@ namespace DigitalPlatform.LibraryServer
                 // 指针回到文件末尾
                 this.m_stream.Seek(0, SeekOrigin.End);
             }
+
+            return;
+        }
+#endif
+
+        // 获得输出结果文本
+        // parameters:
+        //      lEndOffset  本次获取的末尾偏移
+        //      lTotalLength    返回流的最大长度
+        public void GetResultText(long lStart,
+            int nMaxBytes,
+            out byte[] baResult,
+            out long lEndOffset,
+            out long lTotalLength)
+        {
+            baResult = null;
+            lEndOffset = 0;
+
+#if NO
+            lTotalLength = this.m_stream.Length;
+
+            long lLength = this.m_stream.Length - lStart;
+
+            if (lLength <= 0)
+            {
+                lEndOffset = this.m_stream.Length;
+                return;
+            }
+
+            baResult = new byte[Math.Min(nMaxBytes, (int)lLength)];
+#endif
+            // 2017/9/10 改造
+            StreamItem s = this.App._physicalFileCache.GetStream(this.ProgressFileName,
+                FileMode.Open, FileAccess.Read);
+            try
+            {
+                lTotalLength = s.FileStream.Length;
+
+                long lLength = lTotalLength - lStart;
+
+                if (lLength <= 0 
+                    || lStart == -1)   //2017/11/14
+                {
+                    lEndOffset = lTotalLength;
+                    return;
+                }
+
+                baResult = new byte[Math.Min(nMaxBytes, (int)lLength)];
+
+                s.FileStream.FastSeek(lStart);
+                int nByteReaded = s.FileStream.Read(baResult, 0, baResult.Length);
+
+                if (nByteReaded < baResult.Length)
+                {
+                    throw new Exception("希望读入 " + baResult.Length + " 字节，但仅仅读入了 " + nByteReaded + " 字节");
+                }
+                Debug.Assert(nByteReaded == baResult.Length);
+                lEndOffset = lStart + nByteReaded;
+            }
+            finally
+            {
+                this.App._physicalFileCache.ReturnStream(s);
+            }
+
+
+#if NO
+            this.m_stream.Seek(lStart, SeekOrigin.Begin);
+            try
+            {
+                int nByteReaded = this.m_stream.Read(baResult, 0, baResult.Length);
+
+                Debug.Assert(nByteReaded == baResult.Length);
+
+                lEndOffset = lStart + nByteReaded;
+            }
+            finally
+            {
+                // 指针回到文件末尾
+                this.m_stream.Seek(0, SeekOrigin.End);
+            }
+#endif
 
             return;
         }
@@ -672,6 +813,7 @@ namespace DigitalPlatform.LibraryServer
                 try
                 {
                     this.App.WriteErrorLog(strErrorText);
+                    this.AppendResultText(strErrorText + "\r\n");
                 }
                 catch
                 {
@@ -684,14 +826,16 @@ namespace DigitalPlatform.LibraryServer
                 try
                 {
                     eventFinished.Set();
+                    eventStarted.Set(); // 2017/8/23
                 }
-                catch(ObjectDisposedException)  // 2016/4/19
+                catch (ObjectDisposedException)  // 2016/4/19
                 {
 
                 }
 
                 // 2009/7/16 新增
-                this.m_bClosed = true;
+                // this.m_bClosed = true;
+                this.Stopped = true;
             }
 
         }
@@ -702,5 +846,208 @@ namespace DigitalPlatform.LibraryServer
 
         }
 
+        // 执行一个日志记录的恢复动作
+        // parameters:
+        //      attachment  附件流对象。注意文件指针在流的尾部
+        public int DoOperLogRecord(
+            RecoverLevel level,
+            string strXml,
+            Stream attachment,
+            string strStyle,
+            out string strError)
+        {
+            strError = "";
+            int nRet = 0;
+
+            XmlDocument dom = new XmlDocument();
+            try
+            {
+                dom.LoadXml(strXml);
+            }
+            catch (Exception ex)
+            {
+                strError = "日志记录装载到DOM时出错: " + ex.Message;
+                return -1;
+            }
+
+            string strOperation = DomUtil.GetElementText(dom.DocumentElement,
+                "operation");
+            if (strOperation == "borrow")
+            {
+                nRet = this.App.RecoverBorrow(this.RmsChannels,
+                    level,
+                    dom,
+                    false,
+                    out strError);
+            }
+            else if (strOperation == "return")
+            {
+                nRet = this.App.RecoverReturn(this.RmsChannels,
+                    level,
+                    dom,
+                    false,
+                    out strError);
+            }
+            else if (strOperation == "setEntity")
+            {
+                nRet = this.App.RecoverSetEntity(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "setOrder")
+            {
+                nRet = this.App.RecoverSetOrder(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "setIssue")
+            {
+                nRet = this.App.RecoverSetIssue(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "setComment")
+            {
+                nRet = this.App.RecoverSetComment(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "changeReaderPassword")
+            {
+                nRet = this.App.RecoverChangeReaderPassword(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "changeReaderTempPassword")
+            {
+                // 2013/11/3
+            }
+            else if (strOperation == "setReaderInfo")
+            {
+                nRet = this.App.RecoverSetReaderInfo(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "devolveReaderInfo")
+            {
+                nRet = this.App.RecoverDevolveReaderInfo(this.RmsChannels,
+                    level,
+                    dom,
+                    attachment,
+                    out strError);
+            }
+            else if (strOperation == "amerce")
+            {
+                nRet = this.App.RecoverAmerce(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "setBiblioInfo")
+            {
+                nRet = this.App.RecoverSetBiblioInfo(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "hire")
+            {
+                nRet = this.App.RecoverHire(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "foregift")
+            {
+                // 2008/11/11
+                nRet = this.App.RecoverForegift(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "settlement")
+            {
+                nRet = this.App.RecoverSettlement(this.RmsChannels,
+                    level,
+                    dom,
+                    out strError);
+            }
+            else if (strOperation == "writeRes")
+            {
+                // 2011/5/26
+                nRet = this.App.RecoverWriteRes(this.RmsChannels,
+                    level,
+                    dom,
+                    attachment,
+                    out strError);
+            }
+            else if (strOperation == "repairBorrowInfo")
+            {
+                // 2012/6/21
+                nRet = this.App.RecoverRepairBorrowInfo(this.RmsChannels,
+                    level,
+                    dom,
+                    attachment,
+                    out strError);
+            }
+            else if (strOperation == "reservation")
+            {
+                // 暂未实现
+            }
+            else if (strOperation == "setUser")
+            {
+                // 暂未实现
+            }
+            else if (strOperation == "passgate")
+            {
+                // 只读
+            }
+            else if (strOperation == "getRes")
+            {
+                // 只读 2015/7/14
+            }
+            else if (strOperation == "crashReport")
+            {
+                // 只读 2015/7/16
+            }
+            else if (strOperation == "memo")
+            {
+                // 注记 2015/9/8
+            }
+            else if (strOperation == "manageDatabase")
+            {
+#if NO
+                // 管理数据库 2017/5/23
+                // 2017/10/15
+                nRet = this.App.RecoverManageDatabase(this.RmsChannels,
+                    level,
+                    dom,
+                    attachment,
+                    strStyle,
+                    out strError);
+#endif
+            }
+            else
+            {
+                strError = "不能识别的日志操作类型 '" + strOperation + "'";
+                return -1;
+            }
+
+            if (nRet == -1)
+            {
+                string strAction = DomUtil.GetElementText(dom.DocumentElement,
+                        "action");
+                strError = "operation=" + strOperation + ";action=" + strAction + ": " + strError;
+                return -1;
+            }
+
+            return 0;
+        }
     }
 }

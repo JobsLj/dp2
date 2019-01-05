@@ -20,15 +20,6 @@ namespace dp2Circulation
     /// </summary>
     public partial class ChangePasswordForm : MyForm
     {
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        // public ApplicationInfo ap = null;
-        public string Lang = "zh";
-
-        public MainForm MainForm = null;
-        DigitalPlatform.Stop stop = null;
-#endif
-
         const int WM_FIRST_SETFOCUS = API.WM_USER + 200;
 
         /// <summary>
@@ -41,12 +32,12 @@ namespace dp2Circulation
 
         private void ChangePasswordForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 #if NO
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -56,7 +47,7 @@ namespace dp2Circulation
             stop.Register(MainForm.stopManager, true);	// 和容器关联
 #endif
 
-            bool bReader = this.MainForm.AppInfo.GetBoolean(
+            bool bReader = Program.MainForm.AppInfo.GetBoolean(
                 "default_account",
                 "isreader",
                 false);
@@ -121,7 +112,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             this.EnableControls(false);
 
@@ -147,7 +138,7 @@ namespace dp2Circulation
                 stop.Initial("");
             }
 
-            MessageBox.Show(this, "读者密码已经被成功修改。");
+            MessageBox.Show(this, "读者密码修改成功。");
 
             this.textBox_reader_barcode.SelectAll();
             this.textBox_reader_barcode.Focus();
@@ -171,7 +162,7 @@ namespace dp2Circulation
             this.textBox_reader_newPassword.Enabled = bEnable;
             this.textBox_reader_confirmNewPassword.Enabled = bEnable;
 
-            bool bReader = this.MainForm.AppInfo.GetBoolean(
+            bool bReader = Program.MainForm.AppInfo.GetBoolean(
     "default_account",
     "isreader",
     false);
@@ -215,7 +206,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             this.EnableControls(false);
 
@@ -296,7 +287,7 @@ namespace dp2Circulation
                 stop.Initial("");
             }
 
-            MessageBox.Show(this, "工作人员 '" + this.textBox_worker_userName.Text + "' 密码已经被成功修改。");
+            MessageBox.Show(this, "工作人员 '" + this.textBox_worker_userName.Text + "' 密码修改成功。");
 
             this.textBox_worker_userName.SelectAll();
             this.textBox_worker_userName.Focus();
@@ -319,11 +310,11 @@ namespace dp2Circulation
 
         private void ChangePasswordForm_Activated(object sender, EventArgs e)
         {
-            // this.MainForm.stopManager.Active(this.stop);
+            // Program.MainForm.stopManager.Active(this.stop);
 
-            this.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
-            this.MainForm.MenuItem_font.Enabled = false;
-            this.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
+            Program.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
+            Program.MainForm.MenuItem_font.Enabled = false;
+            Program.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
         }
 
         private void tabControl_main_SelectedIndexChanged(object sender, EventArgs e)

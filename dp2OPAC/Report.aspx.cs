@@ -476,7 +476,7 @@ var data = [
         if (strFileName != strOriginFileName)
         {
             string strTempDir = Path.Combine(app.DataDir, "temp");
-            PathUtil.CreateDirIfNeed(strTempDir);
+            PathUtil.TryCreateDir(strTempDir);
             strTempFileName = Path.Combine(strTempDir, "~temp_" + Guid.NewGuid().ToString());
             string strCssTemplate = @"BODY {
 	FONT-FAMILY: Microsoft YaHei, Verdana, 宋体;
@@ -638,7 +638,7 @@ DIV.createtime
     void DisplayTreeStruct(string strStart)
     {
         string strError = "";
-        int nRet = 0;
+        // int nRet = 0;
 
         if (string.IsNullOrEmpty(app.ReportDir) == true)
         {
@@ -877,7 +877,7 @@ DIV.createtime
     void GetTreeData(string strStart)
     {
         string strError = "";
-        int nRet = 0;
+        // int nRet = 0;
 
         this.Response.ContentEncoding = Encoding.UTF8;
         this.Response.ContentType = "application/json; charset=utf-8";

@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="12.0">
   <PropertyGroup>
     <ProjectType>Local</ProjectType>
     <ProductVersion>8.0.50727</ProductVersion>
@@ -38,7 +38,7 @@
     </FileUpgradeFlags>
     <UpgradeBackupLocation>
     </UpgradeBackupLocation>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <OldToolsVersion>2.0</OldToolsVersion>
     <PublishUrl>publish\</PublishUrl>
     <Install>true</Install>
@@ -56,6 +56,10 @@
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <TargetFrameworkProfile />
+    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
+    <RestorePackages>true</RestorePackages>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <OutputPath>bin\Debug\</OutputPath>
@@ -80,6 +84,7 @@
     <DebugType>full</DebugType>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <OutputPath>bin\Release\</OutputPath>
@@ -104,8 +109,16 @@
     <DebugType>none</DebugType>
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\dp-library\DigitalPlatform.Core\DigitalPlatform.Core.csproj">
+      <Project>{fe846fac-d4cb-4013-ad69-39e72e31d204}</Project>
+      <Name>DigitalPlatform.Core</Name>
+    </ProjectReference>
+    <Reference Include="Ionic.Zip">
+      <HintPath>..\Ionic.Zip.dll</HintPath>
+    </Reference>
     <Reference Include="System">
       <Name>System</Name>
     </Reference>
@@ -118,6 +131,7 @@
     </Reference>
     <Reference Include="System.EnterpriseServices" />
     <Reference Include="System.IdentityModel" />
+    <Reference Include="System.Net" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="System.Web.Services">
@@ -204,6 +218,7 @@
     <Compile Include="ChangeUsersRightsDlg.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="DatabaseUtility.cs" />
     <Compile Include="DbNameMap\DbNameMap.cs" />
     <Compile Include="DbNameMap\DbNameMapItemDlg.cs">
       <SubType>Form</SubType>
@@ -211,6 +226,7 @@
     <Compile Include="DbNameMap\OriginNotFoundDlg.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="DirLoader.cs" />
     <Compile Include="ImportExport\ExportDataDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -225,6 +241,8 @@
     </Compile>
     <Compile Include="ImportExport\ExportUtil.cs" />
     <Compile Include="ImportExport\ImportUtil.cs" />
+    <Compile Include="RecordLoader.cs" />
+    <Compile Include="RmsBrowseLoader.cs" />
     <Compile Include="RmsChannel.cs" />
     <Compile Include="RmsChannelCollection.cs">
       <SubType>Code</SubType>
@@ -274,6 +292,7 @@
     <Compile Include="ResTree.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="RmsChannelList.cs" />
     <Compile Include="RmsStream.cs" />
     <Compile Include="Script.cs">
       <SubType>Code</SubType>
@@ -394,6 +413,9 @@
     <None Include="Service References\rmsws_localhost\DigitalPlatform.rms.Client.rmsws_localhost.KeyInfo.datasource">
       <DependentUpon>Reference.svcmap</DependentUpon>
     </None>
+    <None Include="Service References\rmsws_localhost\DigitalPlatform.rms.Client.rmsws_localhost.LogicNameItem.datasource">
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </None>
     <None Include="Service References\rmsws_localhost\DigitalPlatform.rms.Client.rmsws_localhost.Record.datasource">
       <DependentUpon>Reference.svcmap</DependentUpon>
     </None>
@@ -465,4 +487,11 @@
     <PostBuildEvent>
     </PostBuildEvent>
   </PropertyGroup>
+  <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(SolutionDir)\.nuget\NuGet.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\.nuget\NuGet.targets'))" />
+  </Target>
 </Project>

@@ -46,6 +46,23 @@ namespace DigitalPlatform.Marc
             return this.m_list.GetEnumerator();
         }
 
+#if NO
+        void ForEach(Action<MarcNode> action)
+        {
+            this.m_list.ForEach(action);
+        }
+#endif
+        /// <summary>
+        /// 获得 List&lt;MarcNode&gt;接口
+        /// </summary>
+        public List<MarcNode> List
+        {
+            get
+            {
+                return this.m_list;
+            }
+        }
+
         /*
         public List<MarcNode>.Enumerator GetEnumberator()
         {
@@ -284,6 +301,12 @@ namespace DigitalPlatform.Marc
             this.m_list.Insert(nInsertPos, node);
         }
 
+        /// <summary>
+        /// 向当前集合中添加一个节点元素，按节点名字顺序决定加入的位置。寻找位置的算法是从集合尾部向开头寻找
+        /// </summary>
+        /// <param name="node">要加入的节点</param>
+        /// <param name="style">如何加入</param>
+        /// <param name="comparer">用于比较大小的接口</param>
         public virtual void insertSequenceReverse(MarcNode node,
     InsertSequenceStyle style = InsertSequenceStyle.PreferHead,
     IComparer<MarcNode> comparer = null)
@@ -447,7 +470,19 @@ namespace DigitalPlatform.Marc
             return this;
         }
 
-        #region 获得元素
+        // 2017/2/23
+        /// <summary>
+        /// 对集合进行排序
+        /// </summary>
+        /// <param name="comparison">排序接口</param>
+        /// <returns>排序后的当前集合</returns>
+        public MarcNodeList sort(Comparison<MarcNode> comparison)
+        {
+            this.m_list.Sort(comparison);
+            return this;
+        }
+
+#region 获得元素
 
         // 返回第一个元素
         /// <summary>
@@ -547,9 +582,9 @@ namespace DigitalPlatform.Marc
             return results;
         }
 
-        #endregion
+#endregion
 
-        #region 获得各种值
+#region 获得各种值
 
         // 第一个元素的 Name
         /// <summary>
@@ -623,6 +658,24 @@ namespace DigitalPlatform.Marc
                     return null;
 
                 return this[0].Content;
+            }
+        }
+
+        // 2016/12/14
+        /// <summary>
+        /// 获得当前集合中全部节点的 Content 值拼接起来的字符串
+        /// </summary>
+        public List<string> Contents
+        {
+            get
+            {
+                List<string> results = new List<string>();
+                foreach(MarcNode node in this)
+                {
+                    results.Add(node.Content);
+                }
+
+                return results;
             }
         }
 
@@ -719,9 +772,9 @@ namespace DigitalPlatform.Marc
             }
         }
 
-        #endregion
+#endregion
 
-        #region 成批修改成员
+#region 成批修改成员
 
         /// <summary>
         /// 修改当前集合中的每个元素的 Name 值
@@ -746,7 +799,7 @@ namespace DigitalPlatform.Marc
             {
                 foreach (MarcNode node in this)
                 {
-                    node.Indicator = value;  // TODO: 修改indicator的长度不合适了是否高报错?
+                    node.Indicator = value;  // TODO: 修改indicator的长度不合适了是否报错?
                 }
             }
         }
@@ -1093,9 +1146,9 @@ namespace DigitalPlatform.Marc
             return this;
         }
 
-        #endregion
+#endregion
 
-        #region 筛选
+#region 筛选
 
         // 对一批互相没有树重叠关系的对象进行筛选
         static MarcNodeList simpleSelect(MarcNodeList source,
@@ -1254,7 +1307,7 @@ namespace DigitalPlatform.Marc
             return results;
         }
 
-        #endregion
+#endregion
 
         /// <summary>
         /// 输出当前对象的调试用字符串

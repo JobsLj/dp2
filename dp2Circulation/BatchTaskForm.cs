@@ -8,6 +8,7 @@ using System.Windows.Forms;
 using System.Xml;
 using System.Threading;
 using System.Diagnostics;
+using System.IO;
 
 using DigitalPlatform;
 using DigitalPlatform.CirculationClient;
@@ -15,6 +16,8 @@ using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 using DigitalPlatform.LibraryClient.localhost;
 using DigitalPlatform.CommonControl;
+using DigitalPlatform.LibraryClient;
+using DigitalPlatform.Text;
 
 namespace dp2Circulation
 {
@@ -33,18 +36,6 @@ namespace dp2Circulation
 
         internal ReaderWriterLock m_lock = new ReaderWriterLock();
         internal static int m_nLockTimeout = 5000;	// 5000=5秒
-
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        /// <summary>
-        /// 框架窗口
-        /// </summary>
-        public MainForm MainForm = null;
-
-        DigitalPlatform.Stop stop = null;
-#endif
 
         string MonitorTaskName = "";    // 要监控的任务名
 
@@ -93,14 +84,14 @@ namespace dp2Circulation
 
         private void BatchTaskForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 #if NO
             MainForm.AppInfo.LoadMdiChildFormStates(this,
     "mdi_form_state");
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -119,6 +110,17 @@ namespace dp2Circulation
 
             // 使得菜单显示正确
             this.MessageStyle = this.MessageStyle;
+
+            // 删除一些不需要的任务名
+            for (int i = 0; i < this.comboBox_taskName.Items.Count; i++)
+            {
+                string strTaskName = this.comboBox_taskName.Items[i] as string;
+                if (strTaskName.StartsWith("~"))
+                {
+                    this.comboBox_taskName.Items.RemoveAt(i);
+                    i--;
+                }
+            }
 
             // 
             API.PostMessage(this.Handle, WM_INITIAL, 0, 0);
@@ -141,7 +143,7 @@ namespace dp2Circulation
                     {
                         stop.SetMessage("正在初始化浏览器控件...");
                         this.Update();
-                        this.MainForm.Update();
+                        Program.MainForm.Update();
 
                         ClearWebBrowser(this.webBrowser_info, true);
 
@@ -163,7 +165,7 @@ namespace dp2Circulation
 
             this.timer_monitorTask.Stop();
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
                 MainForm.AppInfo.SetString(
     "BatchTaskForm",
@@ -179,9 +181,15 @@ namespace dp2Circulation
             int nRet = StartBatchTask(this.comboBox_taskName.Text,
                 out strError);
             if (nRet == -1)
+            {
+                this.ShowMessage(strError, "red", true);
                 MessageBox.Show(this, strError);
+            }
             else
-                MessageBox.Show(this, "任务 '" + this.comboBox_taskName.Text + "' 已成功启动");
+            {
+                this.ShowMessage(strError, "green", true);
+                // MessageBox.Show(this,strError);
+            }
 
         }
 
@@ -189,6 +197,7 @@ namespace dp2Circulation
         {
             string strError = "";
             int nRet = StopBatchTask(this.comboBox_taskName.Text,
+                "stop",
                 out strError);
             if (nRet == -1)
                 MessageBox.Show(this, strError);
@@ -234,6 +243,10 @@ namespace dp2Circulation
         }
 
         // 启动批处理任务
+        // parameters:
+        // return:
+        //      -1  出错
+        //      1   成功。strError 里面有提示成功的内容
         int StartBatchTask(string strTaskName,
             out string strError)
         {
@@ -302,6 +315,7 @@ namespace dp2Circulation
             }
         }
              * */
+                /*
             else if (strTaskName == "正元一卡通读者信息同步")
             {
                 StartZhengyuanReplicationDlg dlg = new StartZhengyuanReplicationDlg();
@@ -327,6 +341,7 @@ namespace dp2Circulation
                     return -1;
                 }
             }
+                 * */
             else if (strTaskName == "读者信息同步")
             {
 #if NO
@@ -361,6 +376,77 @@ namespace dp2Circulation
                     return -1;
                 }
             }
+            else if (strTaskName == "服务器同步")
+            {
+                StartServerReplicationDlg dlg = new StartServerReplicationDlg();
+                MainForm.SetControlFont(dlg, this.Font, false);
+                dlg.Text = "启动 服务器同步 任务";
+                dlg.TaskName = "服务器同步";
+                dlg.StartInfo = startinfo;
+                dlg.ShowDialog(this);
+                if (dlg.DialogResult != DialogResult.OK)
+                {
+                    strError = "用户放弃启动";
+                    return -1;
+                }
+            }
+            else if (strTaskName == "大备份")
+            {
+                if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.117") < 0)
+                {
+                    strError = "dp2library 应在 2.117 版以上才能使用“大备份”任务相关的功能";
+                    return -1;
+                }
+
+                StartBackupDialog dlg = new StartBackupDialog();
+                MainForm.SetControlFont(dlg, this.Font, false);
+                dlg.StartInfo = startinfo;
+                dlg.ShowDialog(this);
+                if (dlg.DialogResult == System.Windows.Forms.DialogResult.Abort)
+                {
+                    if (StopBatchTask(strTaskName,
+            "abort",
+            out strError) == -1)
+                        return -1;
+                    strError = "任务 '" + strTaskName + "' 已被撤销";
+                    return 1;
+                }
+                if (dlg.DialogResult != DialogResult.OK)
+                {
+                    strError = "用户放弃启动";
+                    return -1;
+                }
+
+                // 2017/9/30
+                if (dlg.DownloadFiles)
+                {
+                    if (StringUtil.IsInList("download", MainForm._currentUserRights) == false)
+                    {
+                        strError = "启动“大备份”任务被拒绝。当前用户并不具备 download 权限，所以无法在大备份同时下载文件。请先为当前用户添加这个权限，再重新启动大备份任务";
+                        return -1;
+                    }
+                }
+            }
+            else if (strTaskName == "<日志备份>")
+            {
+                string strOutputFolder = "";
+
+                // 备份日志文件。即，把日志文件从服务器拷贝到本地目录。要处理好增量复制的问题。
+                // return:
+                //      -1  出错
+                //      0   放弃下载，或者没有必要下载。提示信息在 strError 中
+                //      1   成功启动了下载
+                int nRet = Program.MainForm.BackupOperLogFiles(ref strOutputFolder,
+            out strError);
+                if (nRet != 1)
+                {
+                    if (nRet == 0 && string.IsNullOrEmpty(strError))
+                        strError = "用户放弃启动";
+                    return -1;
+                }
+                strError = "本地任务 '<日志备份> 成功启动'";
+                return 1;
+            }
 
             this.m_lock.AcquireWriterLock(m_nLockTimeout);
             try
@@ -374,7 +460,7 @@ namespace dp2Circulation
                 stop.BeginLoop();
 
                 this.Update();
-                this.MainForm.Update();
+                Program.MainForm.Update();
 
                 try
                 {
@@ -405,6 +491,58 @@ namespace dp2Circulation
                     }
 
                     this.label_progress.Text = resultInfo.ProgressText;
+
+                    if (strTaskName == "大备份"
+                        && resultInfo.StartInfo != null)
+                    {
+                        string strOutputFolder = "";
+                        List<string> paths = StringUtil.SplitList(resultInfo.StartInfo.OutputParam);
+
+                        StringUtil.RemoveBlank(ref paths);
+
+                        List<dp2Circulation.MainForm.DownloadFileInfo> infos = MainForm.BuildDownloadInfoList(paths);
+
+                        // 询问是否覆盖已有的目标下载文件。整体询问
+                        // return:
+                        //      -1  出错
+                        //      0   放弃下载
+                        //      1   同意启动下载
+                        int nRet = Program.MainForm.AskOverwriteFiles(infos,    // paths,
+            ref strOutputFolder,
+            out bool bAppend,
+            out strError);
+                        if (nRet == -1)
+                            return -1;
+                        if (nRet == 1)
+                        {
+                            paths = MainForm.GetFileNames(infos, (info) =>
+                            {
+                                return info.ServerPath;
+                            });
+                            foreach (string path in paths)
+                            {
+                                if (string.IsNullOrEmpty(path) == false)
+                                {
+                                    // parameters:
+                                    //      strOutputFolder 输出目录。
+                                    //                      [in] 如果为 null，表示要弹出对话框询问目录。如果不为 null，则直接使用这个目录路径
+                                    //                      [out] 实际使用的目录
+                                    // return:
+                                    //      -1  出错
+                                    //      0   放弃下载
+                                    //      1   成功启动了下载
+                                    nRet = Program.MainForm.BeginDownloadFile(path,
+                                        bAppend ? "append" : "overwrite",
+                                        ref strOutputFolder,
+                                        out strError);
+                                    if (nRet == -1)
+                                        return -1;
+                                    if (nRet == 0)
+                                        break;
+                                }
+                            }
+                        }
+                    }
                 }
                 finally
                 {
@@ -415,6 +553,7 @@ namespace dp2Circulation
                     EnableControls(true);
                 }
 
+                strError = "任务 '" + strTaskName + "' 已成功启动";
                 return 1;
             ERROR1:
                 return -1;
@@ -425,11 +564,20 @@ namespace dp2Circulation
             }
         }
 
+
         // 停止批处理任务
+        // parameters:
+        //      strAction   "stop"或者"abort"
         int StopBatchTask(string strTaskName,
+            string strAction,
             out string strError)
         {
             strError = "";
+
+            if (string.IsNullOrEmpty(strAction))
+                strAction = "stop";
+
+            Debug.Assert(strAction == "stop" || strAction == "abort", "");
 
             this.m_lock.AcquireWriterLock(m_nLockTimeout);
 
@@ -445,7 +593,7 @@ namespace dp2Circulation
                 stop.BeginLoop();
 
                 this.Update();
-                this.MainForm.Update();
+                Program.MainForm.Update();
 
                 try
                 {
@@ -455,7 +603,7 @@ namespace dp2Circulation
                     long lRet = Channel.BatchTask(
                         stop,
                         strTaskName,
-                        "stop",
+                        strAction,  // "stop",
                         param,
                         out resultInfo,
                         out strError);
@@ -504,7 +652,7 @@ namespace dp2Circulation
                 stop.BeginLoop();
 
                 this.Update();
-                this.MainForm.Update();
+                Program.MainForm.Update();
 
                 try
                 {
@@ -568,7 +716,7 @@ namespace dp2Circulation
                 stop.BeginLoop();
 
                 this.Update();
-                this.MainForm.Update();
+                Program.MainForm.Update();
 
                 try
                 {
@@ -875,11 +1023,11 @@ this.webBrowser_info.Document.Body.ScrollRectangle.Height);
 
         private void BatchTaskForm_Activated(object sender, EventArgs e)
         {
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 
-            this.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
-            this.MainForm.MenuItem_font.Enabled = false;
-            this.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
+            Program.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
+            Program.MainForm.MenuItem_font.Enabled = false;
+            Program.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
         }
 
         private void ToolStripMenuItem_result_Click(object sender, EventArgs e)

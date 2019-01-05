@@ -16,10 +16,12 @@ namespace dp2Circulation
     /// </summary>
     public partial class ConvertReportFormatDialog : Form
     {
+        /*
         /// <summary>
         /// 框架窗口
         /// </summary>
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
+         * */
 
         /// <summary>
         /// 构造函数
@@ -138,7 +140,7 @@ namespace dp2Circulation
 
         private void button_localReportDir_Click(object sender, EventArgs e)
         {
-            // string strReportDir = Path.Combine(this.MainForm.UserDir, "reports");
+            // string strReportDir = Path.Combine(Program.MainForm.UserDir, "reports");
 
             this.textBox_reportDirectory.Text = ReportForm.GetReportDir();
         }

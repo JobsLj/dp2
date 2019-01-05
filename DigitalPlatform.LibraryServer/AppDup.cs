@@ -5,11 +5,11 @@ using System.Text;
 using System.Xml;
 using System.Diagnostics;
 using System.Runtime.Serialization;
+using System.IO;
 
 using DigitalPlatform.Text;
 using DigitalPlatform.Xml;
 using DigitalPlatform.rms.Client;
-using System.IO;
 
 // using DigitalPlatform.rms.Client.rmsws_localhost;   // Record
 
@@ -79,6 +79,8 @@ namespace DigitalPlatform.LibraryServer
                 }
             }
 
+            bool bDetail = (StringUtil.IsInList("detail", strBrowseInfoStyle));
+
             bool bExcludeCols = (StringUtil.IsInList("excludecolsoflowthreshold", strBrowseInfoStyle) == true);
 
             bool bCols = (StringUtil.IsInList("cols", strBrowseInfoStyle) == true);
@@ -96,6 +98,8 @@ namespace DigitalPlatform.LibraryServer
                 result_item.Path = item.Path;
                 result_item.Weight = item.Weight;
                 result_item.Threshold = item.Threshold;
+                if (bDetail)
+                    result_item.Detail = item.Detail;
 
                 // paths[i] = item.Path;
                 if (bCols == true)
@@ -113,11 +117,9 @@ namespace DigitalPlatform.LibraryServer
                 // string[] paths = new string[pathlist.Count];
                 string[] paths = StringUtil.FromListString(pathlist);
 
-                ArrayList aRecord = null;
-
                 nRet = channel.GetBrowseRecords(paths,
                     "cols",
-                    out aRecord,
+                    out ArrayList aRecord,
                     out strError);
                 if (nRet == -1)
                 {
@@ -146,7 +148,7 @@ namespace DigitalPlatform.LibraryServer
 
             result.Value = searchresults.Length;
             return result;
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorCode = ErrorCode.SystemError;
             result.ErrorInfo = strError;
@@ -384,8 +386,13 @@ namespace DigitalPlatform.LibraryServer
 
                                 Debug.Assert(dupset != null, "");
 
-                                onedatabase_set.EnsureCreateIndex(getTempFileName);
-                                dupset.EnsureCreateIndex(getTempFileName);
+                                if (onedatabase_set.Sorted == true)
+                                    onedatabase_set.EnsureCreateIndex(getTempFileName);
+                                else
+                                    onedatabase_set.Sort(getTempFileName);
+                                // dupset.EnsureCreateIndex(getTempFileName);
+                                // 2017/4/14
+                                dupset.Sort(getTempFileName);   // Sort() 里面自动确保了创建 Index
 
                                 // 将dupset和前一个set归并
                                 // 归并可以参考ResultSet中的Merge算法
@@ -420,6 +427,7 @@ namespace DigitalPlatform.LibraryServer
                                     if (onedatabase_set != null)
                                         onedatabase_set.Dispose();
                                     onedatabase_set = tempset;
+                                    onedatabase_set.Sorted = true;  // 归并后产生的结果集自然是符合顺序的
                                 }
 
                             }
@@ -446,8 +454,13 @@ namespace DigitalPlatform.LibraryServer
                         DupResultSet tempset0 = new DupResultSet();
                         tempset0.Open(false, getTempFileName);
 
-                        alldatabase_set.EnsureCreateIndex(getTempFileName);
-                        onedatabase_set.EnsureCreateIndex(getTempFileName);
+                        if (alldatabase_set.Sorted == true)
+                            alldatabase_set.EnsureCreateIndex(getTempFileName);
+                        else
+                            alldatabase_set.Sort(getTempFileName);
+                        // onedatabase_set.EnsureCreateIndex(getTempFileName);
+                        // 2017/4/14
+                        onedatabase_set.Sort(getTempFileName);   // Sort() 里面自动确保了创建 Index
 
                         nRet = DupResultSet.Merge("OR",
                             alldatabase_set,
@@ -466,6 +479,7 @@ namespace DigitalPlatform.LibraryServer
                                 alldatabase_set.Dispose();
 
                             alldatabase_set = tempset0;
+                            alldatabase_set.Sorted = true;
                         }
                     }
                 }
@@ -494,7 +508,7 @@ namespace DigitalPlatform.LibraryServer
             else
                 result.Value = 0;
             return result;
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorCode = ErrorCode.SystemError;
             result.ErrorInfo = strError;
@@ -605,12 +619,18 @@ namespace DigitalPlatform.LibraryServer
                     if (strPath == strExcludeBiblioRecPath)
                         continue;
 
-                    DupLineItem item = new DupLineItem();
-                    item.Path = strPath;
-                    item.Weight = nWeight;
-                    item.Threshold = nThreshold;
+                    DupLineItem item = new DupLineItem
+                    {
+                        Path = strPath,
+                        Weight = nWeight,
+                        Threshold = nThreshold,
+                        Detail = BuildDetail(strDbName,
+            strFrom,
+            strKey,
+            strSearchStyle,
+            nWeight)
+                    };
                     dupset.Add(item);
-
                 }
 
                 lStart += aPath.Count;
@@ -619,8 +639,19 @@ namespace DigitalPlatform.LibraryServer
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
+        }
+
+        static string BuildDetail(string strDbName,
+            string strFrom,
+            string strKey,
+            string strSearchStyle,
+            int nWeight)
+        {
+            return strDbName + "/" + strFrom + "/" + strKey
+                + (strSearchStyle == "exact" ? "" : "," + strSearchStyle)
+                + ":" + nWeight.ToString();
         }
 
         // 从模拟keys中根据from获得对应的key
@@ -666,8 +697,8 @@ namespace DigitalPlatform.LibraryServer
             long lRet = channel.DoGetKeys(
                 strPath,
                 strXml,
-                "zh",	// strLang
-                // "",	// strStyle
+                "zh",   // strLang
+                        // "",	// strStyle
                 null,	// this.stop,
                 out aLine,
                 out strError);
@@ -732,5 +763,10 @@ namespace DigitalPlatform.LibraryServer
         public int Threshold = 0;   // 阈值
         [DataMember]
         public string[] Cols = null;    // 其余的列。一般为题名、作者，或者书目摘要
+
+        // 2018/11/22
+        [DataMember]
+        public string Detail { get; set; }
+
     }
 }

@@ -1,26 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Xml;
-using System.IO;
-using System.Collections;
-using System.Reflection;
-using System.Threading;
 using System.Diagnostics;
 
-using DigitalPlatform;	// Stop类
-using DigitalPlatform.rms.Client;
 using DigitalPlatform.Xml;
-using DigitalPlatform.IO;
 using DigitalPlatform.Text;
-using DigitalPlatform.Script;
-using DigitalPlatform.MarcDom;
-using DigitalPlatform.Marc;
-using DigitalPlatform.Range;
-
-using DigitalPlatform.Message;
-using DigitalPlatform.rms.Client.rmsws_localhost;
-
 
 namespace DigitalPlatform.LibraryServer
 {
@@ -53,6 +37,8 @@ namespace DigitalPlatform.LibraryServer
                 "sellerAddress",    // 书商地址。用于非大宗订购情形 2009/2/13
                 "refID",    // 参考ID 2010/3/15 add
                 "operations", // 2010/4/8
+                "fixedPrice",   // 码洋。 2018/7/31
+                "discount", // 折扣。形态为 0.80 这样的。 2018/7/31
         };
 
         // DoOperChange()和DoOperMove()的下级函数
@@ -61,6 +47,7 @@ namespace DigitalPlatform.LibraryServer
         //      -1  出错
         //      0   正确
         //      1   有部分修改没有兑现。说明在strError中
+        //      2   全部修改都没有兑现。说明在strError中 (2018/10/9)
         public override int MergeTwoItemXml(
             SessionInfo sessioninfo,
             XmlDocument domExist,
@@ -82,30 +69,8 @@ namespace DigitalPlatform.LibraryServer
 
             // 算法的要点是, 把"新记录"中的要害字段, 覆盖到"已存在记录"中
 
-            /*
-            // 要害元素名列表
-            string[] element_names = new string[] {
-                "parent",   // 父记录ID
-                "index",    // 编号
-                "state",    // 状态
-                "catalogNo",    // 书目号 2008/8/31
-                "seller",   // 书商
-                "source",   // 2008/2/15 经费来源
-                "range",    // 订购的时间范围
-                "issueCount",   // 订购(时间范围内)跨越多少期? 以便算出总价
-                "copy", // 复本数
-                "price",    // 册、期单价
-                "totalPrice",   // 总价
-                "orderTime",    // 订购时间
-                "orderID",  // 订单号
-                "distribute",   // 馆藏分配
-                "class",    // 类别 2008/8/31
-                "comment",  // 注释
-                "batchNo",  // 批次号
-            };
-             * */
-
             bool bControlled = true;
+            string strControlWarning = ""; // 不完全管辖的详情
             if (sessioninfo.GlobalUser == false)
             {
                 string strDistribute = DomUtil.GetElementText(domExist.DocumentElement, "distribute");
@@ -120,7 +85,10 @@ namespace DigitalPlatform.LibraryServer
                 if (nRet == -1)
                     return -1;
                 if (nRet == 0)
+                {
                     bControlled = false;
+                    strControlWarning = strError;
+                }
 
                 if (bControlled == true)
                 {
@@ -137,7 +105,10 @@ namespace DigitalPlatform.LibraryServer
                     if (nRet == -1)
                         return -1;
                     if (nRet == 0)
+                    {
                         bControlled = false;
+                        strControlWarning = strError;
+                    }
                 }
             }
 
@@ -146,14 +117,6 @@ namespace DigitalPlatform.LibraryServer
             {
                 for (int i = 0; i < core_order_element_names.Length; i++)
                 {
-                    /*
-                    string strTextNew = DomUtil.GetElementText(domNew.DocumentElement,
-                        core_order_element_names[i]);
-
-                    DomUtil.SetElementText(domExist.DocumentElement,
-                        core_order_element_names[i], strTextNew);
-                     * */
-
                     // 2009/10/23 changed inner-->outer
                     string strTextNew = DomUtil.GetElementOuterXml(domNew.DocumentElement,
                         core_order_element_names[i]);
@@ -164,6 +127,7 @@ namespace DigitalPlatform.LibraryServer
             }
 
             string strWarning = "";
+            bool bAllDenied = false;    // 对字段的修改是否全部被拒绝
 
             // 分馆用户要特意单独处理<distribute>元素
             if (sessioninfo.GlobalUser == false
@@ -171,7 +135,6 @@ namespace DigitalPlatform.LibraryServer
             {
                 string strRefID = DomUtil.GetElementText(domNew.DocumentElement, "refID");
 
-                string strTempMergedXml = "";
                 // 将两个订购XML片断合并
                 // parameters:
                 //      strLibraryCodeList  当前用户管辖的分馆代码列表
@@ -180,10 +143,11 @@ namespace DigitalPlatform.LibraryServer
                 //      0   正常
                 //      1   发生了超越范围的修改
                 //      2   有部分修改需求没有兑现
+                //      3   全部修改都没有兑现 (2018/10/9)
                 nRet = MergeOrderNode(domExist.DocumentElement,
         domNew.DocumentElement,
         sessioninfo.LibraryCodeList,
-        out strTempMergedXml,
+        out string strTempMergedXml,
         out strError);
                 if (nRet == -1)
                 {
@@ -192,11 +156,16 @@ namespace DigitalPlatform.LibraryServer
                 }
                 if (nRet == 1)
                 {
-                    strError = "当前用户对不完全管辖的订购数据修改超过权限范围: " + strError;
+                    // 2018/8/30 也报出不完全管辖的理由
+                    strError = "当前用户对不完全管辖(" + strControlWarning + ")的订购数据修改超过权限范围: " + strError;
                     return -1;
                 }
-                if (nRet == 2)
+                if (nRet == 2 || nRet == 3)
+                {
+                    if (nRet == 3)
+                        bAllDenied = true;
                     strWarning = strError;
+                }
 
                 domExist.DocumentElement.InnerXml = strTempMergedXml;
             }
@@ -224,6 +193,8 @@ namespace DigitalPlatform.LibraryServer
             if (string.IsNullOrEmpty(strWarning) == false)
             {
                 strError = strWarning;
+                if (bAllDenied)
+                    return 2;
                 return 1;
             }
 
@@ -240,6 +211,7 @@ namespace DigitalPlatform.LibraryServer
         //      0   正常
         //      1   发生了超越范围的修改
         //      2   有部分修改需求没有兑现
+        //      3   全部修改都没有兑现 (2018/10/9)
         public int MergeOrderNode(XmlNode exist_node,
             XmlNode new_node,
             string strLibraryCodeList,
@@ -299,23 +271,23 @@ namespace DigitalPlatform.LibraryServer
 
             string strExistCopy = DomUtil.GetElementText(exist_node, "copy");
             string strExistPrice = DomUtil.GetElementText(exist_node, "price");
+            string strExistFixedPrice = DomUtil.GetElementText(exist_node, "fixedPrice");
+            string strExistDiscount = DomUtil.GetElementText(exist_node, "discount");
 
             string strChangedCopy = DomUtil.GetElementText(new_node, "copy");
             string strChangedPrice = DomUtil.GetElementText(new_node, "price");
+            string strChangedFixedPrice = DomUtil.GetElementText(new_node, "fixedPrice");
+            string strChangedDiscount = DomUtil.GetElementText(new_node, "discount");
 
             // 比较两个复本字符串
             {
-                string strExistOldValue = "";
-                string strExistNewValue = "";
                 IssueItemDatabase.ParseOldNewValue(strExistCopy,
-            out strExistOldValue,
-            out strExistNewValue);
+            out string strExistOldValue,
+            out string strExistNewValue);
 
-                string strChangedOldValue = "";
-                string strChangedNewValue = "";
                 IssueItemDatabase.ParseOldNewValue(strChangedCopy,
-            out strChangedOldValue,
-            out strChangedNewValue);
+            out string strChangedOldValue,
+            out string strChangedNewValue);
 
                 if (strExistOldValue != strChangedOldValue)
                 {
@@ -328,17 +300,13 @@ namespace DigitalPlatform.LibraryServer
 
             // 比较两个价格字符串
             {
-                string strExistOldValue = "";
-                string strExistNewValue = "";
                 IssueItemDatabase.ParseOldNewValue(strExistPrice,
-            out strExistOldValue,
-            out strExistNewValue);
+            out string strExistOldValue,
+            out string strExistNewValue);
 
-                string strChangedOldValue = "";
-                string strChangedNewValue = "";
                 IssueItemDatabase.ParseOldNewValue(strChangedPrice,
-            out strChangedOldValue,
-            out strChangedNewValue);
+            out string strChangedOldValue,
+            out string strChangedNewValue);
 
                 if (strExistOldValue != strChangedOldValue)
                 {
@@ -347,7 +315,49 @@ namespace DigitalPlatform.LibraryServer
                 }
                 if (strExistNewValue != strChangedNewValue)
                 {
-                    strError = "验收价(方括中的部分)不允许修改。(原来='" + strExistPrice + "',新的='" + strChangedPrice + "')";
+                    //
+                    strError = "验收价(方括号中的部分)不允许修改。(原来='" + strExistPrice + "',新的='" + strChangedPrice + "')";
+                    return 1;
+                }
+            }
+
+            // 2018/7/31
+            // 比较两个码洋字符串
+            {
+                IssueItemDatabase.ParseOldNewValue(strExistFixedPrice,
+            out string strExistOldValue,
+            out string strExistNewValue);
+
+                IssueItemDatabase.ParseOldNewValue(strChangedFixedPrice,
+            out string strChangedOldValue,
+            out string strChangedNewValue);
+
+                if (strExistOldValue != strChangedOldValue)
+                {
+                    strError = "订购码洋(方括号左边的部分)不允许修改。(原来='" + strExistPrice + "', 新的='" + strChangedPrice + "')";
+                    return 1;
+                }
+                if (strExistNewValue != strChangedNewValue)
+                {
+                    strError = "验收码洋(方括号中的部分)不允许修改。(原来='" + strExistPrice + "', 新的='" + strChangedPrice + "')";
+                    return 1;
+                }
+            }
+
+            // 2018/7/31
+            // 比较两个折扣字符串
+            {
+                IssueItemDatabase.ParseOldNewValue(strExistDiscount,
+            out string strExistOldValue,
+            out string strExistNewValue);
+
+                IssueItemDatabase.ParseOldNewValue(strChangedDiscount,
+            out string strChangedOldValue,
+            out string strChangedNewValue);
+
+                if (strExistOldValue != strChangedOldValue)
+                {
+                    strError = "订购折扣(方括号左边的部分)不允许修改。(原来='" + strExistCopy + "', 新的='" + strChangedCopy + "')";
                     return 1;
                 }
             }
@@ -430,7 +440,7 @@ namespace DigitalPlatform.LibraryServer
             }
             catch (Exception ex)
             {
-                strError = "exist_node.OuterXml装入XMLDOM失败: " + ex.Message;
+                strError = "exist_node.OuterXml 装入 XMLDOM 失败: " + ex.Message;
                 return -1;
             }
 
@@ -456,7 +466,9 @@ namespace DigitalPlatform.LibraryServer
             if (nRet == 1)
             {
                 strError = "对下列元素的修改没有兑现: " + StringUtil.MakePathList(differents);
-                return 2;
+                if (bDistributeChanged)
+                    return 2;   // 部分修改兑现
+                return 3;   // 所有修改都没有兑现
             }
             if (nRet == 0 && bDistributeChanged == false)
             {
@@ -514,12 +526,6 @@ namespace DigitalPlatform.LibraryServer
         {
             for (int i = 0; i < core_order_element_names.Length; i++)
             {
-                /*
-                string strText1 = DomUtil.GetElementText(domExist.DocumentElement,
-                    core_order_element_names[i]);
-                string strText2 = DomUtil.GetElementText(domOldRec.DocumentElement,
-                    core_order_element_names[i]);
-                 * */
                 // 2009/10/24 changed
                 string strText1 = DomUtil.GetElementOuterXml(domExist.DocumentElement,
                     core_order_element_names[i]);
@@ -1142,8 +1148,10 @@ namespace DigitalPlatform.LibraryServer
                 "parent",
                 strBiblioRecId);
 
-            strXml = dom.OuterXml;
+            // 2017/1/13
+            DomUtil.RemoveEmptyElements(dom.DocumentElement);
 
+            strXml = dom.OuterXml;
             return 0;
         }
 
@@ -1184,11 +1192,11 @@ namespace DigitalPlatform.LibraryServer
             }
             catch (Exception ex)
             {
-                strError = "执行脚本函数 '" + "VerifyOrder" + "' 时出错：" + ex.Message;
+                strError = "执行脚本函数 '" + "VerifyOrder" + "' 时出错：" + ExceptionUtil.GetDebugText(ex);
                 return -1;
             }
 
-            return 0;
+            // return 0;
         }
 
 #if NO1

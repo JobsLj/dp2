@@ -832,7 +832,7 @@ namespace dp2Circulation
                 return -1;
             }
 
-            _clientHost.MainForm = this;
+            // _clientHost.MainForm = this;
 
             return 0;
         }
@@ -847,8 +847,6 @@ namespace dp2Circulation
             strError = "";
             host = null;
 
-            string strContent = "";
-            Encoding encoding;
             // 能自动识别文件内容的编码方式的读入文本文件内容模块
             // parameters:
             //      lMaxLength  装入的最大长度。如果超过，则超过的部分不装入。如果为-1，表示不限制装入长度
@@ -859,8 +857,8 @@ namespace dp2Circulation
             //      2   读入的内容不是全部
             int nRet = FileUtil.ReadTextFileContent(strCsFileName,
                 -1,
-                out strContent,
-                out encoding,
+                out string strContent,
+                out Encoding encoding,
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -1066,10 +1064,54 @@ namespace dp2Circulation
             return ScriptManager.ResolveAssembly(args.Name, _dllPaths);
         }
 
+        // 2017/4/24
+        public void TestCompile(string strProjectName)
+        {
+            string strError = "";
+
+            if (String.IsNullOrEmpty(strProjectName) == true)
+            {
+                strError = "尚未指定方案名";
+                goto ERROR1;
+            }
+
+            string strProjectLocate = "";
+            // 获得方案参数
+            // strProjectNamePath	方案名，或者路径
+            // return:
+            //		-1	error
+            //		0	not found project
+            //		1	found
+            int nRet = this.ScriptManager.GetProjectData(
+                strProjectName,
+                out strProjectLocate);
+            if (nRet == 0)
+            {
+                strError = "凭条打印方案 " + strProjectName + " 没有找到...";
+                goto ERROR1;
+            }
+            if (nRet == -1)
+            {
+                strError = "scriptManager.GetProjectData() error ...";
+                goto ERROR1;
+            }
+
+            nRet = PrepareScript(strProjectName,
+    strProjectLocate,
+    out this.objStatis,
+    out strError);
+            if (nRet == -1)
+                goto ERROR1;
+
+            return;
+        ERROR1:
+            throw new Exception(strError);
+        }
+
         // 注: Stop 的使用有 Bug 2016/6/28
-        int RunScript(string strProjectName,
-            string strProjectLocate,
-            out string strError)
+        public int RunScript(string strProjectName,
+    string strProjectLocate,
+    out string strError)
         {
             EnableControls(false);
 
@@ -1101,7 +1143,7 @@ namespace dp2Circulation
 
                 nRet = PrepareScript(strProjectName,
                     strProjectLocate,
-                    out objStatis,
+                    out this.objStatis,
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;

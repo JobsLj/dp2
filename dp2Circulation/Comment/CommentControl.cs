@@ -10,14 +10,10 @@ using System.Xml;
 using System.Web;
 
 using DigitalPlatform;
-using DigitalPlatform.IO;
 using DigitalPlatform.GUI;
 using DigitalPlatform.Xml;
-using DigitalPlatform.CommonControl;
 
 using DigitalPlatform.Text;
-using DigitalPlatform.CirculationClient;
-// using DigitalPlatform.LibraryClient.localhost;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.LibraryClient.localhost;
 
@@ -59,43 +55,6 @@ namespace dp2Circulation
         /// 加入主题词 (UNIMARC 610字段)
         /// </summary>
         public event AddSubjectEventHandler AddSubject = null;
-
-#if NO
-        /// <summary>
-        /// 通讯通道
-        /// </summary>
-        public LibraryChannel Channel = null;
-
-        /// <summary>
-        /// 停止控制
-        /// </summary>
-        public DigitalPlatform.Stop Stop = null;
-
-        /// <summary>
-        /// 框架窗口
-        /// </summary>
-        public MainForm MainForm = null;
-
-        /// <summary>
-        /// 获得宏的值
-        /// </summary>
-        public event GetMacroValueHandler GetMacroValue = null;
-
-        /// <summary>
-        /// 内容发生改变
-        /// </summary>
-        public event ContentChangedEventHandler ContentChanged = null;
-
-        /// <summary>
-        /// 界面许可 / 禁止状态发生改变
-        /// </summary>
-        public event EnableControlsHandler EnableControlsEvent = null;
-
-        string m_strBiblioRecPath = "";
-
-        public CommentItemCollection Items = null;
-
-#endif
 
         /// <summary>
         /// 构造函数
@@ -434,12 +393,14 @@ namespace dp2Circulation
         /// </summary>
         /// <param name="channel">通讯通道</param>
         /// <param name="strBiblioRecPath">书目记录路径</param>
+        /// <param name="preload_entities">预先装载好的事项集合</param>
         /// <param name="strStyle">装载风格</param>
         /// <param name="strError">返回出错信息</param>
         /// <returns>-1: 出错; 0: 没有装载; 1: 已经装载</returns>
         public override int LoadItemRecords(
             LibraryChannel channel,
             string strBiblioRecPath,
+            EntityInfo[] preload_entities,
             // bool bDisplayOtherLibraryItem,
             string strStyle,
             out string strError)
@@ -447,6 +408,7 @@ namespace dp2Circulation
             int nRet = base.LoadItemRecords(
                 channel,
                 strBiblioRecPath,
+                preload_entities,
                 strStyle,
                 out strError);
             if (nRet == -1)
@@ -671,7 +633,7 @@ namespace dp2Circulation
                     goto ERROR1;
 
                 this.Changed = false;
-                this.MainForm.StatusBarMessage = "评注信息 提交 / 保存 成功";
+                Program.MainForm.StatusBarMessage = "评注信息 提交 / 保存 成功";
                 DoViewComment(false);
                 return 1;
             ERROR1:
@@ -1103,7 +1065,7 @@ namespace dp2Circulation
             Stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -1213,7 +1175,7 @@ namespace dp2Circulation
                     if (String.IsNullOrEmpty(commentitem.RecPath) == false)
                     {
                         string strTempCommentDbName = Global.GetDbName(commentitem.RecPath);
-                        string strTempBiblioDbName = this.MainForm.GetBiblioDbNameFromCommentDbName(strTempCommentDbName);
+                        string strTempBiblioDbName = Program.MainForm.GetBiblioDbNameFromCommentDbName(strTempCommentDbName);
 
                         Debug.Assert(String.IsNullOrEmpty(strTempBiblioDbName) == false, "");
                         // TODO: 这里要正规报错
@@ -1432,7 +1394,7 @@ namespace dp2Circulation
             menuItem = new MenuItem("装入已经打开的评注窗(&E)");
             menuItem.Click += new System.EventHandler(this.menu_loadToExistItemForm_Click);
             if (this.listView.SelectedItems.Count == 0
-                || this.MainForm.GetTopChildWindow<ItemInfoForm>() == null)
+                || Program.MainForm.GetTopChildWindow<ItemInfoForm>() == null)
                 menuItem.Enabled = false;
             contextMenu.MenuItems.Add(menuItem);
 
@@ -1590,8 +1552,8 @@ namespace dp2Circulation
             ItemInfoForm form = null;
 
             form = new ItemInfoForm();
-            form.MdiParent = this.MainForm;
-            form.MainForm = this.MainForm;
+            form.MdiParent = Program.MainForm;
+            form.MainForm = Program.MainForm;
             form.Show();
 
             form.DbType = "comment";
@@ -1631,7 +1593,7 @@ namespace dp2Circulation
                 goto ERROR1;
             }
 
-            ItemInfoForm form = this.MainForm.GetTopChildWindow<ItemInfoForm>();
+            ItemInfoForm form = Program.MainForm.GetTopChildWindow<ItemInfoForm>();
             if (form == null)
             {
                 strError = "当前并没有已经打开的评注窗";
@@ -1691,7 +1653,7 @@ namespace dp2Circulation
             // 优化，避免无谓地进行服务器调用
             if (bOpenWindow == false)
             {
-                if (this.MainForm.PanelFixedVisible == false
+                if (Program.MainForm.PanelFixedVisible == false
                     && (m_commentViewer == null || m_commentViewer.Visible == false))
                     return;
             }
@@ -1736,7 +1698,6 @@ namespace dp2Circulation
             if (nRet == -1)
                 goto ERROR1;
 
-
             bool bNew = false;
             if (this.m_commentViewer == null
                 || (bOpenWindow == true && this.m_commentViewer.Visible == false))
@@ -1746,7 +1707,7 @@ namespace dp2Circulation
                 bNew = true;
             }
 
-            m_commentViewer.MainForm = this.MainForm;  // 必须是第一句
+            // m_commentViewer.MainForm = Program.MainForm;  // 必须是第一句
 
             if (bNew == true)
                 m_commentViewer.InitialWebBrowser();
@@ -1756,18 +1717,18 @@ namespace dp2Circulation
             m_commentViewer.XmlString = strXml;
             m_commentViewer.FormClosed -= new FormClosedEventHandler(m_viewer_FormClosed);
             m_commentViewer.FormClosed += new FormClosedEventHandler(m_viewer_FormClosed);
-            // this.MainForm.AppInfo.LinkFormState(m_viewer, "comment_viewer_state");
+            // Program.MainForm.AppInfo.LinkFormState(m_viewer, "comment_viewer_state");
             // m_viewer.ShowDialog(this);
-            // this.MainForm.AppInfo.UnlinkFormState(m_viewer);
+            // Program.MainForm.AppInfo.UnlinkFormState(m_viewer);
             if (bOpenWindow == true)
             {
                 if (m_commentViewer.Visible == false)
                 {
-                    this.MainForm.AppInfo.LinkFormState(m_commentViewer, "comment_viewer_state");
+                    Program.MainForm.AppInfo.LinkFormState(m_commentViewer, "comment_viewer_state");
                     m_commentViewer.Show(this);
                     m_commentViewer.Activate();
 
-                    this.MainForm.CurrentPropertyControl = null;
+                    Program.MainForm.CurrentPropertyControl = null;
                 }
                 else
                 {
@@ -1784,7 +1745,7 @@ namespace dp2Circulation
                 }
                 else
                 {
-                    if (this.MainForm.CurrentPropertyControl != m_commentViewer.MainControl)
+                    if (Program.MainForm.CurrentPropertyControl != m_commentViewer.MainControl)
                         m_commentViewer.DoDock(false); // 不会自动显示FixedPanel
                 }
             }
@@ -1797,7 +1758,7 @@ namespace dp2Circulation
         {
             if (m_commentViewer != null)
             {
-                this.MainForm.AppInfo.UnlinkFormState(m_commentViewer);
+                Program.MainForm.AppInfo.UnlinkFormState(m_commentViewer);
                 this.m_commentViewer = null;
             }
         }
@@ -1814,7 +1775,7 @@ namespace dp2Circulation
 
             LibraryChannel channel = channel_param;
             if (channel == null)
-                channel = this.MainForm.GetChannel();
+                channel = Program.MainForm.GetChannel();
 #if NO
             Stop.OnStop += new StopEventHandler(this.DoStop);
             Stop.Initial("正在获得评注 HTML 信息 ...");
@@ -1849,7 +1810,7 @@ namespace dp2Circulation
             finally
             {
                 if (channel_param == null)
-                    this.MainForm.ReturnChannel(channel);
+                    Program.MainForm.ReturnChannel(channel);
 #if NO
                 Stop.EndLoop();
                 Stop.OnStop -= new StopEventHandler(this.DoStop);
@@ -1951,7 +1912,7 @@ namespace dp2Circulation
         {
             strError = "";
 
-            string strNewDefault = this.MainForm.AppInfo.GetString(
+            string strNewDefault = Program.MainForm.AppInfo.GetString(
     "entityform_optiondlg",
     strCfgEntry,
     "<root />");
@@ -2026,7 +1987,7 @@ namespace dp2Circulation
             CommentEditForm edit = new CommentEditForm();
 
             edit.BiblioDbName = Global.GetDbName(this.BiblioRecPath);
-            edit.MainForm = this.MainForm;
+            // edit.MainForm = Program.MainForm;
             edit.ItemControl = this;
             string strError = "";
             int nRet = edit.InitialForEdit(commentitem,
@@ -2040,9 +2001,9 @@ namespace dp2Circulation
             edit.StartItem = null;  // 清除原始对象标记
 
         REDO:
-            this.MainForm.AppInfo.LinkFormState(edit, "CommentEditForm_state");
+            Program.MainForm.AppInfo.LinkFormState(edit, "CommentEditForm_state");
             edit.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(edit);
+            Program.MainForm.AppInfo.UnlinkFormState(edit);
 
             if (edit.DialogResult != DialogResult.OK)
                 return;
@@ -2063,7 +2024,7 @@ namespace dp2Circulation
 #endif
             TriggerContentChanged(bOldChanged, true);
 
-            LibraryChannel channel = this.MainForm.GetChannel();
+            LibraryChannel channel = Program.MainForm.GetChannel();
 
             this.EnableControls(false);
             try
@@ -2128,12 +2089,17 @@ namespace dp2Circulation
                     }
                 }
 
+                // 2017/3/2
+                if (string.IsNullOrEmpty(commentitem.RefID))
+                {
+                    commentitem.RefID = Guid.NewGuid().ToString();
+                }
             }
             finally
             {
                 this.EnableControls(true);
 
-                this.MainForm.ReturnChannel(channel);
+                Program.MainForm.ReturnChannel(channel);
             }
         }
 
@@ -2209,7 +2175,7 @@ namespace dp2Circulation
         int SearchCommentRefIdDup(
             LibraryChannel channel,
             string strRefID,
-            // string strBiblioRecPath,
+    // string strBiblioRecPath,
     string strOriginRecPath,
     out string[] paths,
     out string strError)
@@ -2252,13 +2218,12 @@ namespace dp2Circulation
 
                 long lHitCount = lRet;
 
-                List<string> aPath = null;
                 lRet = channel.GetSearchResult(Stop,
                     "dup",
                     0,
                     Math.Min(lHitCount, 100),
                     "zh",
-                    out aPath,
+                    out List<string> aPath,
                     out strError);
                 if (lRet == -1)
                     return -1;
@@ -2373,7 +2338,7 @@ namespace dp2Circulation
                     {
                         OrderIndexFoundDupDlg dlg = new OrderIndexFoundDupDlg();
                         MainForm.SetControlFont(dlg, this.Font, false);
-                        dlg.MainForm = this.MainForm;
+                        dlg.MainForm = Program.MainForm;
                         dlg.BiblioText = strBiblioText;
                         dlg.OrderText = strCommentText;
                         dlg.MessageText = "拟新增的编号 '" + strIndex + "' 在数据库中发现已经存在。因此无法新增。";
@@ -2417,7 +2382,7 @@ namespace dp2Circulation
 
             edit.BiblioDbName = Global.GetDbName(this.BiblioRecPath);
             edit.Text = "新增评注事项";
-            edit.MainForm = this.MainForm;
+            // edit.MainForm = Program.MainForm;
             nRet = edit.InitialForEdit(commentitem,
                 this.Items,
                 out strError);
@@ -2425,9 +2390,9 @@ namespace dp2Circulation
                 goto ERROR1;
 
             //REDO:
-            this.MainForm.AppInfo.LinkFormState(edit, "CommentEditForm_state");
+            Program.MainForm.AppInfo.LinkFormState(edit, "CommentEditForm_state");
             edit.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(edit);
+            Program.MainForm.AppInfo.UnlinkFormState(edit);
 
             if (edit.DialogResult != DialogResult.OK
                 && edit.Item == commentitem    // 表明尚未前后移动，或者移动回到起点，然后Cancel
@@ -2532,7 +2497,13 @@ namespace dp2Circulation
                     dupitem.HilightListViewItem(true);
                     return;
                 }
-            } // end of ' if (String.IsNullOrEmpty(strIndex) == false)
+            }
+
+            // 2017/3/2
+            if (string.IsNullOrEmpty(commentitem.RefID))
+            {
+                commentitem.RefID = Guid.NewGuid().ToString();
+            }
 
             return;
         ERROR1:
@@ -2613,7 +2584,7 @@ namespace dp2Circulation
                 "请指定新的书目记录路径",
                 "书目记录路径(格式'库名/ID'): ",
                 "",
-            this.MainForm.DefaultFont);
+            Program.MainForm.DefaultFont);
 
             if (strNewBiblioRecPath == null)
                 return;
@@ -2673,7 +2644,7 @@ namespace dp2Circulation
             if (nRet == -1)
                 goto ERROR1;
 
-            this.MainForm.StatusBarMessage = "评注信息 修改归属 成功";
+            Program.MainForm.StatusBarMessage = "评注信息 修改归属 成功";
             return;
         ERROR1:
             MessageBox.Show(ForegroundWindow.Instance, strError);
@@ -2932,7 +2903,6 @@ namespace dp2Circulation
                 }
             }
         }
-
     }
 
     /// <summary>

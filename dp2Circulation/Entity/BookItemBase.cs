@@ -49,10 +49,26 @@ namespace dp2Circulation
 
         ObjectInfoCollection _objects = new ObjectInfoCollection();
 
+#if NO
         /// <summary>
         /// 事项的显示状态
         /// </summary>
         public ItemDisplayState ItemDisplayState = ItemDisplayState.Normal;
+#endif
+        ItemDisplayState _itemDisplayState = ItemDisplayState.Normal;
+
+        public ItemDisplayState ItemDisplayState
+        {
+            get
+            {
+                return _itemDisplayState;
+            }
+            set
+            {
+                _itemDisplayState = value;
+            }
+        }
+
 
         /// <summary>
         ///  册记录路径
@@ -197,7 +213,6 @@ namespace dp2Circulation
 
             this.RecPath = strRecPath;
             this.Timestamp = baTimeStamp;
-
             return 0;
         }
 
@@ -333,7 +348,11 @@ namespace dp2Circulation
             strError = "";
             if (this._objects == null)
                 return 0;
-            return this._objects.Save(channel, stop, dp2library_version, out strError);
+            return this._objects.Save(channel,
+                stop,
+                this.RecPath,
+                dp2library_version,
+                out strError);
         }
 
         /// <summary>
@@ -355,8 +374,7 @@ namespace dp2Circulation
 
             this.ListViewItem = item;
 
-            this.ListViewItem.Tag = this;   // 将BookItem对象引用保存在ListViewItem事项中
-
+            this.ListViewItem.Tag = this;   // 将 BookItem 对象引用保存在 ListViewItem 事项中
             return item;
         }
 
@@ -511,6 +529,24 @@ namespace dp2Circulation
             return Guid.NewGuid().ToString();
         }
 
+        // 2016/12/19
+        /// <summary>
+        /// 旧的参考 ID
+        /// </summary>
+        public string OldRefID
+        {
+            get
+            {
+                string strRefID = DomUtil.GetElementText(this.RecordDom.DocumentElement, "oldRefID");
+                return strRefID;
+            }
+            set
+            {
+                DomUtil.SetElementText(this.RecordDom.DocumentElement, "oldRefID", value);
+                this.Changed = true;
+            }
+        }
+
         /// <summary>
         /// 参考 ID
         /// </summary>
@@ -546,6 +582,13 @@ namespace dp2Circulation
             }
         }
 
+        // 只修改 RecordDom 字段内容，不改变 Changed 状态
+        // TODO: 修改 Parent 可以用这个函数来实现
+        public void SetElementText(string strName, string strValue)
+        {
+            DomUtil.SetElementText(this.RecordDom.DocumentElement, "refID", strValue);
+        }
+
         /// <summary>
         /// 当前事项所从属的书目记录 ID
         /// </summary>
@@ -561,7 +604,8 @@ namespace dp2Circulation
                 if (oldvalue != value)
                 {
                     DomUtil.SetElementText(this.RecordDom.DocumentElement, "parent", value);
-                    this.Changed = true; // 2009/3/5
+                    // 修改 Parent 不要导致 Changed = true // 2016/12/19
+                    // this.Changed = true; // 2009/3/5
                 }
             }
         }
@@ -670,20 +714,23 @@ namespace dp2Circulation
             strError = "";
             // 检查每个事项的refID
             Hashtable table = new Hashtable();
+            int i = 0;
             foreach (BookItemBase item in this)
             {
-                if (String.IsNullOrEmpty(item.RefID) == true)
+                // 2017/3/2 启用对参考 ID 的检查
+                // .Normal 状态的暂时不检查了，避免给用户造成困扰
+                if (String.IsNullOrEmpty(item.RefID) == true
+                    && (item.ItemDisplayState == ItemDisplayState.New || item.ItemDisplayState == ItemDisplayState.Changed))    // 2017/3/9
                 {
-                    /*
-                    strError = "册事项中出现了空的RefID值";
+                    strError = "事项 " + (i + 1) + " 中出现了空的 RefID";
                     return -1;
-                     * */
-                    continue;
+                    // continue;
                 }
 
                 if (item.ItemDisplayState != ItemDisplayState.Deleted)  // 删除的可以例外
                 {
-                    if (table.Contains(item.RefID) == true)
+                    if (string.IsNullOrEmpty(item.RefID) == false    // 2017/3/9
+                        && table.Contains(item.RefID) == true)
                     {
                         strError = "册事项中出现了重复的参考ID值 '" + item.RefID + "'";
                         return -1;
@@ -692,8 +739,11 @@ namespace dp2Circulation
                 else
                     continue;
 
-                if (table.Contains(item.RefID) == false)
+                if (string.IsNullOrEmpty(item.RefID) == false    // 2017/3/9
+                    && table.Contains(item.RefID) == false)
                     table.Add(item.RefID, null);
+
+                i++;
             }
 
             return 0;
@@ -743,6 +793,26 @@ namespace dp2Circulation
 
             return null;
         }
+
+        public BookItemBase GetItemByOldRefID(string strRefID,
+    List<BookItemBase> excludeItems = null)
+        {
+            foreach (BookItemBase item in this)
+            {
+                // 需要排除的事项
+                if (excludeItems != null)
+                {
+                    if (excludeItems.IndexOf(item) != -1)
+                        continue;
+                }
+
+                if (item.OldRefID == strRefID)
+                    return item;
+            }
+
+            return null;
+        }
+
 
         /// <summary>
         /// 以记录路径定位一个事项

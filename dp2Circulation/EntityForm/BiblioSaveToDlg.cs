@@ -15,10 +15,13 @@ namespace dp2Circulation
     /// </summary>
     internal partial class BiblioSaveToDlg : Form
     {
+        // 是否越过 从剪贴板自动复制记录路径 的动作
+        public bool SuppressAutoClipboard = false;
+
         /// <summary>
         /// 框架窗口
         /// </summary>
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
 
         public string CurrentBiblioRecPath = "";    // 当前书目记录的路径
 
@@ -45,6 +48,7 @@ namespace dp2Circulation
 
             comboBox_biblioDbName_TextChanged(null, null);
 
+            if (this.SuppressAutoClipboard == false)
             TrySetRecPathFromClipboard();
         }
 
@@ -162,12 +166,12 @@ namespace dp2Circulation
             if (this.comboBox_biblioDbName.Items.Count > 0)
                 return;
 
-            if (this.MainForm.BiblioDbProperties == null)
+            if (Program.MainForm.BiblioDbProperties == null)
                 return;
 
-            for (int i = 0; i < this.MainForm.BiblioDbProperties.Count; i++)
+            for (int i = 0; i < Program.MainForm.BiblioDbProperties.Count; i++)
             {
-                BiblioDbProperty property = this.MainForm.BiblioDbProperties[i];
+                BiblioDbProperty property = Program.MainForm.BiblioDbProperties[i];
                 // 只允许特定的 MARC 格式
                 if (string.IsNullOrEmpty(this.MarcSyntax) == false
                     && property.Syntax != this.MarcSyntax)
@@ -199,7 +203,7 @@ namespace dp2Circulation
 
             // 如果另存前的记录路径中ID为问号，意味着不知道目标路径，因此无法创建目标关系
             // 所以要检查目标路径，ID应不为问号
-            int nRet = this.MainForm.CheckBuildLinkCondition(
+            int nRet = Program.MainForm.CheckBuildLinkCondition(
                     this.RecPath,   // 要另存去的那条
                     this.CurrentBiblioRecPath,  // 另存前的那条
                     true,

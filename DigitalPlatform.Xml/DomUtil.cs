@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Xml;
-using System.Text.RegularExpressions;
 using System.Diagnostics;
 
 namespace DigitalPlatform.Xml
@@ -12,9 +11,105 @@ namespace DigitalPlatform.Xml
     // DomUtil类包含XML DOM的一些扩展功能函数
     public class DomUtil
     {
+        // parameters:
+        //      condition   如果为 "element_not_exists"，表示元素一开始不存在
+        //      action      希望进行的动作。传入值为 "change" 或者 "remove"。传出值表示希望进行的修改动作
+        public delegate void FuncChange(string condition,
+            ref string action,
+            ref string attr_value);
+
+        // 有条件地修改一个元素的属性值。
+        // 所谓条件就是根据 func 的返回值判断
+        // parameters:
+        //      element_name    内容为 "element1/element2" 形态
+        public static bool ChangeAttribute(XmlDocument dom,
+            string element_name,
+            string attr_name,
+            FuncChange func)
+        {
+            bool bChanged = false;
+            string attr_value = null;
+            string action = "change";
+            string strOldValue = null;
+
+            XmlElement element = dom.DocumentElement.SelectSingleNode(element_name) as XmlElement;
+            if (element == null)
+            {
+                func("element_not_exists", ref action, ref attr_value);
+                if (attr_value == null || action == "remove")
+                    return false;
+                element = DomUtil.CreateNode(dom.DocumentElement, element_name.Split(new char[] { '/' })) as XmlElement;
+                bChanged = true;
+            }
+            else
+            {
+                attr_value = element.GetAttribute(attr_name);
+                strOldValue = attr_value;
+                func("element_exists", ref action, ref attr_value);
+            }
+
+            if (attr_value == null && strOldValue == null)
+                return bChanged;
+            if (attr_value == null || action == "remove")
+                element.RemoveAttribute(attr_name);
+            else
+            {
+                if (attr_value == strOldValue)
+                    return bChanged;
+                element.SetAttribute(attr_name, attr_value);
+            }
+
+            bChanged = true;
+            return bChanged;
+        }
+
+
+        // 确保在根元素之下创建一个容器元素
+        public static XmlElement EnsureContainerElement(XmlDocument cfg_dom,
+            string strElementName)
+        {
+            XmlElement container = cfg_dom.DocumentElement.SelectSingleNode(strElementName) as XmlElement;
+            if (container == null)
+            {
+                container = cfg_dom.CreateElement(strElementName);
+                cfg_dom.DocumentElement.AppendChild(container);
+            }
+
+            return container;
+        }
+
+        // 2017/12/27
+        public static void SafeLoadXml(XmlDocument dom, string xml)
+        {
+            dom.LoadXml(string.IsNullOrEmpty(xml) ? "<root />" : xml);
+        }
+
+        public static string RemoveEmptyElements(string strXml)
+        {
+            if (String.IsNullOrEmpty(strXml) == true)
+                return strXml;
+
+            XmlDocument dom = new XmlDocument();
+            try
+            {
+                dom.LoadXml(strXml);
+            }
+            catch
+            {
+                return strXml;
+            }
+
+            if (dom.DocumentElement == null)
+                return strXml;
+
+            RemoveEmptyElements(dom.DocumentElement);
+
+            return dom.DocumentElement.OuterXml;
+        }
+
         // 删除 start 元素下的所有空元素
         // parameters:
-        //      bCheckStart 是否检查 start。如果本参数为 true, 当 start 为空元素时，要删除 start 元素
+        //      bCheckStart 是否检查 start 节点的状况。如果本参数为 true, 当 start 为空元素时，要删除 start 元素
         public static void RemoveEmptyElements(XmlElement start,
             bool bCheckStart = false)
         {
@@ -25,7 +120,7 @@ namespace DigitalPlatform.Xml
                     continue;
                 XmlElement element = node as XmlElement;
                 if (element.HasAttributes == false
-                    && string.IsNullOrEmpty(element.InnerText.Trim()) == true)
+                    && string.IsNullOrEmpty(element.InnerXml.Trim()) == true)
                 {
                     delete.Add(element);
                 }
@@ -42,7 +137,7 @@ namespace DigitalPlatform.Xml
             {
                 XmlElement element = start;
                 if (element.HasAttributes == false
-                    && string.IsNullOrEmpty(element.InnerText.Trim()) == true)
+                    && string.IsNullOrEmpty(element.InnerXml.Trim()) == true)
                     element.ParentNode.RemoveChild(element);
             }
         }
@@ -505,6 +600,65 @@ namespace DigitalPlatform.Xml
         }
 
 
+        // 2016/10/13
+        // 包装版本
+        public static string GetStringParam(XmlElement node,
+            string strParamName,
+            string strDefaultValue)
+        {
+            string strValue = strDefaultValue;
+            string strError = "";
+            GetStringParam(node,
+                strParamName,
+                strDefaultValue,
+                out strValue,
+                out strError);
+            return strValue;
+        }
+
+        // 2016/10/13
+        // 包装后的版本。不用事先获得元素的 Node
+        public static string GetStringParam(
+            XmlNode root,
+            string strElementPath,
+            string strParamName,
+            string strDefaultValue)
+        {
+            XmlElement node = root.SelectSingleNode(strElementPath) as XmlElement;
+            if (node == null)
+                return strDefaultValue;
+            return GetStringParam(node,
+                strParamName,
+                strDefaultValue);
+        }
+
+        // 2016/10/13
+        // 获得字符串的属性参数值
+        // 注：属性节点不具备的时候，返回 strDefaultValue。否则，就要返回属性值，哪怕属性值为 ""
+        // return:
+        //      -1  出错。但是nValue中已经有了nDefaultValue值，可以不加警告而直接使用
+        //      0   正常获得明确定义的参数值
+        //      1   参数没有定义，因此代替以缺省参数值返回
+        public static int GetStringParam(XmlElement node,
+            string strParamName,
+            string strDefaultValue,
+            out string strValue,
+            out string strError)
+        {
+            strError = "";
+
+            XmlAttribute attr = node.GetAttributeNode(strParamName);
+            if (attr == null)
+            {
+                strValue = strDefaultValue;
+                return 1;
+            }
+            strValue = attr.Value;
+            if (string.IsNullOrEmpty(strValue) == false)
+                strValue = strValue.Trim();
+
+            return 0;
+        }
 
         // 获得整数型的属性参数值
         // return:
@@ -593,7 +747,6 @@ namespace DigitalPlatform.Xml
             nValue = nDefaultValue;
 
             string strValue = DomUtil.GetAttr(node, strParamName);
-
 
             if (String.IsNullOrEmpty(strValue) == true)
             {
@@ -980,12 +1133,12 @@ namespace DigitalPlatform.Xml
             if (node == null)
                 return strDefault;
             /*
-			XmlNode nodeAttr = node.SelectSingleNode("@" + attrName);
+            XmlNode nodeAttr = node.SelectSingleNode("@" + attrName);
 
-			if (nodeAttr == null)
-				return strDefault;
-			else
-				return nodeAttr.Value;
+            if (nodeAttr == null)
+                return strDefault;
+            else
+                return nodeAttr.Value;
              * */
 
             Debug.Assert(node.Attributes != null, "");
@@ -1026,7 +1179,7 @@ namespace DigitalPlatform.Xml
             if (attrFound == null)
             {
                 if (strAttrValue == null)
-                    return;	// 本来就不存在
+                    return; // 本来就不存在
 
                 XmlElement element = (XmlElement)node;
                 element.SetAttribute(strAttrName, strAttrValue);
@@ -1064,7 +1217,7 @@ namespace DigitalPlatform.Xml
             if (attrFound == null)
             {
                 if (strAttrValue == null)
-                    return;	// 本来就不存在
+                    return; // 本来就不存在
 
                 XmlElement element = (XmlElement)node;
                 element.SetAttribute(strAttrName, strAttrNameSpaceURI, strAttrValue);
@@ -1104,7 +1257,7 @@ namespace DigitalPlatform.Xml
             if (attrFound == null)
             {
                 if (strValue == null)
-                    return;	// 本来就不存在
+                    return; // 本来就不存在
 
                 XmlElement element = (XmlElement)node;
                 XmlAttribute attr = node.OwnerDocument.CreateAttribute(strPrefix, strName, strNamespaceURI);
@@ -1472,9 +1625,7 @@ namespace DigitalPlatform.Xml
             string strOuterXml)
         {
             if (nodeRoot == null)
-            {
-                throw (new Exception("nodeRoot参数不能为null"));
-            }
+                throw new ArgumentException("nodeRoot 参数值不应为空", "nodeRoot");
 
             XmlNode nodeFound = nodeRoot.SelectSingleNode(strXpath);
             if (nodeFound == null)
@@ -1488,39 +1639,53 @@ namespace DigitalPlatform.Xml
                 throw (new Exception("SetElementOuterXml() CreateNode error"));
             }
 
-            XmlDocumentFragment fragment = nodeFound.OwnerDocument.CreateDocumentFragment();
-            fragment.InnerXml = strOuterXml;
+            if (string.IsNullOrEmpty(strOuterXml) == false)
+            {
+                XmlDocumentFragment fragment = nodeFound.OwnerDocument.CreateDocumentFragment();
+                fragment.InnerXml = strOuterXml;
 
-            nodeFound.ParentNode.InsertAfter(fragment, nodeFound);
+                nodeFound.ParentNode.InsertAfter(fragment, nodeFound);
 
-            nodeFound.ParentNode.RemoveChild(nodeFound);
+                nodeFound.ParentNode.RemoveChild(nodeFound);
 
-            nodeFound = nodeRoot.SelectSingleNode(strXpath);
-            return nodeFound;
+                nodeFound = nodeRoot.SelectSingleNode(strXpath);
+                return nodeFound;
+            }
+            else
+            {
+                // 2016/11/5
+                nodeFound.ParentNode.RemoveChild(nodeFound);
+                return null;
+            }
         }
 
         // 2009/10/31
-        // 写入一个元素的OuterXml
+        // 2016/11/3 允许 strOuterXml 为空。这时候的效果是删除 node 元素
+        // 写入一个元素的 OuterXml
+        // exception:
+        //      可能会因为 strOuterXml 格式不正确而抛出异常
         // return:
-        //      返回变动后该元素的XmlNode
-        public static XmlNode SetElementOuterXml(XmlNode node,
+        //      返回变动后该元素的 XmlNode
+        public static XmlElement SetElementOuterXml(XmlElement element,
             string strOuterXml)
         {
-            if (node == null)
+            if (element == null)
             {
-                throw (new Exception("node参数不能为null"));
+                throw new ArgumentException("node 参数值不应为空", "node");
             }
 
-            XmlDocumentFragment fragment = node.OwnerDocument.CreateDocumentFragment();
-            fragment.InnerXml = strOuterXml;
+            XmlElement new_element = null;
+            if (string.IsNullOrEmpty(strOuterXml) == false)
+            {
+                XmlDocumentFragment fragment = element.OwnerDocument.CreateDocumentFragment();
+                fragment.InnerXml = strOuterXml;
 
-            node.ParentNode.InsertAfter(fragment, node);
+                element.ParentNode.InsertAfter(fragment, element);
 
-            XmlNode new_node = node.NextSibling;    // 2012/12/12 新增加
-
-            node.ParentNode.RemoveChild(node);
-
-            return new_node;
+                new_element = element.NextSibling as XmlElement;    // 2012/12/12 新增加
+            }
+            element.ParentNode.RemoveChild(element);
+            return new_element;
         }
 
         // 插入新对象到儿子们的最前面

@@ -1,17 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.IO;
 using System.Web;
 using System.Reflection;
+using System.Xml;
+using System.Runtime.Remoting.Channels.Ipc;
+using System.Runtime.Remoting.Channels;
 
 using DigitalPlatform;
-using DigitalPlatform.GUI;
 using DigitalPlatform.Text;
 using DigitalPlatform.Xml;
 using DigitalPlatform.Script;
@@ -21,6 +20,7 @@ using DigitalPlatform.MarcDom;
 using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.LibraryClient.localhost;
+using DigitalPlatform.Interfaces;
 
 // 2013/3/16 添加 XML 注释
 
@@ -37,8 +37,17 @@ namespace dp2Circulation
             {
                 if (this.Channel != null)
                     this.Channel.Dispose();
+
+                // 2017/4/24
+                if (stop != null) // 脱离关联
+                {
+                    stop.Unregister();	// 和容器关联
+                    stop = null;
+                }
+
                 CloseFloatingMessage();
             }
+
             base.Dispose(disposing);
         }
 
@@ -64,7 +73,7 @@ namespace dp2Circulation
             get
             {
                 if (this.Visible == false)
-                    return this.MainForm;
+                    return Program.MainForm;
                 return this;
             }
         }
@@ -79,10 +88,20 @@ namespace dp2Circulation
         }
 
         /// <summary>
+        /// 窗口是否为固定窗口。所谓固定窗口就是固定在某一侧的窗口
+        /// </summary>
+        public virtual bool Fixed
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
         /// 界面语言
         /// </summary>
         public string Lang = "zh";
 
+#if NO
         MainForm m_mainForm = null;
 
         /// <summary>
@@ -100,6 +119,21 @@ namespace dp2Circulation
             {
                 // 为了让脚本代码能兼容
                 this.m_mainForm = value;
+            }
+        }
+#endif
+        /// <summary>
+        /// 当前窗口所从属的框架窗口
+        /// </summary>
+        public virtual MainForm MainForm
+        {
+            get
+            {
+                return Program.MainForm;
+            }
+            set
+            {
+                // 为了让脚本代码能兼容
             }
         }
 
@@ -171,10 +205,13 @@ namespace dp2Circulation
         /// </summary>
         public virtual void OnMyFormLoad()
         {
-            if (this.MainForm == null)
+            if (Program.MainForm == null)
                 return;
 
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
+            this.HelpRequested -= MyForm_HelpRequested;
+            this.HelpRequested += MyForm_HelpRequested;
+
+            this.Channel.Url = Program.MainForm.LibraryServerUrl;
 
             this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
             this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
@@ -186,7 +223,7 @@ namespace dp2Circulation
             this.Channel.Idle += Channel_Idle;
 
             stop = new DigitalPlatform.Stop();
-            stop.Register(MainForm.stopManager, true);	// 和容器关联
+            stop.Register(Program.MainForm?.stopManager, true);	// 和容器关联
 
             {
                 _floatingMessage = new FloatingMessageForm(this, true);
@@ -198,9 +235,14 @@ namespace dp2Circulation
 
                 // _floatingMessage.Text = "test";
                 //_floatingMessage.Clicked += _floatingMessage_Clicked;
-                if (this.MainForm != null)
-                    this.MainForm.Move -= new EventHandler(MainForm_Move);
+                if (Program.MainForm != null)
+                    Program.MainForm.Move += new EventHandler(MainForm_Move);
             }
+        }
+
+        private void MyForm_HelpRequested(object sender, HelpEventArgs hlpevent)
+        {
+            OnHelpTriggered();
         }
 
         bool _channelDoEvents = true;
@@ -260,8 +302,8 @@ namespace dp2Circulation
 
             // 原来
 
-            if (this.MainForm != null)
-                this.MainForm.Move -= new EventHandler(MainForm_Move);
+            if (Program.MainForm != null)
+                Program.MainForm.Move -= new EventHandler(MainForm_Move);
 
 #if NO
             if (_floatingMessage != null)
@@ -270,8 +312,8 @@ namespace dp2Circulation
             CloseFloatingMessage();
             /*
             // 如果MDI子窗口不是MainForm刚刚准备退出时的状态，恢复它。为了记忆尺寸做准备
-            if (this.WindowState != this.MainForm.MdiWindowState)
-                this.WindowState = this.MainForm.MdiWindowState;
+            if (this.WindowState != Program.MainForm.MdiWindowState)
+                this.WindowState = Program.MainForm.MdiWindowState;
              * */
         }
 
@@ -349,32 +391,78 @@ namespace dp2Circulation
         //      strStyle    风格。如果为 GUI，表示会自动添加 Idle 事件，并在其中执行 Application.DoEvents
         public LibraryChannel GetChannel(string strServerUrl = ".",
             string strUserName = ".",
-            MainForm.GetChannelStyle style = MainForm.GetChannelStyle.GUI)
+            GetChannelStyle style = GetChannelStyle.GUI,
+            string strClientIP = "")
         {
-            LibraryChannel channel = this.MainForm.GetChannel(strServerUrl, strUserName, style);
-            _channelList.Add(channel);
+            LibraryChannel channel = Program.MainForm.GetChannel(strServerUrl, strUserName, style, strClientIP);
+
+            lock (_syncRoot_channelList)
+            {
+                _channelList.Add(channel);
+            }
             // TODO: 检查数组是否溢出
             return channel;
         }
 
         public void ReturnChannel(LibraryChannel channel)
         {
-            this.MainForm.ReturnChannel(channel);
-            _channelList.Remove(channel);
+            Program.MainForm.ReturnChannel(channel);
+            lock (_syncRoot_channelList)
+            {
+                _channelList.Remove(channel);
+            }
         }
 
+        private static readonly Object _syncRoot_channelList = new Object(); // 2017/5/18
         List<LibraryChannel> _channelList = new List<LibraryChannel>();
 
+        /*
+操作类型 crashReport -- 异常报告 
+主题 dp2circulation 
+发送者 huxh@xxx
+媒体类型 text 
+内容 发生未捕获的界面线程异常: 
+Type: System.InvalidOperationException
+Message: 集合已修改；可能无法执行枚举操作。
+Stack:
+在 System.ThrowHelper.ThrowInvalidOperationException(ExceptionResource resource)
+在 System.Collections.Generic.List`1.Enumerator.MoveNextRare()
+在 dp2Circulation.MyForm.DoStop(Object sender, StopEventArgs e)
+在 dp2Circulation.TaskList.DoStop(Object sender, StopEventArgs e)
+在 dp2Circulation.QuickChargingForm.ClearTaskByRows(List`1 rows, Boolean bWarning)
+在 dp2Circulation.QuickChargingForm.SmartSetFuncState(FuncState value, Boolean bClearInfoWindow, Boolean bDupAsClear)
+在 dp2Circulation.QuickChargingForm.set_SmartFuncState(FuncState value)
+在 dp2Circulation.MainForm.toolButton_borrow_Click(Object sender, EventArgs e)
+在 System.Windows.Forms.ToolStripItem.RaiseEvent(Object key, EventArgs e)
+在 System.Windows.Forms.ToolStripButton.OnClick(EventArgs e)
+在 System.Windows.Forms.ToolStripItem.HandleClick(EventArgs e)
+在 System.Windows.Forms.ToolStripItem.HandleMouseUp(MouseEventArgs e)
+在 System.Windows.Forms.ToolStrip.OnMouseUp(MouseEventArgs mea)
+在 System.Windows.Forms.Control.WmMouseUp(Message& m, MouseButtons button, Int32 clicks)
+在 System.Windows.Forms.Control.WndProc(Message& m)
+在 System.Windows.Forms.ToolStrip.WndProc(Message& m)
+在 System.Windows.Forms.NativeWindow.Callback(IntPtr hWnd, Int32 msg, IntPtr wparam, IntPtr lparam)
+
+
+dp2Circulation 版本: dp2Circulation, Version=2.28.6325.27243, Culture=neutral, PublicKeyToken=null
+操作系统：Microsoft Windows NT 6.1.7601 Service Pack 1
+本机 MAC 地址: F44D3077D567 
+操作时间 2017/5/18 13:25:07 (Thu, 18 May 2017 13:25:07 +0800) 
+前端地址 xxx 经由 http://dp2003.com/dp2library 
+         * */
         internal void DoStop(object sender, StopEventArgs e)
         {
             // 兼容旧风格
             if (this.Channel != null)
                 this.Channel.Abort();
 
-            foreach (LibraryChannel channel in _channelList)
+            lock (_syncRoot_channelList)
             {
-                if (channel != null)
-                    channel.Abort();
+                foreach (LibraryChannel channel in _channelList)
+                {
+                    if (channel != null)
+                        channel.Abort();
+                }
             }
         }
 
@@ -382,7 +470,7 @@ namespace dp2Circulation
         {
             get
             {
-                return this.MainForm._currentUserName;
+                return Program.MainForm?._currentUserName;
             }
         }
 
@@ -391,7 +479,7 @@ namespace dp2Circulation
         {
             get
             {
-                return this.MainForm._currentLibraryCodeList;
+                return Program.MainForm?._currentLibraryCodeList;
             }
         }
 
@@ -399,7 +487,7 @@ namespace dp2Circulation
         {
             get
             {
-                return this.MainForm._currentUserRights;
+                return Program.MainForm?._currentUserRights;
             }
         }
 
@@ -419,12 +507,12 @@ namespace dp2Circulation
         /// <param name="e">事件参数</param>
         public virtual void Channel_BeforeLogin(object sender, BeforeLoginEventArgs e)
         {
-            this.MainForm.Channel_BeforeLogin(sender, e); // 2015/11/4 原来是 this
+            Program.MainForm?.Channel_BeforeLogin(sender, e); // 2015/11/4 原来是 this
         }
 
         public virtual void Channel_AfterLogin(object sender, AfterLoginEventArgs e)
         {
-            this.MainForm.Channel_AfterLogin(sender, e); // 2015/11/4 原来是 this
+            Program.MainForm?.Channel_AfterLogin(sender, e); // 2015/11/4 原来是 this
         }
 
 #if NO
@@ -510,19 +598,19 @@ namespace dp2Circulation
         /// </summary>
         public void RestoreDefaultFont()
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
                 Size oldsize = this.Size;
-                if (this.MainForm.DefaultFont == null)
+                if (Program.MainForm.DefaultFont == null)
                     MainForm.SetControlFont(this, Control.DefaultFont);
                 else
-                    MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                    MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
                 this.Size = oldsize;
             }
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                    this.FormName,
                    "default_font",
                    "");
@@ -602,7 +690,7 @@ namespace dp2Circulation
         /// </summary>
         public void SaveFontSetting()
         {
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
                 {
                     // Create the FontConverter.
@@ -611,7 +699,7 @@ namespace dp2Circulation
 
                     string strFontString = converter.ConvertToString(this.Font);
 
-                    this.MainForm.AppInfo.SetString(
+                    Program.MainForm.AppInfo.SetString(
                         this.FormName,
                         "default_font",
                         strFontString);
@@ -638,10 +726,10 @@ namespace dp2Circulation
         /// </summary>
         public void LoadFontSetting()
         {
-            if (this.MainForm == null)
+            if (Program.MainForm == null)
                 return;
 
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
                 string strFontString = MainForm.AppInfo.GetString(
                     this.FormName,
@@ -659,9 +747,9 @@ namespace dp2Circulation
                 else
                 {
                     // 沿用系统的缺省字体
-                    if (this.MainForm != null)
+                    if (Program.MainForm != null)
                     {
-                        MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                        MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
                     }
                 }
 
@@ -696,16 +784,17 @@ namespace dp2Circulation
             // 设置窗口尺寸状态
             // 一般派生类会在 EntityForm_Load() 函数中
             /*
-            this.MainForm.AppInfo.LoadMdiSize += new EventHandler(AppInfo_LoadMdiSize);
-            this.MainForm.AppInfo.SaveMdiSize += new EventHandler(AppInfo_SaveMdiSize);
+            Program.MainForm.AppInfo.LoadMdiSize += new EventHandler(AppInfo_LoadMdiSize);
+            Program.MainForm.AppInfo.SaveMdiSize += new EventHandler(AppInfo_SaveMdiSize);
              * 因此这里稍后一点处理尺寸初始化是必要的
              * 
              * * */
-            if (this.MainForm != null && this.MainForm.AppInfo != null
-                && Floating == false && this.SupressSizeSetting == false)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null
+                && Floating == false)
             {
-                this.MainForm.AppInfo.LoadMdiChildFormStates(this,
-                        "mdi_form_state");
+                Program.MainForm?.AppInfo?.LoadMdiChildFormStates(this,
+                        "mdi_form_state",
+                        this.SuppressSizeSetting == true ? SizeStyle.Layout : SizeStyle.All);
             }
         }
 
@@ -716,11 +805,12 @@ namespace dp2Circulation
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             // 在这里保存。如果靠后调用，可能会遇到 base.OnFormClosed() 里面相关事件被卸掉的问题
-            if (this.MainForm != null && this.MainForm.AppInfo != null
-    && Floating == false && this.SupressSizeSetting == false)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null
+    && Floating == false)
             {
-                MainForm.AppInfo.SaveMdiChildFormStates(this,
-                    "mdi_form_state");
+                Program.MainForm?.AppInfo?.SaveMdiChildFormStates(this,
+                    "mdi_form_state",
+                    this.SuppressSizeSetting == true ? SizeStyle.Layout : SizeStyle.All);
             }
 
             base.OnFormClosed(e);
@@ -732,12 +822,12 @@ namespace dp2Circulation
         /// <summary>
         /// 在 FormClosing 阶段，是否要越过 this.OnMyFormClosing(e)
         /// </summary>
-        public bool SupressFormClosing = false;
+        public bool SuppressFormClosing = false;
 
         /// <summary>
         /// 是否需要忽略尺寸设定的过程
         /// </summary>
-        public bool SupressSizeSetting = false;
+        public bool SuppressSizeSetting = false;
 
         /// <summary>
         /// Form 即将关闭事件
@@ -746,7 +836,7 @@ namespace dp2Circulation
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
-            if (this.SupressFormClosing == false)
+            if (this.SuppressFormClosing == false)
                 this.OnMyFormClosing(e);
         }
 
@@ -756,13 +846,17 @@ namespace dp2Circulation
         /// <param name="e">事件参数</param>
         protected override void OnActivated(EventArgs e)
         {
-            if (this.MainForm != null)
+            // 2017/4/23
+            if (this.IsDisposed)
+                return;
+
+            if (Program.MainForm != null)
             {
                 // if (this.stop != null)
-                this.MainForm.stopManager.Active(this.stop);
+                Program.MainForm?.stopManager?.Active(this.stop);
 
-                this.MainForm.MenuItem_font.Enabled = true;
-                this.MainForm.MenuItem_restoreDefaultFont.Enabled = true;
+                Program.MainForm.MenuItem_font.Enabled = true;
+                Program.MainForm.MenuItem_restoreDefaultFont.Enabled = true;
             }
 
             base.OnActivated(e);
@@ -813,7 +907,7 @@ namespace dp2Circulation
 
             try
             {
-                return this.MainForm.VerifyBarcode(
+                return Program.MainForm.VerifyBarcode(
                     stop,
                     Channel,
                     strLibraryCodeList,
@@ -840,7 +934,7 @@ namespace dp2Circulation
         /// <param name="strHtml">要输出的 HTML 字符串</param>
         public void OutputHtml(string strHtml)
         {
-            this.MainForm.OperHistory.AppendHtml(strHtml);
+            Program.MainForm?.OperHistory?.AppendHtml(strHtml);
         }
 
         // parameters:
@@ -850,14 +944,14 @@ namespace dp2Circulation
         /// </summary>
         /// <param name="strText">要输出的纯文本字符串</param>
         /// <param name="nWarningLevel">警告级别。0 正常文本(白色背景) 1 警告文本(黄色背景) >=2 错误文本(红色背景)</param>
-        public void OutputText(string strText, int nWarningLevel = 0)
+        public virtual void OutputText(string strText, int nWarningLevel = 0)
         {
             string strClass = "normal";
             if (nWarningLevel == 1)
                 strClass = "warning";
             else if (nWarningLevel >= 2)
                 strClass = "error";
-            this.MainForm.OperHistory.AppendHtml("<div class='debug " + strClass + "'>" + HttpUtility.HtmlEncode(strText).Replace("\r\n", "<br/>") + "</div>");
+            Program.MainForm?.OperHistory?.AppendHtml("<div class='debug " + strClass + "'>" + HttpUtility.HtmlEncode(strText).Replace("\r\n", "<br/>") + "</div>");
         }
 
         /// <summary>
@@ -935,10 +1029,10 @@ namespace dp2Circulation
                 string strMetaData = "";
                 string strOutputPath = "";
 
-                string strStyle = "content,data,metadata,timestamp,outputpath";
+                string strStyle = "content,data,metadata,timestamp,outputpath,gzip";
 
                 long lRet = channel.GetRes(Progress,
-                    MainForm.cfgCache,
+                    Program.MainForm?.cfgCache,
                     strCfgFilePath,
                     strStyle,
                     null,
@@ -971,7 +1065,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1022,7 +1116,7 @@ namespace dp2Circulation
                 string strStyle = "content,data,metadata,timestamp,outputpath";
 
                 long lRet = channel.GetResLocalFile(Progress,
-                    MainForm.cfgCache,
+                    Program.MainForm?.cfgCache,
                     strPath,
                     strStyle,
                     out strOutputFilename,
@@ -1055,7 +1149,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1116,8 +1210,77 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
+        }
+
+        #endregion
+
+        #region 种次号尾号相关
+
+        public int ReleaseProtectedTailNumber(
+dp2Circulation.CallNumberForm.MemoTailNumber number,
+out string strError)
+        {
+            strError = "";
+
+            string strOutputNumber = "";
+
+            return ProtectTailNumber(
+                "unmemo",
+                number.ArrangeGroupName,
+                number.Class,
+                number.Number,
+                out strOutputNumber,
+                out strError);
+        }
+
+        // 保护或者释放保护一个尾号。
+        // 所谓保护，就是把一个尾号交给 dp2library 记忆在内存中，防止后面取号的时候再用到这个号。
+        // 注: 当用到这个号的册记录保存了，或者放弃了使用这个号，需要专门请求 dp2library 释放对这个号的保护
+        // parameters:
+        //      strAction   protect/unmemo 之一
+        public int ProtectTailNumber(
+            string strAction,
+            string strArrangeGroupName,
+            string strClass,
+            string strTestNumber,
+            out string strOutputNumber,
+            out string strError)
+        {
+            strOutputNumber = "";
+
+            // EnableControls(false);
+
+            Debug.Assert(strAction == "protect" || strAction == "unmemo", "");
+
+            LibraryChannel channel = this.GetChannel();
+            string strOldMessage = Progress.Initial(strAction == "protect" ? "正在请求保护尾号 ..." : "正在请求释放保护尾号 ...");
+            TimeSpan old_timeout = channel.Timeout;
+            channel.Timeout = new TimeSpan(0, 1, 0);
+
+            try
+            {
+                long lRet = Channel.SetOneClassTailNumber(
+                    stop,
+                    strAction,
+                    strArrangeGroupName,
+                    strClass,
+                    strTestNumber,
+                    out strOutputNumber,
+                    out strError);
+                if (lRet == -1)
+                    return -1;
+
+                return (int)lRet;
+            }
+            finally
+            {
+                Progress.Initial(strOldMessage);
+
+                channel.Timeout = old_timeout;
+                this.ReturnChannel(channel);
+            }
         }
 
         #endregion
@@ -1190,11 +1353,11 @@ namespace dp2Circulation
 
             FilterHost host = new FilterHost();
             host.ID = "";
-            host.MainForm = this.MainForm;
+            host.MainForm = Program.MainForm;
 
             BrowseFilterDocument filter = null;
 
-            string strFilterFileName = Path.Combine(this.MainForm.DataDir, strMarcSyntax.Replace(".", "_") + "_cfgs\\marc_browse.fltx");
+            string strFilterFileName = Path.Combine(Program.MainForm.DataDir, strMarcSyntax.Replace(".", "_") + "_cfgs\\marc_browse.fltx");
 
             int nRet = this.PrepareMarcFilter(
                 host,
@@ -1220,11 +1383,11 @@ namespace dp2Circulation
             {
                 // 归还对象
                 filter.FilterHost = null;   // 2016/1/23
-                this.MainForm.Filters.SetFilter(strFilterFileName, filter);
+                Program.MainForm.Filters.SetFilter(strFilterFileName, filter);
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1237,7 +1400,7 @@ out string strError)
             strError = "";
 
             // 看看是否有现成可用的对象
-            filter = (BrowseFilterDocument)this.MainForm.Filters.GetFilter(strFilterFileName);
+            filter = (BrowseFilterDocument)Program.MainForm.Filters.GetFilter(strFilterFileName);
 
             if (filter != null)
             {
@@ -1279,14 +1442,14 @@ out string strError)
             string strBinDir = Environment.CurrentDirectory;
 
             string[] saAddRef1 = {
-										 strBinDir + "\\digitalplatform.marcdom.dll",
+                                         strBinDir + "\\digitalplatform.marcdom.dll",
 										 // this.BinDir + "\\digitalplatform.marckernel.dll",
 										 // this.BinDir + "\\digitalplatform.libraryserver.dll",
 										 strBinDir + "\\digitalplatform.dll",
-										 strBinDir + "\\digitalplatform.Text.dll",
-										 strBinDir + "\\digitalplatform.IO.dll",
-										 strBinDir + "\\digitalplatform.Xml.dll",
-										 strBinDir + "\\dp2circulation.exe" };
+                                         strBinDir + "\\digitalplatform.Text.dll",
+                                         strBinDir + "\\digitalplatform.IO.dll",
+                                         strBinDir + "\\digitalplatform.Xml.dll",
+                                         strBinDir + "\\dp2circulation.exe" };
 
             Assembly assembly = null;
             string strWarning = "";
@@ -1320,7 +1483,7 @@ out string strError)
             filter.Assembly = assembly;
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1331,8 +1494,8 @@ out string strError)
         {
             get
             {
-                if (this.MainForm != null && this.MainForm.AppInfo != null)
-                    return this.MainForm.AppInfo.GetBoolean(
+                if (Program.MainForm != null && Program.MainForm.AppInfo != null)
+                    return Program.MainForm.AppInfo.GetBoolean(
         "biblio_search_form",
         "search_sharebiblio",
         true);
@@ -1340,9 +1503,9 @@ out string strError)
             }
             set
             {
-                if (this.MainForm != null && this.MainForm.AppInfo != null)
+                if (Program.MainForm != null && Program.MainForm.AppInfo != null)
                 {
-                    this.MainForm.AppInfo.SetBoolean(
+                    Program.MainForm.AppInfo.SetBoolean(
         "biblio_search_form",
         "search_sharebiblio",
         value);
@@ -1359,11 +1522,22 @@ out string strError)
         // 获得当前用户能管辖的全部馆代码
         public List<string> GetOwnerLibraryCodes()
         {
+            if (Global.IsGlobalUser(this.CurrentLibraryCodeList) == true)
+                return Program.MainForm?.GetAllLibraryCode();
+
+            return StringUtil.SplitList(this.CurrentLibraryCodeList);
+        }
+
+#if NO
+        // 获得当前用户能管辖的全部馆代码
+        public List<string> GetOwnerLibraryCodes()
+        {
             if (Global.IsGlobalUser(this.Channel.LibraryCodeList) == true)
-                return this.MainForm.GetAllLibraryCode();
+                return Program.MainForm.GetAllLibraryCode();
 
             return StringUtil.SplitList(this.Channel.LibraryCodeList);
         }
+#endif
 
         #region 防止控件泄露
 
@@ -1387,6 +1561,488 @@ out string strError)
 
         #endregion
 
+
+        public void ParseOneMacro(ParseOneMacroEventArgs e)
+        {
+            string strName = StringUtil.Unquote(e.Macro, "%%");  // 去掉百分号
+
+            // 函数名：
+            string strFuncName = "";
+            string strParams = "";
+
+            int nRet = strName.IndexOf(":");
+            if (nRet == -1)
+            {
+                strFuncName = strName.Trim();
+            }
+            else
+            {
+                strFuncName = strName.Substring(0, nRet).Trim();
+                strParams = strName.Substring(nRet + 1).Trim();
+            }
+
+            if (strName == "username")
+            {
+                e.Value = this.CurrentUserName;
+                return;
+            }
+
+            string strValue = "";
+            string strError = "";
+            // 从marceditor_macrotable.xml文件中解析宏
+            // return:
+            //      -1  error
+            //      0   not found
+            //      1   found
+            nRet = MacroUtil.GetFromLocalMacroTable(
+                Path.Combine(Program.MainForm.UserDir, "marceditor_macrotable.xml"),
+                strName,
+                e.Simulate,
+                out strValue,
+                out strError);
+            if (nRet == -1)
+            {
+                e.Canceled = true;
+                e.ErrorInfo = strError;
+                return;
+            }
+
+            if (nRet == 1)
+            {
+                e.Value = strValue;
+                return;
+            }
+
+            if (String.Compare(strFuncName, "IncSeed", true) == 0
+                || String.Compare(strFuncName, "IncSeed+", true) == 0
+                || String.Compare(strFuncName, "+IncSeed", true) == 0)
+            {
+                // 种次号库名, 指标名, 要填充到的位数
+                string[] aParam = strParams.Split(new char[] { ',' });
+                if (aParam.Length != 3 && aParam.Length != 2)
+                {
+                    strError = "IncSeed需要2或3个参数。";
+                    goto ERROR1;
+                }
+
+                bool IncAfter = false;  // 是否为先取后加
+                if (strFuncName[strFuncName.Length - 1] == '+')
+                    IncAfter = true;
+
+                string strZhongcihaoDbName = aParam[0].Trim();
+                string strEntryName = aParam[1].Trim();
+                strValue = "";
+
+                LibraryChannel channel = this.GetChannel();
+
+                try
+                {
+
+                    long lRet = 0;
+                    if (e.Simulate == true)
+                    {
+                        // parameters:
+                        //      strZhongcihaoGroupName  @引导种次号库名 !引导线索书目库名 否则就是 种次号组名
+                        lRet = channel.GetZhongcihaoTailNumber(
+        null,
+        strZhongcihaoDbName,
+        strEntryName,
+        out strValue,
+        out strError);
+                        if (lRet == -1)
+                            goto ERROR1;
+                        if (string.IsNullOrEmpty(strValue) == true)
+                        {
+                            strValue = "1";
+                        }
+                    }
+                    else
+                    {
+                        // parameters:
+                        //      strZhongcihaoGroupName  @引导种次号库名 !引导线索书目库名 否则就是 种次号组名
+                        lRet = channel.SetZhongcihaoTailNumber(
+        null,
+        IncAfter == true ? "increase+" : "increase",
+        strZhongcihaoDbName,
+        strEntryName,
+        "1",
+        out strValue,
+        out strError);
+                        if (lRet == -1)
+                            goto ERROR1;
+                    }
+                }
+                finally
+                {
+                    this.ReturnChannel(channel);
+                }
+
+                // 补足左方'0'
+                if (aParam.Length == 3)
+                {
+                    int nWidth = 0;
+                    try
+                    {
+                        nWidth = Convert.ToInt32(aParam[2]);
+                    }
+                    catch
+                    {
+                        strError = "第三参数应当为纯数字（表示补足的宽度）";
+                        goto ERROR1;
+                    }
+                    e.Value = strValue.PadLeft(nWidth, '0');
+                }
+                else
+                    e.Value = strValue;
+                return;
+            }
+
+            e.Canceled = true;  // 不能解释处理
+            return;
+            ERROR1:
+            e.Canceled = true;
+            e.ErrorInfo = strError;
+        }
+
+        public void ShowMessageBox(string strText)
+        {
+            if (this.IsHandleCreated)
+                this.Invoke((Action)(() =>
+                {
+                    try
+                    {
+                        MessageBox.Show(this, strText);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+
+                    }
+                }));
+        }
+
+        #region 人脸识别有关功能
+
+        public class FaceChannel
+        {
+            public IpcClientChannel Channel { get; set; }
+            public IBioRecognition Object { get; set; }
+        }
+
+        internal int _inFaceCall = 0; // >0 表示正在调用人脸识别 API 尚未返回
+
+        public FaceChannel StartFaceChannel(
+    string strUrl,
+    out string strError)
+        {
+            strError = "";
+
+            FaceChannel result = new FaceChannel();
+
+            result.Channel = new IpcClientChannel(Guid.NewGuid().ToString(), // 随机的名字，令多个 Channel 对象可以并存 
+                    new BinaryClientFormatterSinkProvider());
+
+            ChannelServices.RegisterChannel(result.Channel, true);
+            bool bDone = false;
+            try
+            {
+                result.Object = (IBioRecognition)Activator.GetObject(typeof(IBioRecognition),
+                    strUrl);
+                if (result.Object == null)
+                {
+                    strError = "无法连接到服务器 " + strUrl;
+                    return null;
+                }
+                bDone = true;
+                return result;
+            }
+            finally
+            {
+                if (bDone == false)
+                    EndFaceChannel(result);
+            }
+        }
+
+        public void EndFaceChannel(FaceChannel channel)
+        {
+            if (channel != null && channel.Channel != null)
+            {
+                ChannelServices.UnregisterChannel(channel.Channel);
+                channel.Channel = null;
+            }
+        }
+
+        #endregion
+
+        #region 指纹有关功能
+
+        public class FingerprintChannel
+        {
+            public IpcClientChannel Channel { get; set; }
+            public IFingerprint Object { get; set; }
+        }
+
+        // IpcClientChannel m_fingerPrintChannel = new IpcClientChannel();
+        // IFingerprint m_fingerPrintObj = null;
+        internal int _inFingerprintCall = 0; // >0 表示正在调用指纹 API 尚未返回
+
+        public FingerprintChannel StartFingerprintChannel(
+            string strUrl,
+            out string strError)
+        {
+            strError = "";
+
+            FingerprintChannel result = new FingerprintChannel();
+
+            result.Channel = new IpcClientChannel(Guid.NewGuid().ToString(), // 随机的名字，令多个 Channel 对象可以并存 
+                    new BinaryClientFormatterSinkProvider());
+
+            ChannelServices.RegisterChannel(result.Channel, true);
+            bool bDone = false;
+            try
+            {
+                result.Object = (IFingerprint)Activator.GetObject(typeof(IFingerprint),
+                    strUrl);
+                if (result.Object == null)
+                {
+                    strError = "无法连接到服务器 " + strUrl;
+                    return null;
+                }
+                bDone = true;
+                return result;
+            }
+            finally
+            {
+                if (bDone == false)
+                    EndFingerprintChannel(result);
+            }
+        }
+
+        public void EndFingerprintChannel(FingerprintChannel channel)
+        {
+            if (channel != null && channel.Channel != null)
+            {
+                ChannelServices.UnregisterChannel(channel.Channel);
+                channel.Channel = null;
+            }
+        }
+
+        // return:
+        //      -2  remoting服务器连接失败。驱动程序尚未启动
+        //      -1  出错
+        //      0   成功
+        public int AddItems(
+            FingerprintChannel channel,
+            List<FingerprintItem> items,
+            out string strError)
+        {
+            strError = "";
+
+            try
+            {
+                int nRet = channel.Object.AddItems(items,
+                    out strError);
+                if (nRet == -1)
+                    return -1;
+            }
+            // [System.Runtime.Remoting.RemotingException] = {"连接到 IPC 端口失败: 系统找不到指定的文件。\r\n "}
+            catch (System.Runtime.Remoting.RemotingException ex)
+            {
+                strError = "针对 " + Program.MainForm.FingerprintReaderUrl + " 的 AddItems() 操作失败: " + ex.Message;
+                return -2;
+            }
+            catch (Exception ex)
+            {
+                strError = "针对 " + Program.MainForm.FingerprintReaderUrl + " 的 AddItems() 操作失败: " + ex.Message;
+                return -1;
+            }
+
+            return 0;
+        }
+
+        #endregion
+
+        #region 其他 API
+
+        // 获得馆藏地列表
+        public int GetLocationList(
+            out List<string> list,
+            out string strError)
+        {
+            strError = "";
+            list = new List<string>();
+            string strOutputInfo = "";
+
+            LibraryChannel channel = this.GetChannel();
+            try
+            {
+                long lRet = channel.GetSystemParameter(
+stop,
+"circulation",
+"locationTypes",
+out strOutputInfo,
+out strError);
+                if (lRet == -1)
+                    return -1;
+            }
+            finally
+            {
+                this.ReturnChannel(channel);
+            }
+
+            // 
+            XmlDocument dom = new XmlDocument();
+            dom.LoadXml("<root />");
+
+            XmlDocumentFragment fragment = dom.CreateDocumentFragment();
+            try
+            {
+                fragment.InnerXml = strOutputInfo;
+            }
+            catch (Exception ex)
+            {
+                strError = "fragment XML装入XmlDocumentFragment时出错: " + ex.Message;
+                return -1;
+            }
+
+            dom.DocumentElement.AppendChild(fragment);
+
+            /*
+<locationTypes>
+    <item canborrow="yes" itembarcodeNullable="yes">流通库</item>
+    <item>阅览室</item>
+    <library code="分馆1">
+        <item canborrow="yes">流通库</item>
+        <item>阅览室</item>
+    </library>
+</locationTypes>
+*/
+
+            XmlNodeList nodes = dom.DocumentElement.SelectNodes("//item");
+            foreach (XmlElement node in nodes)
+            {
+                string strText = node.InnerText;
+
+                // 
+                string strLibraryCode = "";
+                XmlNode parent = node.ParentNode;
+                if (parent.Name == "library")
+                {
+                    strLibraryCode = DomUtil.GetAttr(parent, "code");
+                }
+
+                list.Add(string.IsNullOrEmpty(strLibraryCode) ? strText : strLibraryCode + "/" + strText);
+            }
+
+            return 1;
+        }
+
+
+        // return:
+        //      -1  出错
+        //      0   没有找到
+        //      1   找到
+        public int GetTable(
+            string strRecPath,
+            string strStyleList,
+            out string strXml,
+            out string strError)
+        {
+            strError = "";
+            strXml = "";
+
+            string strFormat = "table";
+            if (string.IsNullOrEmpty(strStyleList) == false)
+                strFormat += ":" + strStyleList.Replace(",", "|");
+
+            LibraryChannel channel = this.GetChannel();
+            try
+            {
+                string[] results = null;
+                byte[] baNewTimestamp = null;
+                long lRet = channel.GetBiblioInfos(
+                    stop,
+                    strRecPath,
+                    "",
+                    new string[] { strFormat },   // formats
+                    out results,
+                    out baNewTimestamp,
+                    out strError);
+                if (lRet == 0)
+                    return 0;
+                if (lRet == -1)
+                    return -1;
+                if (results == null || results.Length == 0)
+                {
+                    strError = "results error";
+                    return -1;
+                }
+                strXml = results[0];
+                return 1;
+            }
+            finally
+            {
+                this.ReturnChannel(channel);
+            }
+        }
+
+        public void OnLoaderPrompt(object sender, MessagePromptEventArgs e)
+        {
+            // TODO: 不再出现此对话框。不过重试有个次数限制，同一位置失败多次后总要出现对话框才好
+            if (e.Actions == "yes,no,cancel")
+            {
+                DialogResult result = AutoCloseMessageBox.Show(this,
+    e.MessageText + "\r\n\r\n将自动重试操作\r\n\r\n(点右上角关闭按钮可以中断批处理)",
+    20 * 1000,
+    "MyForm");
+                if (result == DialogResult.Cancel)
+                    e.ResultAction = "no";
+                else
+                    e.ResultAction = "yes";
+            }
+        }
+
+        #endregion
+
+#if NO
+        protected override bool ProcessDialogKey(
+Keys keyData)
+        {
+            if (keyData == Keys.F1)
+            {
+                // MessageBox.Show(this, "MyForm Help");
+                OnHelpTriggered();
+                return true;
+            }
+
+            return base.ProcessDialogKey(keyData);
+        }
+#endif
+
+        string _helpUrl = "";
+        public string HelpUrl
+        {
+            get
+            {
+                return _helpUrl;
+            }
+            set
+            {
+                _helpUrl = value;
+            }
+        }
+
+        public virtual void OnHelpTriggered()
+        {
+            // TODO: 如果是多个 URL，需要出现一个对话框让用户选择。每个 URL 需要跟一个小标题
+            if (string.IsNullOrEmpty(this.HelpUrl) == false)
+            {
+                // Process.Start("IExplore.exe", this.HelpUrl);
+                Process.Start(this.HelpUrl);
+                return;
+            }
+            // TODO: 最好跳转到一个帮助目录页面
+            MessageBox.Show(this, "当前没有帮助链接");
+        }
     }
 
     public class FilterHost

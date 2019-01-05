@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Xml;
 using System.IO;
@@ -16,17 +15,14 @@ using System.Drawing.Imaging;
 using System.Web.UI;
 
 using ZXing;
-using ZXing.Common;
 using ZXing.QrCode;
 using ZXing.QrCode.Internal;
 
-using DigitalPlatform;
 using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 using DigitalPlatform.Text;
 using DigitalPlatform.Drawing;
 using DigitalPlatform.Range;
-// using DigitalPlatform.CirculationClient;
 using DigitalPlatform.LibraryClient;
 using DigitalPlatform.LibraryClient.localhost;
 
@@ -40,8 +36,25 @@ namespace DigitalPlatform.OPAC.Server
         /// </summary>
         public string SearchLogEnable
         {
-            get;
-            set;
+            get; set;
+        }
+
+        // 2017/12/12
+        /// <summary>
+        /// 要隐藏的数据库名列表。为逗号分隔的字符串。如果为 null，表示不隐藏任何数据库名
+        /// </summary>
+        public string HideDbNames
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// 用于限制 SearchBiblio() API 命中范围的过滤条件。
+        /// 例如，"-内部"。注意需要和 dp2library 的 library.xml 中的 globalResults 元素配合使用
+        /// </summary>
+        public string BiblioFilter
+        {
+            get; set;
         }
 
         /// <summary>
@@ -53,9 +66,15 @@ namespace DigitalPlatform.OPAC.Server
             set;
         }
 
+        /// <summary>
+        /// dp2library 输出的 MSMQ 队列路径
+        /// </summary>
+        public string OutgoingQueue { get; set; }
+
         public LibraryChannelPool ChannelPool = new LibraryChannelPool();
 
-        public double dp2LibraryVersion = 0;
+        // public double dp2LibraryVersion = 0;
+        public string dp2LibraryVersion = "0.0";
 
         // 2015/6/16
         public string dp2LibraryUID = "";
@@ -177,7 +196,6 @@ namespace DigitalPlatform.OPAC.Server
 
         public SearchLog SearchLog = null;
 
-
         // 构造函数
         public OpacApplication()
         {
@@ -260,7 +278,7 @@ namespace DigitalPlatform.OPAC.Server
             if (string.IsNullOrEmpty(strUri) == true)
                 return strUri;
 
-            if (StringUtil.HasHead(strUri, "http:") == true)
+            if (StringUtil.IsHttpUrl(strUri) == true)
                 return strUri;
 
             if (StringUtil.HasHead(strUri, "uri:") == true)
@@ -376,25 +394,29 @@ namespace DigitalPlatform.OPAC.Server
 
                 // 本地映射配置文件目录
                 app.CfgMapDir = Path.Combine(strDataDir, "cfgsmap");
-                PathUtil.CreateDirIfNeed(app.CfgMapDir);
+                PathUtil.TryCreateDir(app.CfgMapDir);
 
                 // 日志存储目录
                 app.LogDir = Path.Combine(strDataDir, "log");
-                PathUtil.CreateDirIfNeed(app.LogDir);
+                PathUtil.TryCreateDir(app.LogDir);
 
                 // session 临时文件目录
                 app.SessionDir = Path.Combine(strDataDir, "session");
-                PathUtil.CreateDirIfNeed(app.SessionDir);
+                PathUtil.TryCreateDir(app.SessionDir);
 
                 if (PathUtil.TryClearDir(app.SessionDir) == false)
                     this.WriteErrorLog("清除 Session 文件目录 " + app.SessionDir + " 时出错");
 
                 // 临时文件目录
                 app.TempDir = Path.Combine(strDataDir, "temp");
-                PathUtil.CreateDirIfNeed(app.TempDir);
+                PathUtil.TryCreateDir(app.TempDir);
 
                 if (PathUtil.TryClearDir(app.TempDir) == false)
                     this.WriteErrorLog("清除临时文件目录 " + app.TempDir + " 时出错");
+
+                // 2018/10/23
+                // 清除一些特殊的临时文件
+                this.TryClearSpecialTempFiles();
 
                 // bin dir
                 app.BinDir = Path.Combine(strHostDir, "bin");
@@ -522,6 +544,20 @@ namespace DigitalPlatform.OPAC.Server
                 {
                     app.MongoDbConnStr = DomUtil.GetAttr(node, "connectionString");
                     app.MongoDbInstancePrefix = node.GetAttribute("instancePrefix");
+                }
+
+                // databaseFilter
+                {
+                    if (this.OpacCfgDom.DocumentElement.SelectSingleNode("databaseFilter") is XmlElement nodeDatabaseFilter)
+                    {
+                        this.HideDbNames = nodeDatabaseFilter.GetAttribute("hide");
+                        this.BiblioFilter = nodeDatabaseFilter.GetAttribute("biblioFilter");
+                    }
+                    else
+                    {
+                        this.HideDbNames = null;
+                        this.BiblioFilter = "";
+                    }
                 }
 
                 // //
@@ -678,7 +714,7 @@ namespace DigitalPlatform.OPAC.Server
                 {
                     string strColumnDir = Path.Combine(strDataDir, "column");
 
-                    PathUtil.CreateDirIfNeed(strColumnDir);	// 确保目录创建
+                    PathUtil.TryCreateDir(strColumnDir);	// 确保目录创建
                     nRet = LoadCommentColumn(
                         Path.Combine(strColumnDir, "comment"),
                         out strError);
@@ -717,7 +753,7 @@ namespace DigitalPlatform.OPAC.Server
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             if (bReload == false)
             {
                 if (this.watcher == null)
@@ -789,6 +825,19 @@ namespace DigitalPlatform.OPAC.Server
 #endif
                 if (channel.Param is string)
                     e.Parameters = (string)channel.Param;
+            }
+        }
+
+        public void TryClearSpecialTempFiles()
+        {
+            string strFileName = Path.Combine(this.DataDir, "cfgs\\statis_timerange.xml.1");
+            try
+            {
+                File.Delete(strFileName);
+            }
+            catch
+            {
+
             }
         }
 
@@ -900,7 +949,10 @@ namespace DigitalPlatform.OPAC.Server
 
             XmlElement root = this.WebUiDom.DocumentElement.SelectSingleNode("libraries") as XmlElement;
             if (root == null)
+            {
+                strFilePath = Path.Combine(this.DataDir, "style/" + strStyle + "/" + strFileName);  // 2017/11/13
                 return 0;
+            }
 
             XmlElement library = root.SelectSingleNode("library[@code='" + strLibraryCode + "']") as XmlElement;
             if (library == null)
@@ -1141,7 +1193,7 @@ namespace DigitalPlatform.OPAC.Server
                         Directory.Delete(strTargetDir, true);
                 }
 
-                PathUtil.CreateDirIfNeed(strTargetDir);
+                PathUtil.TryCreateDir(strTargetDir);
 
                 FileSystemInfo[] subs = di.GetFileSystemInfos();
 
@@ -1240,7 +1292,7 @@ namespace DigitalPlatform.OPAC.Server
 
             this.m_fromTable[strKey] = infos;
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1292,47 +1344,71 @@ namespace DigitalPlatform.OPAC.Server
                             goto ERROR1;
                         }
 
-                        double value = 0;
+                        // double value = 0;
 
                         if (string.IsNullOrEmpty(strVersion) == true)
                         {
-                            strVersion = "2.0以下";
-                            value = 2.0;
+                            strVersion = "0.0";
+                            // strVersion = "2.0以下";
+                            // value = 2.0;
                         }
                         else
                         {
+#if NO
                             // 检查最低版本号
                             if (double.TryParse(strVersion, out value) == false)
                             {
                                 strError = "dp2Library 版本号 '" + strVersion + "' 格式不正确";
                                 goto ERROR1;
                             }
+#endif
                         }
 
-                        this.dp2LibraryVersion = value;
+                        this.dp2LibraryVersion = strVersion;    //  value;
                         this.dp2LibraryUID = strUID;
 
-                        double base_version = 2.40; // 2.18
+#if NO
+                        double base_version = 2.86; // 2.18
                         if (value < base_version)
+                        {
+                            strError = "当前 dp2OPAC 版本需要和 dp2Library " + base_version + " 或以上版本配套使用 (而当前 dp2Library 版本号为 '" + strVersion + "' )。请立即升级 dp2Library 到最新版本。";
+                            return -2;
+                        }
+#endif
+
+                        string base_version = "2.86";
+                        if (StringUtil.CompareVersion(strVersion, base_version) < 0)
                         {
                             strError = "当前 dp2OPAC 版本需要和 dp2Library " + base_version + " 或以上版本配套使用 (而当前 dp2Library 版本号为 '" + strVersion + "' )。请立即升级 dp2Library 到最新版本。";
                             return -2;
                         }
                     }
 
-                    string strValue = "";
                     lRet = // session.Channel.
                         channel.GetSystemParameter(
                         null,
                         "circulation",
                         "chargingOperDatabase",
-                        out strValue,
+                        out string strValue,
                         out strError);
-                    this.WriteErrorLog("GetSystemParameters() circulation chargingOperDatabase return " + lRet + " , strError '" + strError + "'");
+                    this.WriteErrorLog("GetSystemParameters() circulation chargingOperDatabase return " + lRet + " , strValue '" + strValue + "', strError '" + strError + "'。(这是一条提示信息，不一定等于出错)");
                     if (strValue == "enabled")
                         this.ChargingHistoryType = strValue;
                     else
                         this.ChargingHistoryType = "";
+
+                    // 2016/9/28
+                    strValue = "";
+                    lRet = channel.GetSystemParameter(
+                        null,
+            "system",
+            "outgoingQueue",
+            out strValue,
+            out strError);
+                    if (lRet == 1)
+                        this.OutgoingQueue = strValue;
+                    else
+                        this.OutgoingQueue = "";
 
                     // 获取虚拟库定义
                     string strXml = "";
@@ -1353,7 +1429,7 @@ namespace DigitalPlatform.OPAC.Server
                     if (bOuputDebugInfo == true)
                         strDebugInfo += "*** virtual/def:\r\n" + strXml + "\r\n";
 
-                    XmlNode node_virtual = this.OpacCfgDom.DocumentElement.SelectSingleNode("virtualDatabases");
+                    XmlElement node_virtual = this.OpacCfgDom.DocumentElement.SelectSingleNode("virtualDatabases") as XmlElement;
                     if (node_virtual == null)
                     {
                         node_virtual = this.OpacCfgDom.CreateElement("virtualDatabases");
@@ -1362,6 +1438,9 @@ namespace DigitalPlatform.OPAC.Server
 
                     node_virtual = DomUtil.SetElementOuterXml(node_virtual, strXml);
                     Debug.Assert(node_virtual != null, "");
+
+                    // 根据“禁用数据库名”列表，修改 virtualDatabases 元素内的细部
+                    ModifyVirtualDatabases(node_virtual, this.HideDbNames);
 
                     // 获取<arrived>定义
                     lRet = // session.Channel.
@@ -1381,7 +1460,7 @@ namespace DigitalPlatform.OPAC.Server
                     if (bOuputDebugInfo == true)
                         strDebugInfo += "*** system/arrived:\r\n" + strXml + "\r\n";
 
-                    XmlNode node_arrived = this.OpacCfgDom.DocumentElement.SelectSingleNode("arrived");
+                    XmlElement node_arrived = this.OpacCfgDom.DocumentElement.SelectSingleNode("arrived") as XmlElement;
                     if (node_arrived == null)
                     {
                         node_arrived = this.OpacCfgDom.CreateElement("arrived");
@@ -1543,7 +1622,7 @@ namespace DigitalPlatform.OPAC.Server
                 this.m_lock.ReleaseWriterLock();
             }
 
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1884,15 +1963,34 @@ System.Text.Encoding.UTF8))
                     // 没有进入内存属性的其他XML片断
                     if (this.OpacCfgDom != null)
                     {
+                        string[] elements = new string[]{
+                            "yczb",
+                            "monitors",
+                            "libraryInfo",
+                            "biblioDbGroup",
+                            "arrived",
+                            "browseformats",
+                            "virtualDatabases",
+                            "externalSsoInterface",
+                            "dp2sso",
+                            "searchLog",
+                            "databaseFilter",
+                        };
+
+                        RestoreElements(writer, elements);
+
+#if NO
                         // 2009/9/23
-                        XmlNode node = this.OpacCfgDom.DocumentElement.SelectSingleNode("//yczb");
+                        XmlNode node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "//yczb");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
 
                         // <monitors>
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("monitors");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "monitors");
                         if (node != null)
                         {
                             node.WriteTo(writer);
@@ -1901,56 +1999,54 @@ System.Text.Encoding.UTF8))
                         // TODO: 暂时没有任何地方用到这个信息
                         // <libraryInfo>
                         // 注: <libraryName>元素在此里面
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("libraryInfo");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "libraryInfo");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
 
                         // <biblioDbGroup>
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("biblioDbGroup");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "biblioDbGroup");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
 
                         // <arrived>
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("arrived");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "arrived");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
 
                         // <browseformats>
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("browseformats");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "browseformats");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
 
                         // <virtualDatabases>
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("//virtualDatabases");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "//virtualDatabases");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
 
                         // <externalSsoInterface>
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("externalSsoInterface");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "externalSsoInterface");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
 
-                        // chat room
-                        if (this.ChatRooms != null)
-                        {
-                            string strError = "";
-                            string strXml = "";
-                            this.ChatRooms.GetDef(out strXml, out strError);
-                            if (string.IsNullOrEmpty(strXml) == false)
-                                writer.WriteRaw("\r\n" + strXml + "\r\n");
-                        }
+
 
                         // 2012/5/23
                         // <dp2sso>
@@ -1959,7 +2055,8 @@ System.Text.Encoding.UTF8))
             <domain name='dp2bbs' loginUrl='http://dp2003.com/dp2bbs/login.aspx?redirect=%redirect%'  logoutUrl='' />
         </dp2sso>
                          * */
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("//dp2sso");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "//dp2sso");
                         if (node != null)
                         {
                             node.WriteTo(writer);
@@ -1975,11 +2072,34 @@ System.Text.Encoding.UTF8))
 #endif
 
                         // <searchLog>
-                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode("searchLog");
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "searchLog");
                         if (node != null)
                         {
                             node.WriteTo(writer);
                         }
+
+                        // 2017/12/12
+                        // <databaseFilter>
+                        node = this.OpacCfgDom.DocumentElement.SelectSingleNode(
+                            "databaseFilter");
+                        if (node != null)
+                        {
+                            node.WriteTo(writer);
+                        }
+
+#endif
+
+                        // chat room
+                        if (this.ChatRooms != null)
+                        {
+                            string strError = "";
+                            string strXml = "";
+                            this.ChatRooms.GetDef(out strXml, out strError);
+                            if (string.IsNullOrEmpty(strXml) == false)
+                                writer.WriteRaw("\r\n" + strXml + "\r\n");
+                        }
+
                     }
 
                     writer.WriteEndElement();
@@ -2004,6 +2124,17 @@ System.Text.Encoding.UTF8))
 
         }
 
+        void RestoreElements(XmlTextWriter writer, string[] elements)
+        {
+            foreach (string element in elements)
+            {
+                XmlNode node = this.OpacCfgDom.DocumentElement.SelectSingleNode(element);
+                if (node != null)
+                    node.WriteTo(writer);
+            }
+        }
+
+
         public static bool ToBoolean(string strText,
     bool bDefaultValue)
         {
@@ -2025,34 +2156,59 @@ System.Text.Encoding.UTF8))
                 this.defaultManagerThread.Activate();
         }
 
+        // 当遇到 System.IO.IOException 的时候会自动重试几次
         int LoadWebuiCfgDom(out string strError)
         {
             strError = "";
 
-            if (String.IsNullOrEmpty(this.m_strWebuiFileName) == true)
-            {
-                strError = "m_strWebuiFileName尚未初始化，因此无法装载webui.xml配置文件到DOM";
-                return -1;
-            }
-
-            XmlDocument webuidom = new XmlDocument();
+            this.m_lock.AcquireWriterLock(m_nLockTimeout);
             try
             {
-                webuidom.Load(this.m_strWebuiFileName);
-            }
-            catch (FileNotFoundException)
-            {
-                webuidom.LoadXml("<root/>");
-            }
-            catch (Exception ex)
-            {
-                strError = "装载配置文件-- '" + this.m_strWebuiFileName + "'时发生错误，原因：" + ex.Message;
-                // app.WriteErrorLog(strError);
-                return -1;
-            }
+                if (String.IsNullOrEmpty(this.m_strWebuiFileName) == true)
+                {
+                    strError = "m_strWebuiFileName尚未初始化，因此无法装载webui.xml配置文件到DOM";
+                    return -1;
+                }
 
-            this.WebUiDom = webuidom;
-            return 0;
+                int nRedoCount = 0;
+                REDO:
+                XmlDocument webuidom = new XmlDocument();
+                try
+                {
+                    webuidom.Load(this.m_strWebuiFileName);
+                }
+                catch (FileNotFoundException)
+                {
+                    webuidom.LoadXml("<root/>");
+                }
+                catch (System.IO.IOException ex)
+                {
+                    if (nRedoCount < 5)
+                    {
+                        Thread.Sleep(500);
+                        nRedoCount++;
+                        goto REDO;
+                    }
+                    else
+                    {
+                        strError = "装载配置文件-- '" + this.m_strWebuiFileName + "' 时出现异常(重试 5 次以后依然遇到异常)：" + ExceptionUtil.GetDebugText(ex);
+                        return -1;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    strError = "装载配置文件-- '" + this.m_strWebuiFileName + "' 时出现异常：" + ExceptionUtil.GetDebugText(ex);
+                    // this.WriteErrorLog(strError);
+                    return -1;
+                }
+
+                this.WebUiDom = webuidom;
+                return 0;
+            }
+            finally
+            {
+                this.m_lock.ReleaseWriterLock();
+            }
         }
 
 #if NO
@@ -2155,7 +2311,7 @@ System.Text.Encoding.UTF8))
             {
                 string strError = "";
 
-                // 稍微延时一下，避免很快地重装、正好和尚在改写opac.xml文件的的进程发生冲突
+                // 稍微延时一下，避免很快地重装、正好和尚在改写 opac.xml 文件的的进程发生冲突
                 Thread.Sleep(500);
 
                 nRet = this.Load(
@@ -2179,6 +2335,10 @@ System.Text.Encoding.UTF8))
             if (PathUtil.IsEqual(this.m_strWebuiFileName, e.FullPath) == true)
             {
                 string strError = "";
+
+                // 稍微延时一下，避免很快地重装、正好和尚在改写 webui.xml 文件的的进程发生冲突
+                Thread.Sleep(500);
+
                 nRet = this.LoadWebuiCfgDom(out strError);
                 if (nRet == -1)
                 {
@@ -2300,9 +2460,47 @@ System.Text.Encoding.UTF8))
             return 0;
         }
 
+        /*
+    <virtualDatabases searchMaxResultCount="5000">
+        <database name="中文图书" alias="cbook">
+            <caption lang="zh">中文图书</caption>
+            <from name="ISBN" style="isbn">
+                <caption lang="zh-CN">ISBN</caption>
+                <caption lang="en">ISBN</caption>
+            </from>
+         * */
+        // 根据“禁用数据库名”列表，修改 virtualDatabases 元素内的细部
+        void ModifyVirtualDatabases(XmlElement root,
+            string strHideDbNames)
+        {
+            // Debug.Assert(false, "");
+
+            List<string> hide_dbnames = StringUtil.SplitList(strHideDbNames);
+
+            XmlNodeList databases = root.SelectNodes("database | virtualDatabase");
+            foreach (XmlElement database in databases)
+            {
+                XmlNodeList captions = database.SelectNodes("caption");
+                bool bFound = false;
+                foreach (XmlNode caption in captions)
+                {
+                    if (hide_dbnames.IndexOf(caption.InnerText.Trim()) != -1)
+                        bFound = true;
+                }
+
+#if NO
+                if (bFound == false)
+                    database.RemoveAttribute("hide");
+                else
+                    database.SetAttribute("hide", "true");
+#endif
+                if (bFound == true)
+                    database.ParentNode.RemoveChild(database);
+            }
+        }
+
         // 初始化虚拟库集合定义对象
-        public int InitialVdbs(
-            out string strError)
+        public int InitialVdbs(out string strError)
         {
             strError = "";
 
@@ -2509,14 +2707,11 @@ System.Text.Encoding.UTF8))
             int nTotalUsed = 0;
 
             // *** 第一步 把虚拟库名和普通库名分离
-            List<VirtualDatabase> vdb_list = null;
-            string strNormalDbNameList = "";
-
-            int nRet = SeperateVirtuslDbs(
+            int nRet = SeperateVirtualDbs(
             app,
             strDbName,
-            out vdb_list,
-            out strNormalDbNameList,
+            out List<VirtualDatabase> vdb_list,
+            out string strNormalDbNameList,
             out strError);
             if (nRet == -1)
                 return -1;
@@ -2542,7 +2737,6 @@ System.Text.Encoding.UTF8))
             // *** 第三步：把普通库名创建成检索式
             if (string.IsNullOrEmpty(strNormalDbNameList) == false)
             {
-                string strTargetList = "";
 #if NO
                 if (String.IsNullOrEmpty(strDbName) == true
                     || strDbName.ToLower() == "<all>"
@@ -2641,7 +2835,7 @@ System.Text.Encoding.UTF8))
             app,
             strNormalDbNameList,
             strFrom,
-            out strTargetList,
+            out string strTargetList,
             out strError);
                 if (nRet == -1)
                     return -1;
@@ -2689,11 +2883,26 @@ System.Text.Encoding.UTF8))
 
             // TODO: 增加 strLocationFilter 功能
 
+            // 2018/12/5
+            // 对书目检索的额外过滤
+            if (string.IsNullOrEmpty(app.BiblioFilter) == false)
+            {
+                string strOperator = "AND";
+                string strFilter = app.BiblioFilter;
+                if (strFilter.StartsWith("-"))
+                {
+                    strFilter = strFilter.Substring(1);
+                    strOperator = "SUB";
+                }
+                string strSubQueryXml = "<item resultset='#" + strFilter + "' />";
+                strXml = $"<group>{strXml}<operator value='{strOperator}'/>{strSubQueryXml}</group>";
+            }
+
             return 1;
         }
 
         // 将数据库名列表分离为虚拟库数组和普通库名列表两部分
-        static int SeperateVirtuslDbs(
+        static int SeperateVirtualDbs(
             OpacApplication app,
             string strDbNameList,
             out List<VirtualDatabase> vdb_list,
@@ -2714,6 +2923,15 @@ System.Text.Encoding.UTF8))
                 //
                 // 数据库是不是虚拟库?
                 VirtualDatabase vdb = app.vdbs[strDbName];  // 需要增加一个索引器
+
+                // 2017/12/21
+                // 既不是虚拟库也不是普通库
+                // 2018/1/8 注: 特殊的名字，例如 "<全部实体>" 等要继续向后处理
+                if (vdb == null && !(strDbName.StartsWith("<") && strDbName.EndsWith(">")))
+                {
+                    strError = "数据库名 '" + strDbName + "' 不存在";
+                    return -1;
+                }
 
                 // 如果是虚拟库
                 if (vdb != null && vdb.IsVirtual == true)
@@ -2748,7 +2966,6 @@ System.Text.Encoding.UTF8))
                 string strDbName = dbnames[i].Trim();
                 if (String.IsNullOrEmpty(strDbName) == true)
                     continue;
-
 
                 // 全部数据库是指<virutualDatabases>里面定义的数据库。可能比<biblioDbGroup>里面定义的范围要窄
                 if (String.IsNullOrEmpty(strDbName) == true
@@ -2817,7 +3034,6 @@ System.Text.Encoding.UTF8))
                     {
                         Debug.Assert(false, "");
                     }
-
 
                     for (int j = 0; j < app.ItemDbs.Count; j++)
                     {
@@ -3004,7 +3220,7 @@ System.Text.Encoding.UTF8))
                     channel.GetCommentInfo(
     null,
     "@path:" + strCommentRecPath,
-                    // null,
+    // null,
     "xml", // strResultType
     out strItemXml,
     out strOutputItemPath,
@@ -3361,7 +3577,8 @@ System.Text.Encoding.UTF8))
                 string[] results = null;
                 long lRet = // session.Channel.
                     channel.GetReaderInfo(null,
-                    this.dp2LibraryVersion >= 2.22 ?
+                    // this.dp2LibraryVersion >= 2.22 ?
+                    StringUtil.CompareVersion(this.dp2LibraryVersion, "2.22") >= 0 ?
                     "@barcode:" + strReaderBarcode // dp2Library V2.22 及以后可以使用这个方法
                     : strReaderBarcode,
                     strResultTypeList,
@@ -3581,12 +3798,12 @@ System.Text.Encoding.UTF8))
 
                 // page.Response.Write("<br/>正在保存" + strLocalPath);
 
-            REDOWHOLESAVE:
+                REDOWHOLESAVE:
                 string strWarning = "";
 
                 for (int j = 0; j < ranges.Length; j++)
                 {
-                REDOSINGLESAVE:
+                    REDOSINGLESAVE:
 
                     // Application.DoEvents();	// 出让界面控制权
 
@@ -3665,8 +3882,8 @@ out strError);
                 }
 
 
-                return 1;	// 已经保存
-            ERROR1:
+                return 1;   // 已经保存
+                ERROR1:
                 return -1;
             }
             finally
@@ -3969,10 +4186,6 @@ out strError);
             // return:
             //		-1	出错。具体出错原因在this.ErrorCode中。this.ErrorInfo中有出错信息。
             //		0	成功
-            string strMetaData = "";
-            string strOutputPath;
-            byte[] baOutputTimeStamp = null;
-            byte[] baContent = null;
             // 只获得媒体类型
             long lRet = channel.GetRes(
                 stop,
@@ -3980,10 +4193,10 @@ out strError);
                 0,
                 0,
                 "metadata",
-                out baContent,
-                out strMetaData,
-                out strOutputPath,
-                out baOutputTimeStamp,
+                out byte[] baContent,
+                out string strMetaData,
+                out string strOutputPath,
+                out byte[] baOutputTimeStamp,
                 out strError);
             if (lRet == -1)
             {
@@ -4001,7 +4214,7 @@ out strError);
                     return -1;
                 }
 
-                strError = "GetRes() (for metadata) Error : " + strError;
+                strError = "GetRes() '" + strPath + "' (for metadata) Error : " + strError;
                 return -1;
             }
 
@@ -4009,7 +4222,7 @@ out strError);
                 return -1;
 
             // 取 metadata 中的 mime 类型信息
-            Hashtable values = StringUtil.ParseMedaDataXml(strMetaData,
+            Hashtable values = StringUtil.ParseMetaDataXml(strMetaData,
                 out strError);
             if (values == null)
             {
@@ -4067,6 +4280,9 @@ out strError);
 #endif
 
             string strLastModifyTime = (string)values["lastmodifytime"];
+            // 2018/7/22
+            if (string.IsNullOrEmpty(strLastModifyTime))
+                strLastModifyTime = (string)values["lastmodified"];
             if (String.IsNullOrEmpty(strLastModifyTime) == false)
             {
                 DateTime lastmodified = DateTime.Parse(strLastModifyTime).ToUniversalTime();
@@ -4137,8 +4353,8 @@ Value data: HEX 0x1
              * */
 
             // 设置媒体类型
-            if (strMime == "text/plain")
-                strMime = "text";
+            //if (strMime == "text/plain")
+            //    strMime = "text";
             Page.Response.ContentType = strMime;
 
             string strSize = (string)values["size"];
@@ -4197,7 +4413,7 @@ Value data: HEX 0x1
             Color.Transparent,
             Color.Gray,
             ArtEffect.None,
-            ImageFormat.Png,
+            ImageFormat.Png,    // TODO: 可否用 jpeg 格式?
             200))
             {
                 Page.Response.ContentType = "image/png";
@@ -4208,6 +4424,8 @@ Value data: HEX 0x1
                 Page.Response.AddHeader("Expires", "0");
 
                 // FlushOutput flushdelegate = new FlushOutput(MyFlushOutput);
+
+                Page.Response.BufferOutput = false; // 2016/8/31
 
                 image.Seek(0, SeekOrigin.Begin);
                 StreamUtil.DumpStream(image, Page.Response.OutputStream/*, flushdelegate*/);

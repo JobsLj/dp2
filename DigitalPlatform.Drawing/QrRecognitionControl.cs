@@ -1,16 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
-using System.Data;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using System.Threading;
+using System.Diagnostics;
 
 using AForge.Video;
 using ZXing;
-using System.Diagnostics;
 
 namespace DigitalPlatform.Drawing
 {
@@ -18,7 +14,7 @@ namespace DigitalPlatform.Drawing
     {
         public event CatchedEventHandler Catched = null;
 
-        public event EventHandler FirstImageFilled = null;
+        public event FirstImageFilledEventHandler FirstImageFilled = null;
 
         private struct Device
         {
@@ -32,7 +28,7 @@ namespace DigitalPlatform.Drawing
         }
 
         private CameraDevices camDevices;
-        private Bitmap currentBitmapForDecoding;
+        private Bitmap _currentBitmapForDecoding;
         private readonly Thread decodingThread;
         private Result currentResult;
         private readonly Pen resultRectPen;
@@ -59,10 +55,14 @@ namespace DigitalPlatform.Drawing
         {
             if (disposing)
             {
+                // 2018/10/23
+                if (_currentBitmapForDecoding != null)
+                    _currentBitmapForDecoding.Dispose();
+
                 if (resultRectPen != null)
                     resultRectPen.Dispose();
 
-                decodingThread.Abort();
+                decodingThread?.Abort();
                 if (camDevices.Current != null)
                 {
                     if (camDevices.Current.IsRunning)
@@ -81,7 +81,7 @@ namespace DigitalPlatform.Drawing
             base.OnLoad(e);
 
             if (this.PhotoMode == false)
-                decodingThread.Start();
+                decodingThread?.Start();
             ////
             LoadDevicesToCombobox();
         }
@@ -195,8 +195,8 @@ namespace DigitalPlatform.Drawing
                         SelectListItem(value);
                     else
                     {
-                            this.m_strSelectedCameraName = value;
-                            StartCatch();
+                        this.m_strSelectedCameraName = value;
+                        StartCatch();
                     }
                 }
                 catch
@@ -252,6 +252,7 @@ namespace DigitalPlatform.Drawing
                 this.label_message.Visible = true;
 
                 this.pictureBox1.Visible = false;
+                OnFirstImageFilled(true);
                 return false;
             }
             else
@@ -267,7 +268,6 @@ namespace DigitalPlatform.Drawing
 
             this.pictureBox1.Visible = true;
             this.progressBar1.Visible = true;
-
             return true;
         }
 
@@ -299,7 +299,7 @@ namespace DigitalPlatform.Drawing
 
             pictureBox1.Width = image.Width;
             pictureBox1.Height = image.Height;
-            pictureBox1.Image = image;
+            ImageUtil.SetImage(pictureBox1, image); // 2016/12/28
         }
 
         public void SetImageBorder(bool bThick)
@@ -407,7 +407,14 @@ namespace DigitalPlatform.Drawing
 
         void DisplayMotionLevel(float level)
         {
-            this.progressBar1.Value = (int)((float)100 * level);
+            try
+            {
+                this.progressBar1.Value = (int)((float)100 * level);
+            }
+            catch
+            {
+
+            }
         }
 
         static float AWAKE_LEVEL = 0.3F;
@@ -417,10 +424,9 @@ namespace DigitalPlatform.Drawing
             var reader = new BarcodeReader();
             while (true)
             {
-                if (currentBitmapForDecoding != null)
+                if (_currentBitmapForDecoding != null)
                 {
-
-                    var result = reader.Decode(currentBitmapForDecoding);
+                    var result = reader.Decode(_currentBitmapForDecoding);
                     if (result != null)
                     {
                         Invoke(new Action<Result>(ShowResult), result);
@@ -428,21 +434,21 @@ namespace DigitalPlatform.Drawing
                     else
                         this.Invoke(new Action<Color>(PaintColor), Color.Yellow);
 
-
-                    if ((_iFrameCount % 2) == 0)
+                    if (motionDetector != null
+                        && (_iFrameCount % 2) == 0)
                     {
-                        motionLevel = motionDetector.ProcessFrame(currentBitmapForDecoding);
+                        motionLevel = motionDetector.ProcessFrame(_currentBitmapForDecoding);
                         // Debug.WriteLine("level=" + motionLevel.ToString());
                         if (motionLevel > AWAKE_LEVEL)
                         {
                             BeginInvoke(new Action(RefreshLastText));
                         }
-                        BeginInvoke(new Action<float>(DisplayMotionLevel), new object [] {motionLevel});
+                        BeginInvoke(new Action<float>(DisplayMotionLevel), new object[] { motionLevel });
                     }
                     _iFrameCount++;
 
-                    currentBitmapForDecoding.Dispose();
-                    currentBitmapForDecoding = null;
+                    _currentBitmapForDecoding.Dispose();
+                    _currentBitmapForDecoding = null;
                 }
                 int nInterval = 1000;
                 if (motionLevel > AWAKE_LEVEL)
@@ -478,10 +484,17 @@ namespace DigitalPlatform.Drawing
         // 看看是否超时，如果超时则清空 m_strLastText
         void RefreshLastText()
         {
-            DateTime now = DateTime.Now;
-            if (string.IsNullOrEmpty(this.m_strLastText) == false
-                && now - this.m_lastTextTime > new TimeSpan(0, 0, 5))
-                this.LastText = ""; 
+            try
+            {
+                DateTime now = DateTime.Now;
+                if (string.IsNullOrEmpty(this.m_strLastText) == false
+                    && now - this.m_lastTextTime > new TimeSpan(0, 0, 5))
+                    this.LastText = "";
+            }
+            catch
+            {
+
+            }
         }
 
         int _colorPosIndex = 0;
@@ -503,7 +516,7 @@ namespace DigitalPlatform.Drawing
                 }
             }
 
-            _colorPosIndex ++;
+            _colorPosIndex++;
         }
 
         private void ShowResult(Result result)
@@ -538,41 +551,39 @@ namespace DigitalPlatform.Drawing
 
         int _inNewFrame = 0;
 
-        int _sourceFrameCount = 0;
+        // int _sourceFrameCount = 0;
 
         private void Current_NewFrame(object sender, NewFrameEventArgs eventArgs)
         {
-
-                if (IsDisposed)
-                {
-                    return;
-                }
+            if (IsDisposed)
+            {
+                return;
+            }
 
             _inNewFrame++;
-                try
+            try
+            {
+                if (_currentBitmapForDecoding == null)
                 {
-                    if (currentBitmapForDecoding == null)
-                    {
-                        currentBitmapForDecoding = (Bitmap)eventArgs.Frame.Clone();
-                    }
-                    //if ((_sourceFrameCount % 2) == 1)
-                        BeginInvoke(new Action<Bitmap>(ShowFrame), eventArgs.Frame.Clone());
-                    //_sourceFrameCount++;
-                    /*
-                        if (motionLevel < 0.5)
-                            Thread.Sleep(100);
-                     * */
-                        Application.DoEvents();
+                    _currentBitmapForDecoding = (Bitmap)eventArgs.Frame.Clone();
                 }
-                catch (ObjectDisposedException)
-                {
-                    // not sure, why....
-                    int i = 0;
-                    i++;
-                }
+                //if ((_sourceFrameCount % 2) == 1)
+                BeginInvoke(new Action<Bitmap>(ShowFrame), eventArgs.Frame.Clone());
+                //_sourceFrameCount++;
+                /*
+                    if (motionLevel < 0.5)
+                        Thread.Sleep(100);
+                 * */
+                // Application.DoEvents();
+            }
+            catch (ObjectDisposedException)
+            {
+                // not sure, why....
+                int i = 0;
+                i++;
+            }
 
-                _inNewFrame--;
-
+            _inNewFrame--;
         }
 
         bool _bFirstImageFilled = false;
@@ -583,21 +594,29 @@ namespace DigitalPlatform.Drawing
 
         private void ShowFrame(Bitmap frame)
         {
-            int _frameWidth = frame.Width;
-            int _frameHeight = frame.Height;
-            if (pictureBox1.Width < _frameWidth)
-                pictureBox1.Width = _frameWidth;
+            try
+            {
+                int _frameWidth = frame.Width;
+                int _frameHeight = frame.Height;
+                if (pictureBox1.Width < _frameWidth)
+                    pictureBox1.Width = _frameWidth;
 
-            if (pictureBox1.Height < _frameHeight)
-                pictureBox1.Height = _frameHeight;
+                if (pictureBox1.Height < _frameHeight)
+                    pictureBox1.Height = _frameHeight;
 
-            pictureBox1.Image = frame;
+                // pictureBox1.Image = frame;
+                // 2018/10/23
+                ImageUtil.SetImage(pictureBox1, frame);
+
+#if NO
             if (_bFirstImageFilled == false)
             {
                 if (this.FirstImageFilled != null)
                     this.FirstImageFilled(this, new EventArgs());
                 _bFirstImageFilled = true;
             }
+#endif
+                OnFirstImageFilled(false);
 
 #if NO
             if ((_iFrameCount % 20) == 0)
@@ -611,20 +630,34 @@ namespace DigitalPlatform.Drawing
             }
             _iFrameCount++;
 #endif
+            }
+            catch
+            {
 
+            }
+        }
+
+        void OnFirstImageFilled(bool bError)
+        {
+            if (_bFirstImageFilled == false)
+            {
+                if (this.FirstImageFilled != null)
+                    this.FirstImageFilled(this, new FirstImageFilledEventArgs(bError));
+                _bFirstImageFilled = true;
+            }
         }
 
         // Play around with this function to tweak results.
         public static AForge.Vision.Motion.MotionDetector GetDefaultMotionDetector()
         {
             AForge.Vision.Motion.IMotionDetector detector = null;
-            AForge.Vision.Motion.IMotionProcessing processor = null;
+            // AForge.Vision.Motion.IMotionProcessing processor = null;
             AForge.Vision.Motion.MotionDetector motionDetector = null;
 
             detector = new AForge.Vision.Motion.TwoFramesDifferenceDetector()
             {
-              DifferenceThreshold = 15,
-              SuppressNoise = true
+                DifferenceThreshold = 15,
+                SuppressNoise = true
             };
 
             //detector = new AForge.Vision.Motion.CustomFrameDifferenceDetector()
@@ -651,7 +684,6 @@ namespace DigitalPlatform.Drawing
              * */
 
             motionDetector = new AForge.Vision.Motion.MotionDetector(detector);
-
             return (motionDetector);
         }
 #if NO
@@ -713,6 +745,10 @@ namespace DigitalPlatform.Drawing
             {
                 return this.pictureBox1.Image;
             }
+            set
+            {
+                ImageUtil.SetImage(this.pictureBox1, value);    // 2016/12/28
+            }
         }
 
         private void cmbDevice_SelectedIndexChanged(object sender, EventArgs e)
@@ -748,6 +784,7 @@ namespace DigitalPlatform.Drawing
                 this.label_message.Visible = true;
 
                 this.pictureBox1.Visible = false;
+                OnFirstImageFilled(true);
             }
             return false;
         }
@@ -763,5 +800,21 @@ namespace DigitalPlatform.Drawing
     {
         public BarcodeFormat BarcodeFormat = 0; // [out]
         public string Text = "";    // [out]
+    }
+
+    public delegate void FirstImageFilledEventHandler(object sender,
+    FirstImageFilledEventArgs e);
+
+    /// <summary>
+    /// 第一帧图像到来的参数
+    /// </summary>
+    public class FirstImageFilledEventArgs : EventArgs
+    {
+        public bool Error = false;  // 是否 因为发生错误而第一帧图像不会到来
+
+        public FirstImageFilledEventArgs(bool bError)
+        {
+            this.Error = bError;
+        }
     }
 }

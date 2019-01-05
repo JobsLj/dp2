@@ -12,12 +12,13 @@ using MongoDB.Driver.Builders;
 using DigitalPlatform.IO;
 using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
+using System.Threading;
 
 namespace DigitalPlatform.LibraryServer
 {
     public class AccessLogDatabase
     {
-        MongoClient _mongoClient = null;
+        // MongoClient _mongoClient = null;
 
         string _logDatabaseName = "";
 
@@ -271,7 +272,10 @@ namespace DigitalPlatform.LibraryServer
             var query = Query.And(Query.GTE("OperTime", start_time),
                 Query.LT("OperTime", end_time));
 
-            var keyFunction = (BsonJavaScript)@"{}";
+            // var keyFunction = (BsonJavaScript)@"{}";
+            var keyFunction = (BsonJavaScript)@"function(doc) {
+return { None : '' };
+}"; // mongodb v3.4
 
             var document = new BsonDocument("count", 0);
             var result = collection.Group(
@@ -331,7 +335,6 @@ namespace DigitalPlatform.LibraryServer
                 new BsonJavaScript("function(doc, out){ out.count++; }"),
                 null
             ).Skip<BsonDocument>(start);
-
 
             List<ValueCount> values = new List<ValueCount>();
             int nCount = 0;
@@ -439,8 +442,9 @@ namespace DigitalPlatform.LibraryServer
             if (StringUtil.IsInList("getfilenames", strStyle) == true)
             {
                 int hit_count = 0;
-                List<ValueCount> dates = ListDates(0, MAX_FILENAME_COUNT, out hit_count);
                 int nStart = (int)lIndex;
+                List<ValueCount> dates = ListDates(nStart,   // bug???
+                    MAX_FILENAME_COUNT, out hit_count);
                 int nEnd = dates.Count;
                 if (nCount == -1)
                     nEnd = dates.Count;
@@ -551,7 +555,7 @@ namespace DigitalPlatform.LibraryServer
         public DateTime OperTime { get; set; } // 操作时间
     }
 
-    class DailyItemCount
+    public class DailyItemCount
     {
         private static readonly Object syncRoot = new Object();
 
@@ -582,5 +586,70 @@ namespace DigitalPlatform.LibraryServer
                 this.Count = lValue;
             }
         }
+    }
+
+    public class DailyItemCountTable
+    {
+        public int MAX_COUNT = 1000;
+        internal ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+        Dictionary<string, DailyItemCount> _table = new Dictionary<string, DailyItemCount>();
+
+        public DailyItemCount FindItem(string name)
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                if (_table.ContainsKey(name) == false)
+                    return null;
+                return _table[name];
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
+        public DailyItemCount GetItem(string name)
+        {
+            DailyItemCount item = FindItem(name);
+            if (item != null)
+                return item;
+
+            _lock.EnterWriteLock();
+            try
+            {
+                if (_table.ContainsKey(name))
+                    return _table[name];
+                if (_table.Count > MAX_COUNT)
+                    throw new Exception("DailyItem 数量超过 " + MAX_COUNT);
+
+                item = new DailyItemCount();
+                _table.Add(name, item);
+                return item;
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+        }
+
+        public long GetValue(string name,
+            string strDate,
+            int nInc)
+        {
+            DailyItemCount item = GetItem(name);
+
+            return item.GetValue(strDate, nInc);
+        }
+
+        public void SetValue(string name,
+            string strDate, 
+            long lValue)
+        {
+            DailyItemCount item = GetItem(name);
+
+            item.SetValue(strDate, lValue);
+        }
+
     }
 }

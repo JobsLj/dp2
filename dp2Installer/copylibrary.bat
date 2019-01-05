@@ -22,5 +22,9 @@ xcopy ..\..\dp2library\bin\debug\zh-CN zh-CN /s /Y
 
 cd ..
 
+rd library_data /S /Q
+md library_data
+xcopy ..\dp2libraryxe\library_data library_data /s /Y
+
 ..\ziputil library_app library_app.zip -t
 ..\ziputil library_data library_data.zip -t

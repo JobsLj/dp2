@@ -2,12 +2,8 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
-using System.Data;
-using System.Text;
 using System.Windows.Forms;
-using System.Xml;
 using System.Diagnostics;
-using System.Drawing.Drawing2D;
 
 using DigitalPlatform;
 using DigitalPlatform.Text;
@@ -351,7 +347,20 @@ namespace dp2Circulation
             }
         }
 
-
+        /// <summary>
+        /// 架号
+        /// </summary>
+        public string ShelfNo
+        {
+            get
+            {
+                return this.textBox_shelfNo.Text;
+            }
+            set
+            {
+                this.textBox_shelfNo.Text = value;
+            }
+        }
 
         /// <summary>
         /// 参考 ID
@@ -431,7 +440,7 @@ namespace dp2Circulation
             SetMouseWheelSimulateEvent();
         }
 
-        /*public*/ void SetMouseWheelSimulateEvent()
+        void SetMouseWheelSimulateEvent()
         {
             foreach (Control child in this.tableLayoutPanel_main.Controls)
             {
@@ -457,7 +466,7 @@ namespace dp2Circulation
         void textBox_comment_MouseWheel(object sender, MouseEventArgs e)
         {
             int nValue = this.tableLayoutPanel_main.VerticalScroll.Value;
-            nValue  -= e.Delta;
+            nValue -= e.Delta;
             if (nValue > this.tableLayoutPanel_main.VerticalScroll.Maximum)
                 nValue = this.tableLayoutPanel_main.VerticalScroll.Maximum;
             if (nValue < this.tableLayoutPanel_main.VerticalScroll.Minimum)
@@ -577,7 +586,7 @@ namespace dp2Circulation
             get
             {
                 if (this.label_errorInfo == null)
-                    CreateErrorInfoLabel(null); 
+                    CreateErrorInfoLabel(null);
                 return this.label_errorInfo;
             }
         }
@@ -629,7 +638,7 @@ namespace dp2Circulation
             table.RowCount++;
 
             // 2015/5/30
-                List<int> column_indices = new List<int>();
+            List<int> column_indices = new List<int>();
             {
                 for (int j = 0; j < table.ColumnStyles.Count; j++)
                 {
@@ -724,6 +733,7 @@ namespace dp2Circulation
                 if (strMode == "simple" || strMode == "simple_register")
                 {
                     controls.Add(this.textBox_barcode);
+                    controls.Add(this.textBox_registerNo);  // 2018/12/10
                     controls.Add(this.comboBox_location);
                     controls.Add(this.textBox_price);
                     controls.Add(this.textBox_accessNo);
@@ -1083,6 +1093,7 @@ namespace dp2Circulation
             this.BatchNo = DomUtil.GetElementText(this._dataDom.DocumentElement, "batchNo");
             this.Volume = DomUtil.GetElementText(this._dataDom.DocumentElement, "volume");
             this.AccessNo = DomUtil.GetElementText(this._dataDom.DocumentElement, "accessNo");
+            this.ShelfNo = DomUtil.GetElementText(this._dataDom.DocumentElement, "shelfNo");
 
 
             this.Borrower = DomUtil.GetElementText(this._dataDom.DocumentElement, "borrower");
@@ -1128,6 +1139,7 @@ namespace dp2Circulation
             this.BatchNo = "";
             this.Volume = "";
             this.AccessNo = "";
+            this.ShelfNo = "";
 
             this.Borrower = "";
             this.BorrowDate = "";
@@ -1146,12 +1158,11 @@ namespace dp2Circulation
             this.Changed = false;
         }
 
-
-
         /// <summary>
         /// 刷新 记录 XMLDOM。即把控件中的内容更新到 XMLDOM 中
         /// </summary>
-        /*public*/ internal override void RefreshDom()
+        /*public*/
+        internal override void RefreshDom()
         {
             DomUtil.SetElementText(this._dataDom.DocumentElement, "parent", this.ParentId);
 
@@ -1175,6 +1186,7 @@ namespace dp2Circulation
             DomUtil.SetElementText(this._dataDom.DocumentElement, "batchNo", this.BatchNo);
             DomUtil.SetElementText(this._dataDom.DocumentElement, "volume", this.Volume);
             DomUtil.SetElementText(this._dataDom.DocumentElement, "accessNo", this.AccessNo);
+            DomUtil.SetElementText(this._dataDom.DocumentElement, "shelfNo", this.ShelfNo);
 
             DomUtil.SetElementText(this._dataDom.DocumentElement, "borrower", this.Borrower);
             DomUtil.SetElementText(this._dataDom.DocumentElement, "borrowDate", this.BorrowDate);
@@ -1209,7 +1221,64 @@ namespace dp2Circulation
             }
         }
 
+        public void FocusField(string name, bool bSelectAll)
+        {
+            if (name == "barcode")
+            {
+                if (bSelectAll == true)
+                    this.textBox_barcode.SelectAll();
 
+                this.textBox_barcode.Focus();
+            }
+
+            if (name == "state")
+            {
+                if (bSelectAll == true)
+                    this.checkedComboBox_state.SelectAll();
+
+                this.checkedComboBox_state.Focus();
+            }
+
+            if (name == "publishTime")
+            {
+                if (bSelectAll == true)
+                    this.textBox_publishTime.SelectAll();
+
+                this.textBox_publishTime.Focus();
+            }
+
+            if (name == "location")
+            {
+                if (bSelectAll == true)
+                    this.comboBox_location.SelectAll();
+
+                this.comboBox_location.Focus();
+            }
+
+            if (name == "seller")
+            {
+                if (bSelectAll == true)
+                    this.comboBox_seller.SelectAll();
+
+                this.comboBox_seller.Focus();
+            }
+
+            if (name == "bookType")
+            {
+                if (bSelectAll == true)
+                    this.comboBox_bookType.SelectAll();
+
+                this.comboBox_bookType.Focus();
+            }
+
+            if (name == "registerNo")
+            {
+                if (bSelectAll == true)
+                    this.textBox_registerNo.SelectAll();
+
+                this.textBox_registerNo.Focus();
+            }
+        }
 
         /// <summary>
         /// 将输入焦点设置到条码号输入域上
@@ -1608,6 +1677,7 @@ namespace dp2Circulation
                 this.textBox_batchNo.ReadOnly = true;
                 this.textBox_volume.ReadOnly = true;
                 this.textBox_accessNo.ReadOnly = true;
+                this.textBox_shelfNo.ReadOnly = true;
                 this.textBox_borrower.ReadOnly = true;
                 this.textBox_borrowDate.ReadOnly = true;
                 this.textBox_borrowPeriod.ReadOnly = true;
@@ -1637,6 +1707,7 @@ namespace dp2Circulation
             this.textBox_batchNo.ReadOnly = false;
             this.textBox_volume.ReadOnly = false;
             this.textBox_accessNo.ReadOnly = false;
+            this.textBox_shelfNo.ReadOnly = false;
 
             this.textBox_borrower.ReadOnly = false;
             this.textBox_borrowDate.ReadOnly = false;
@@ -1937,6 +2008,9 @@ namespace dp2Circulation
             if (this.AccessNo != refControl.AccessNo)
                 this.label_accessNo_color.BackColor = this.ColorDifference;
 
+            if (this.ShelfNo != refControl.ShelfNo)
+                this.label_shelfNo_color.BackColor = this.ColorDifference;
+
             if (this.Borrower != refControl.Borrower)
                 this.label_borrower_color.BackColor = this.ColorDifference;
 
@@ -2010,13 +2084,15 @@ namespace dp2Circulation
                     e1.Name = "Volume";
                 else if (sender == (object)this.textBox_accessNo)
                     e1.Name = "AccessNo";
+                else if (sender == (object)this.textBox_shelfNo)
+                    e1.Name = "ShelfNo";
                 else if (sender == (object)this.textBox_intact)
                     e1.Name = "Intact";
                 else if (sender == (object)this.textBox_binding)
                     e1.Name = "Binding";
                 else if (sender == (object)this.textBox_operations)
                     e1.Name = "Operations";
-                else 
+                else
                 {
                     Debug.Assert(false, "未知的部件");
                     return;
@@ -2080,6 +2156,8 @@ namespace dp2Circulation
                     e1.Name = "Volume";
                 else if (sender == (object)this.textBox_accessNo)
                     e1.Name = "AccessNo";
+                else if (sender == (object)this.textBox_shelfNo)
+                    e1.Name = "ShelfNo";
                 else if (sender == (object)this.textBox_intact)
                     e1.Name = "Intact";
                 else if (sender == (object)this.textBox_binding)
@@ -2217,7 +2295,7 @@ namespace dp2Circulation
                 e1.ContextMenu = contextMenu;
                 this.AppendMenu(this, e1);
 
-                contextMenu.Show(sender as Control, new Point(e.X, e.Y));		
+                contextMenu.Show(sender as Control, new Point(e.X, e.Y));
             }
         }
 

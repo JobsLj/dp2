@@ -1,9 +1,4 @@
-﻿using System;
-using System.Drawing;
-using System.Collections;
-using System.ComponentModel;
-using System.Windows.Forms;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Deployment.Application;
 
 using DigitalPlatform;
@@ -16,13 +11,6 @@ namespace dp2Circulation
     /// </summary>
     internal class AboutDlg : System.Windows.Forms.Form
     {
-#if NO
-        /// <summary>
-        /// 框架窗口
-        /// </summary>
-        public MainForm MainForm = null;
-#endif
-
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.LinkLabel linkLabel1;
         private System.Windows.Forms.Button button_OK;
@@ -79,19 +67,19 @@ namespace dp2Circulation
             // 
             // label1
             // 
-            this.label1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.label1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.label1.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.label1.Location = new System.Drawing.Point(10, 24);
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(461, 17);
             this.label1.TabIndex = 0;
-            this.label1.Text = "dp2 内务/流通 dp2Circulation V2.18";
+            this.label1.Text = "dp2 内务/流通 dp2Circulation V3";
             this.label1.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // label_copyright
             // 
-            this.label_copyright.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.label_copyright.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.label_copyright.Location = new System.Drawing.Point(10, 50);
             this.label_copyright.Name = "label_copyright";
@@ -103,7 +91,7 @@ namespace dp2Circulation
             // 
             // linkLabel1
             // 
-            this.linkLabel1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            this.linkLabel1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.linkLabel1.LinkColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(192)))), ((int)(((byte)(192)))));
             this.linkLabel1.Location = new System.Drawing.Point(10, 92);
@@ -128,8 +116,8 @@ namespace dp2Circulation
             // 
             // textBox_environment
             // 
-            this.textBox_environment.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
+            this.textBox_environment.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBox_environment.BackColor = System.Drawing.Color.MidnightBlue;
             this.textBox_environment.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
@@ -202,8 +190,8 @@ namespace dp2Circulation
             AssemblyName name = myAssembly.GetName();
 
             textBox_environment.Text = "版本和环境:"
-                + "\r\n本软件: "+name.Name+" " + name.Version.ToString()    // .FullName
-                + "\r\n当前连接的 dp2Library (位于 " + Program.MainForm.LibraryServerUrl + "): " + Program.MainForm.ServerVersion.ToString() + " UID:" + Program.MainForm.ServerUID
+                + "\r\n本软件: " + name.Name + " " + name.Version.ToString()    // .FullName
+                + "\r\n当前连接的 dp2Library (位于 " + Program.MainForm.LibraryServerUrl + "): " + Program.MainForm.ServerVersion.ToString() + " UID:" + Program.MainForm.ServerUID + " 失效期:" + Program.MainForm.ExpireDate
                 + "\r\n本机 .NET Framework 版本: " + myAssembly.ImageRuntimeVersion
                 + "\r\n\r\n本机 MAC 地址: " + StringUtil.MakePathList(SerialCodeForm.GetMacAddress())
                 + "\r\n是否安装 KB2468871: " + Global.IsKbInstalled("KB2468871")

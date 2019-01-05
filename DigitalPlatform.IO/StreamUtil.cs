@@ -11,11 +11,22 @@ namespace DigitalPlatform.IO
     {
         public static void FastSeek(this Stream stream, long lOffset)
         {
+#if NO
+            // 2017/9/5
+            if (lOffset != 0 && lOffset == stream.Length)
+            {
+                stream.Seek(0, SeekOrigin.End);
+                return;
+            }
+#endif
+
             long delta1 = lOffset - stream.Position;
 #if NO
             if (delta1 < 0)
                 delta1 = -delta1;
 #endif
+
+
             if (Math.Abs(delta1) < lOffset)
             {
                 stream.Seek(delta1, SeekOrigin.Current);
@@ -125,6 +136,47 @@ namespace DigitalPlatform.IO
             return lLength;
         }
 
+        // return:
+        //      true    需要中断
+        //      false   继续处理
+        public delegate bool Delegate_isStop();
+
+        // return:
+        //      -1  表示操作被中断
+        //      其它  实际 Dump 的字节数
+        public static long LockingDumpStream(Stream streamSource,
+    Stream streamTarget,
+    bool bFlush,
+            Delegate_isStop func_isStop)
+        {
+            int nChunkSize = 4096 * 10; // 8192;
+            byte[] bytes = new byte[nChunkSize];
+            long lLength = 0;
+            while (true)
+            {
+                if (func_isStop != null)
+                {
+                    if (func_isStop() == true)
+                        return -1;
+                }
+                int n = streamSource.Read(bytes, 0, nChunkSize);
+
+                if (n != 0)
+                {
+                    streamTarget.LockingWrite(bytes, 0, n);
+
+                    if (bFlush == true)
+                        streamTarget.Flush();
+                }
+
+                if (n <= 0)
+                    break;
+
+                lLength += n;
+            }
+
+            return lLength;
+        }
 
         /// <summary>
         /// 将源流输入到目标流
@@ -249,6 +301,9 @@ namespace DigitalPlatform.IO
         // 写入文本文件。
         // 如果文件不存在, 会自动创建新文件
         // 如果文件已经存在，则追加在尾部。
+        // Exception:
+        //      可能会抛出异常。
+        //      System.UnauthorizedAccessException 对路径的访问被拒绝。
         public static void WriteText(string strFileName,
             string strText)
         {

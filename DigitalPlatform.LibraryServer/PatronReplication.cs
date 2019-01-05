@@ -151,7 +151,8 @@ namespace DigitalPlatform.LibraryServer
             if (this.App.PauseBatchTask == true)
                 return;
 
-            if (DateTime.Now > new DateTime(2015,12,31) // 2016/1/1 以后可删除此语句
+#if NO
+            if (DateTime.Now > new DateTime(2015, 12, 31) // 2016/1/1 以后可删除此语句
                 && StringUtil.IsInList("patronReplication", this.App.Function) == false)
             {
                 string strErrorText = "读者同步功能需要设置序列号才能运行";
@@ -159,8 +160,8 @@ namespace DigitalPlatform.LibraryServer
                 // this.App.WriteErrorLog(strErrorText);
                 return;
             }
+#endif
 
-            string strError = "";
             int nRet = 0;
 
             BatchTaskStartInfo startinfo = this.StartInfo;
@@ -172,7 +173,7 @@ namespace DigitalPlatform.LibraryServer
             //      -1  出错
             //      0   尚未配置<patronReplication>参数
             //      1   成功
-            nRet = GetConfigParameters(out strError);
+            nRet = GetConfigParameters(out string strError);
             if (nRet == -1)
             {
                 string strErrorText = "获取配置参数时出错: " + strError;
@@ -284,7 +285,7 @@ namespace DigitalPlatform.LibraryServer
                 }
 
                 // 如果nRet == 0，表示没有配置相关参数，则兼容原来的习惯，每次都作
-                if (nRet == 0 )
+                if (nRet == 0)
                 {
 
                 }
@@ -423,7 +424,7 @@ namespace DigitalPlatform.LibraryServer
                 }
                 else
                 {
-                    this.AppendResultText("刷新读者数据完成，共处理读者记录 "+ids.Count.ToString()+" 条\r\n");
+                    this.AppendResultText("刷新读者数据完成，共处理读者记录 " + ids.Count.ToString() + " 条\r\n");
                     Debug.Assert(this.App != null, "");
                 }
 
@@ -432,9 +433,9 @@ namespace DigitalPlatform.LibraryServer
                 // current_ids 和 ids 进行交叉运算
                 this.AppendResultText("排序归并ID\r\n");
                 current_ids.Sort();
-                StringUtil.RemoveDup(ref current_ids);
+                StringUtil.RemoveDup(ref current_ids, true);
                 ids.Sort();
-                StringUtil.RemoveDup(ref ids);
+                StringUtil.RemoveDup(ref ids, true);
 
                 List<string> targetLeft = new List<string>();
                 List<string> targetMiddle = null;
@@ -494,7 +495,7 @@ namespace DigitalPlatform.LibraryServer
                 }
                 else
                 {
-                    this.AppendResultText("标记删除读者记录完成，共处理记录 " + targetLeft.Count.ToString()+ " 条\r\n");
+                    this.AppendResultText("标记删除读者记录完成，共处理记录 " + targetLeft.Count.ToString() + " 条\r\n");
                     this.AppendResultText("*** 同步读者数据任务完成\r\n");
 
                     nTotalRecCount += targetLeft.Count;
@@ -528,10 +529,12 @@ namespace DigitalPlatform.LibraryServer
             }
 
             return;
-        ERROR1:
+#if NO
+            ERROR1:
             AppendResultText("PatronReplication thread error : " + strError + "\r\n");
             this.App.WriteErrorLog("PatronReplication thread error : " + strError + "\r\n");
             return;
+#endif
         }
 
         IChannel m_cardCenterChannel = null;    // new IpcClientChannel();
@@ -558,7 +561,7 @@ namespace DigitalPlatform.LibraryServer
                 m_cardCenterChannel = new HttpClientChannel();
             else
             {
-                strError = "URL '"+strUrl+"' 中包含了无法识别的Scheme '" + strScheme + "'。只能使用 ipc tcp http 之一";
+                strError = "URL '" + strUrl + "' 中包含了无法识别的Scheme '" + strScheme + "'。只能使用 ipc tcp http 之一";
                 return -1;
             }
 
@@ -671,7 +674,7 @@ namespace DigitalPlatform.LibraryServer
                                 // 2012/11/2
                                 if (string.IsNullOrEmpty(strXml) == true)
                                 {
-                                    strError = "ICardCenter.GetPatronRecords()方法(本次调用后 strPosition = '"+strPosition+"')所获得的 "+records.Length.ToString()+" 个字符串中, 第 "+i.ToString()+"个(从0开始计算)的值为空";
+                                    strError = "ICardCenter.GetPatronRecords()方法(本次调用后 strPosition = '" + strPosition + "')所获得的 " + records.Length.ToString() + " 个字符串中, 第 " + i.ToString() + "个(从0开始计算)的值为空";
                                     return -1;
                                 }
                                 XmlDocument dom = new XmlDocument();
@@ -737,7 +740,7 @@ patronDbName="读者库"
 idElementName="barcode"
 />
 */
-            XmlNode node = this.App.LibraryCfgDom.DocumentElement.SelectSingleNode("//patronReplication");
+            XmlNode node = this.App.LibraryCfgDom.DocumentElement.SelectSingleNode("patronReplication");  // "//patronReplication" 2018/9/5 修改 bug
             if (node == null)
             {
                 strError = "尚未配置<patronReplication>参数";
@@ -779,7 +782,7 @@ idElementName="barcode"
             // 验证this.PatronDbName
             if (this.App.IsReaderDbName(this.PatronDbName) == false)
             {
-                strError = "<patronReplication> 元素内 patronDbName 属性值 '"+this.PatronDbName+"' 并不是一个合法的读者库名";
+                strError = "<patronReplication> 元素内 patronDbName 属性值 '" + this.PatronDbName + "' 并不是一个合法的读者库名";
                 return -1;
             }
 
@@ -794,16 +797,17 @@ idElementName="barcode"
             // 临时的SessionInfo对象
             SessionInfo sessioninfo = new SessionInfo(this.App);
 
+            // TODO: 一般创建用户的时候，用户名第一字符不允许为 ~，这是系统内部保留的用户名 2017/2/21
             // 模拟一个账户
             Account account = new Account();
-            account.LoginName = "replication";
+            account.LoginName = "~replication";
             account.Password = "";
             account.Rights = "setreaderinfo,devolvereaderinfo";
 
             account.Type = "";
             account.Barcode = "";
-            account.Name = "replication";
-            account.UserID = "replication";
+            account.Name = "~replication";
+            account.UserID = "~replication";
             account.RmsUserName = this.App.ManagerUserName;
             account.RmsPassword = this.App.ManagerPassword;
 
@@ -997,7 +1001,7 @@ idElementName="barcode"
                     if (nRet > 1)
                     {
                         // 警告，检索命中不唯一
-                        string strErrorText = "获取读者记录 '" + strID + "' (检索途径 '" + this.From + "') 时发现命中多条("+nRet.ToString()+")记录，这是一个严重错误，请系统管理员尽快检查修复";
+                        string strErrorText = "获取读者记录 '" + strID + "' (检索途径 '" + this.From + "') 时发现命中多条(" + nRet.ToString() + ")记录，这是一个严重错误，请系统管理员尽快检查修复";
                         this.AppendResultText(strErrorText + "\r\n");
                         this.App.WriteErrorLog(strErrorText);
                         continue;
@@ -1107,8 +1111,12 @@ out kernel_errorcode);
                                     goto REDO;
                                 }
 
-                                strError = "修改保存读者记录 '" + strOutputPath + "' 时出错: " + result.ErrorInfo;
-                                return -1;
+                                strError = "WriteToReaderDb() 修改保存读者记录 '" + strOutputPath + "' 时出错: " + result.ErrorInfo;
+                                // return -1;
+                                // 2017/6/7
+                                this.App.WriteErrorLog(strError);
+                                this.AppendResultText(strError + "\r\n");
+                                continue;
                             }
                             // this.AppendResultText("更新读者记录 " + strSavedRecPath + "\r\n");
                             this.SetProgressText("更新读者记录 " + strSavedRecPath);
@@ -1223,7 +1231,7 @@ out kernel_errorcode);
                 if (nRet == 0)
                 {
                     // 等到处理记录的时候，发现记录已经不存在
-                    this.App.WriteErrorLog("PatronReplication: 在删除阶段发现ID为 '"+strID+"' 的读者记录已经不存在");
+                    this.App.WriteErrorLog("PatronReplication: 在删除阶段发现ID为 '" + strID + "' 的读者记录已经不存在");
                     continue;
                 }
 
@@ -1288,8 +1296,12 @@ out kernel_errorcode);
                                 goto REDO;
                             }
 
-                            strError = "修改保存读者记录 '" + strOutputPath + "' 时出错: " + result.ErrorInfo;
-                            return -1;
+                            strError = "MaskDeleteRecords() 修改保存读者记录 '" + strOutputPath + "' 时出错: " + result.ErrorInfo;
+                            // return -1;
+                            // 2017/6/7
+                            this.App.WriteErrorLog(strError);
+                            this.AppendResultText(strError + "\r\n");
+                            continue;
                         }
 
                         // this.AppendResultText("标记删除读者记录 '" + strOutputPath + "'\r\n");
@@ -1409,6 +1421,24 @@ out kernel_errorcode);
 
             strOutputXml = domNew.DocumentElement.OuterXml;
 
+            // 2017/2/21
+            // 添加 password 元素
+            XmlDocument domOperLog = null;
+            // 修改读者密码
+            // return:
+            //      -1  error
+            //      0   成功
+            int nRet = LibraryApplication.ChangeReaderPassword(
+                domNew,
+                Guid.NewGuid().ToString(),
+                ref domOperLog,
+                out strError);
+            if (nRet == -1)
+            {
+                strError = "为准备新创建的读者记录添加 password 元素时出错: " + strError;
+                return -1;
+            }
+
             this.App.WriteDebugInfo("MergePatronXml() strOutputXml='" + strOutputXml + "'");
             return 0;
         }
@@ -1418,7 +1448,7 @@ out kernel_errorcode);
         static List<string> GetCardCenterState(string strState)
         {
             List<string> results = new List<string>();
-            string[] parts = strState.Split(new char[] {','});
+            string[] parts = strState.Split(new char[] { ',' });
             foreach (string strPart in parts)
             {
                 string strText = strPart.Trim();
@@ -1452,7 +1482,7 @@ out kernel_errorcode);
         }
 
         // TODO: 需要硬编码禁止覆盖一些流通专用的字段 borrows 等
-        // TODO: <fprms:file> 元素应该不让覆盖
+        // TODO: <dprms:file> 元素应该不让覆盖
         // 检查记录有无修改
         // return:
         //      -1  出错
@@ -1487,7 +1517,7 @@ out kernel_errorcode);
                 this.App.WriteDebugInfo("MergePatronXml() 使用了重新定义的字段名列表 '" + string.Join(",", element_names) + "' 。");
             }
 
-            this.App.WriteDebugInfo("MergePatronXml() domExist='"+domExist.OuterXml+"'");
+            this.App.WriteDebugInfo("MergePatronXml() domExist='" + domExist.OuterXml + "'");
             this.App.WriteDebugInfo("MergePatronXml() domNew='" + domNew.OuterXml + "'");
 
             XmlNamespaceManager nsmgr = new XmlNamespaceManager(new NameTable());

@@ -11,10 +11,12 @@ namespace dp2Circulation
     /// </summary>
     public class MainFormHost : StatisHostBase0
     {
+        /*
         /// <summary>
         /// 框架窗口
         /// </summary>
-        public MainForm MainForm = null;
+        // public MainForm MainForm = null;
+         * */
 
 #if NO
         public string ProjectDir = "";  // 方案源文件所在目录
@@ -59,7 +61,7 @@ namespace dp2Circulation
         {
             Dispose(true);
             // This object will be cleaned up by the Dispose method.
-            // Therefore, you should call GC.SupressFinalize to
+            // Therefore, you should call GC.SuppressFinalize to
             // take this object off the finalization queue 
             // and prevent finalization code for this object
             // from executing a second time.
@@ -119,7 +121,7 @@ namespace dp2Circulation
 #endif
         internal override string GetOutputFileNamePrefix()
         {
-            return Path.Combine(this.MainForm.DataDir, "~mainform_statis");
+            return Path.Combine(Program.MainForm.DataDir, "~mainform_statis");
         }
 
         /// <summary>
@@ -136,7 +138,7 @@ namespace dp2Circulation
         // 获得一个新的输出文件名
         public string NewOutputFileName()
         {
-            string strFileNamePrefix = this.MainForm.DataDir + "\\~item_statis";
+            string strFileNamePrefix = Program.MainForm.DataDir + "\\~item_statis";
 
             string strFileName = strFileNamePrefix + "_" + this.m_nFileNameSeed.ToString() + ".html";
 

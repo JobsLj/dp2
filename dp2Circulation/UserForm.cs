@@ -1,21 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using System.Diagnostics;
+using System.IO;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
-using DigitalPlatform.CirculationClient;
-using DigitalPlatform.Xml;
 using DigitalPlatform.Text;
-using DigitalPlatform.CommonControl;
-
 using DigitalPlatform.LibraryClient.localhost;
-using System.IO;
 
 namespace dp2Circulation
 {
@@ -24,13 +17,14 @@ namespace dp2Circulation
     /// </summary>
     public partial class UserForm : MyForm
     {
-        const int COLUMN_LIBRARYCODE =  0;
-        const int COLUMN_USERNAME =     1;
-        const int COLUMN_TYPE =         2;
-        const int COLUMN_RIGHTS =       3;
-        const int COLUMN_CHANGED =      4;
-        const int COLUMN_ACCESSCODE =   5;
-        const int COLUMN_COMMENT =      6;
+        const int COLUMN_LIBRARYCODE = 0;
+        const int COLUMN_USERNAME = 1;
+        const int COLUMN_TYPE = 2;
+        const int COLUMN_RIGHTS = 3;
+        const int COLUMN_CHANGED = 4;
+        const int COLUMN_ACCESSCODE = 5;
+        const int COLUMN_BINDING = 6;
+        const int COLUMN_COMMENT = 7;
 
         const int WM_PREPARE = API.WM_USER + 200;
 
@@ -65,9 +59,10 @@ namespace dp2Circulation
 
         private void UserForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            this.HelpUrl = "https://github.com/DigitalPlatform/dp2/wiki/%E5%A6%82%E4%BD%95%E5%88%9B%E5%BB%BA%E5%B7%A5%E4%BD%9C%E4%BA%BA%E5%91%98%E8%B4%A6%E6%88%B7";
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
 
             EnableControls(false);
@@ -82,7 +77,7 @@ namespace dp2Circulation
             {
                 // 警告尚未保存
                 DialogResult result = MessageBox.Show(this,
-    "当前有 "+nChangedCount.ToString()+" 个用户信息修改后尚未保存。若此时关闭窗口，现有未保存信息将丢失。\r\n\r\n确实要关闭窗口? ",
+    "当前有 " + nChangedCount.ToString() + " 个用户信息修改后尚未保存。若此时关闭窗口，现有未保存信息将丢失。\r\n\r\n确实要关闭窗口? ",
     "UserForm",
     MessageBoxButtons.YesNo,
     MessageBoxIcon.Question,
@@ -102,17 +97,17 @@ namespace dp2Circulation
 
         void SaveSize()
         {
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
 
                 // 保存splitContainer_main的状态
-                this.MainForm.SaveSplitterPos(
+                Program.MainForm.SaveSplitterPos(
                     this.splitContainer_main,
                     "userform_state",
                     "splitContainer_main_ratio");
 
                 string strWidths = ListViewUtil.GetColumnWidthListString(this.listView_users);
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "user_form",
                     "amerced_list_column_width",
                     strWidths);
@@ -124,9 +119,9 @@ namespace dp2Circulation
             try
             {
                 // 获得splitContainer_main的状态
-                if (this.MainForm != null)
+                if (Program.MainForm != null)
                 {
-                    this.MainForm.LoadSplitterPos(
+                    Program.MainForm.LoadSplitterPos(
                     this.splitContainer_main,
                     "userform_state",
                     "splitContainer_main_ratio");
@@ -136,7 +131,7 @@ namespace dp2Circulation
             {
             }
 
-            string strWidths = this.MainForm.AppInfo.GetString(
+            string strWidths = Program.MainForm.AppInfo.GetString(
                 "user_form",
                 "amerced_list_column_width",
                 "");
@@ -179,7 +174,7 @@ namespace dp2Circulation
                         EnableControls(true);
                         return;
                     }
-                // break;
+                    // break;
             }
             base.DefWndProc(ref m);
         }
@@ -196,6 +191,7 @@ namespace dp2Circulation
             // this.textBox_libraryCode.Enabled = bEnable;
             this.checkedComboBox_libraryCode.Enabled = bEnable;
             this.textBox_access.Enabled = bEnable;
+            this.textBox_binding.Enabled = bEnable;
             this.textBox_comment.Enabled = bEnable;
             this.listView_users.Enabled = bEnable;
 
@@ -244,6 +240,7 @@ namespace dp2Circulation
             //this.textBox_libraryCode.Text = "";
             this.checkedComboBox_libraryCode.Text = "";
             this.textBox_access.Text = "";
+            this.textBox_binding.Text = "";
             this.textBox_comment.Text = "";
         }
 
@@ -267,7 +264,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -331,7 +328,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -355,6 +352,9 @@ namespace dp2Circulation
 
             ListViewUtil.ChangeItemText(item, COLUMN_ACCESSCODE,
                 item_info.UserInfo.Access);
+            ListViewUtil.ChangeItemText(item, COLUMN_BINDING,
+    item_info.UserInfo.Binding);
+
             ListViewUtil.ChangeItemText(item, COLUMN_COMMENT,
                 item_info.UserInfo.Comment);
 #if NO
@@ -404,7 +404,7 @@ namespace dp2Circulation
                 goto ERROR1;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -420,6 +420,7 @@ namespace dp2Circulation
             item_info.UserInfo.Rights = this.textBox_userRights.Text;
             item_info.UserInfo.LibraryCode = this.checkedComboBox_libraryCode.Text; //  this.textBox_libraryCode.Text;
             item_info.UserInfo.Access = this.textBox_access.Text;
+            item_info.UserInfo.Binding = this.textBox_binding.Text;
             item_info.UserInfo.Comment = this.textBox_comment.Text;
             item_info.Changed = this.EditChanged;
 
@@ -452,8 +453,8 @@ namespace dp2Circulation
             // this.textBox_libraryCode.Text = info.LibraryCode;
             this.checkedComboBox_libraryCode.Text = info.LibraryCode;
             this.textBox_access.Text = info.Access;
+            this.textBox_binding.Text = info.Binding;
             this.textBox_comment.Text = info.Comment;
-
 
             // 故意造成两个密码不一样，防止无意中重设了密码
             this.textBox_password.Text = "1";
@@ -483,6 +484,7 @@ namespace dp2Circulation
             // this.textBox_libraryCode.Text = "";
             this.checkedComboBox_libraryCode.Text = "";
             this.textBox_access.Text = "";
+            this.textBox_binding.Text = "";
             this.textBox_comment.Text = "";
 
             this.textBox_password.Text = "";
@@ -533,9 +535,8 @@ namespace dp2Circulation
 
             MessageBox.Show(this, "密码重设完成");
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
-
         }
 
         // 重设密码
@@ -553,7 +554,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -581,13 +582,14 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
         // 保存用户信息
         int SaveUserInfo(
             UserInfo info,
+            string strAction,
             out string strError)
         {
             strError = "";
@@ -599,13 +601,13 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
                 long lRet = Channel.SetUser(
                     stop,
-                    "change",
+                    strAction,  // "change",
                     info,
                     out strError);
                 if (lRet == -1)
@@ -621,7 +623,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -639,7 +641,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -661,7 +663,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -679,7 +681,7 @@ namespace dp2Circulation
             stop.BeginLoop();
 
             this.Update();
-            this.MainForm.Update();
+            Program.MainForm.Update();
 
             try
             {
@@ -704,7 +706,7 @@ namespace dp2Circulation
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -712,7 +714,7 @@ namespace dp2Circulation
         private void button_editUserRights_Click(object sender, EventArgs e)
         {
             bool bControl = Control.ModifierKeys == Keys.Control;
-            string strRightsCfgFileName = Path.Combine(this.MainForm.UserDir, "objectrights.xml");
+            string strRightsCfgFileName = Path.Combine(Program.MainForm.UserDir, "objectrights.xml");
 
             DigitalPlatform.CommonControl.PropertyDlg dlg = new DigitalPlatform.CommonControl.PropertyDlg();
             MainForm.SetControlFont(dlg, this.Font, false);
@@ -720,7 +722,7 @@ namespace dp2Circulation
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.Text = "用户 '" + this.textBox_userName.Text + "' 的权限";
             dlg.PropertyString = this.textBox_userRights.Text;
-            dlg.CfgFileName = this.MainForm.DataDir + "\\userrightsdef.xml";
+            dlg.CfgFileName = Program.MainForm.DataDir + "\\userrightsdef.xml";
             if (bControl)
             {
                 if (File.Exists(strRightsCfgFileName) == true)
@@ -753,6 +755,7 @@ namespace dp2Circulation
             info.Rights = this.textBox_userRights.Text;
             info.LibraryCode = this.checkedComboBox_libraryCode.Text;   //  this.textBox_libraryCode.Text;
             info.Access = this.textBox_access.Text;
+            info.Binding = this.textBox_binding.Text;
             info.Comment = this.textBox_comment.Text;
 
             if (this.checkBox_changePassword.Checked == true)
@@ -771,14 +774,37 @@ namespace dp2Circulation
             // 保存用户信息
             nRet = SaveUserInfo(
                 info,
+                "change",
                 out strError);
             if (nRet == -1)
                 goto ERROR1;
 
             this.EditChanged = false;
             MessageBox.Show(this, "用户信息保存成功");
+
+
+            if (StringUtil.CompareVersion(Program.MainForm.ServerVersion, "2.116") >= 0
+                && info.UserName == Program.MainForm._currentUserName)
+            {
+                DialogResult result = MessageBox.Show(this,
+    "您刚修改和保存了当前正在使用的账户 " + info.UserName + "，请问是否需要关闭此账户的所有活跃通道，以迫使刚才修改的账户权限尽快兑现?\r\n\r\n(警告：关闭通道会中断正在使用该通道的长操作)",
+    "UserForm",
+    MessageBoxButtons.YesNo,
+    MessageBoxIcon.Question,
+    MessageBoxDefaultButton.Button2);
+                if (result == System.Windows.Forms.DialogResult.Yes)
+                {
+                    nRet = SaveUserInfo(
+    info,
+    "closechannel",
+    out strError);
+                    if (nRet == -1)
+                        goto ERROR1;
+                    // TODO: 如何迫使重新登录，避免下一次操作时出现通道被关闭过的报错?
+                }
+            }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -877,9 +903,8 @@ namespace dp2Circulation
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
-
         }
 
         private void checkBox_changePassword_CheckedChanged(object sender, EventArgs e)
@@ -927,6 +952,7 @@ namespace dp2Circulation
             info.Rights = this.textBox_userRights.Text;
             info.LibraryCode = this.checkedComboBox_libraryCode.Text;   //  this.textBox_libraryCode.Text;
             info.Access = this.textBox_access.Text;
+            info.Binding = this.textBox_binding.Text;
             info.Comment = this.textBox_comment.Text;
 
             if (this.checkBox_changePassword.Checked == true)
@@ -966,17 +992,17 @@ namespace dp2Circulation
 
             MessageBox.Show(this, "用户 '" + info.UserName + "' 创建成功");
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
         private void UserForm_Activated(object sender, EventArgs e)
         {
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 
-            this.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
-            this.MainForm.MenuItem_font.Enabled = false;
-            this.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
+            Program.MainForm.MenuItem_recoverUrgentLog.Enabled = false;
+            Program.MainForm.MenuItem_font.Enabled = false;
+            Program.MainForm.MenuItem_restoreDefaultFont.Enabled = false;
         }
 
         SortColumns SortColumns = new SortColumns();
@@ -991,7 +1017,6 @@ namespace dp2Circulation
             this.listView_users.ListViewItemSorter = new SortColumnsComparer(this.SortColumns);
 
             this.listView_users.ListViewItemSorter = null;
-
         }
 
         private void checkedComboBox_libraryCode_TextChanged(object sender, EventArgs e)
@@ -1003,7 +1028,7 @@ namespace dp2Circulation
         {
             if (this.checkedComboBox_libraryCode.Items.Count > 0)
                 return;
-            lock(this.checkedComboBox_libraryCode)
+            lock (this.checkedComboBox_libraryCode)
             {
                 List<string> librarycodes = null;
                 string strError = "";
@@ -1078,6 +1103,11 @@ namespace dp2Circulation
 
         private void tableLayoutPanel_userEdit_SizeChanged(object sender, EventArgs e)
         {
+        }
+
+        private void textBox_binding_TextChanged(object sender, EventArgs e)
+        {
+            this.EditChanged = true;
         }
 
 #if NO

@@ -45,6 +45,7 @@ namespace dp2Circulation
             this.columnHeader_operTime = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader_seconds = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader_attachment = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader_comment = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.panel_record = new System.Windows.Forms.Panel();
             this.toolStrip_panelFixed = new System.Windows.Forms.ToolStrip();
             this.toolStripButton_closeDownPanel = new System.Windows.Forms.ToolStripButton();
@@ -56,6 +57,8 @@ namespace dp2Circulation
             this.button_loadFromSingleFile = new System.Windows.Forms.Button();
             this.tabControl_main = new System.Windows.Forms.TabControl();
             this.tabPage_selectFile = new System.Windows.Forms.TabPage();
+            this.label7 = new System.Windows.Forms.Label();
+            this.textBox_filter = new System.Windows.Forms.TextBox();
             this.button_getTodayFilename = new System.Windows.Forms.Button();
             this.button_getSingleLogFilename = new System.Windows.Forms.Button();
             this.tabPage_selectFiles = new System.Windows.Forms.TabPage();
@@ -79,6 +82,30 @@ namespace dp2Circulation
             this.button_repair_findSourceFilename = new System.Windows.Forms.Button();
             this.label2 = new System.Windows.Forms.Label();
             this.textBox_repair_sourceFilename = new System.Windows.Forms.TextBox();
+            this.tabPage_file = new System.Windows.Forms.TabPage();
+            this.listView_file = new System.Windows.Forms.ListView();
+            this.columnHeader_file_index = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader_file_size = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader_file_operation = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader_file_operator = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.toolStrip_file = new System.Windows.Forms.ToolStrip();
+            this.toolStripButton_file_load = new System.Windows.Forms.ToolStripButton();
+            this.tabPage_restore = new System.Windows.Forms.TabPage();
+            this.splitContainer_recover = new System.Windows.Forms.SplitContainer();
+            this.listView_restoreList = new DigitalPlatform.GUI.ListViewQU();
+            this.columnHeader_restoreList_no = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader_restoreList_recPath = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader_restoreList_summary = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader_restoreList_history = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.listView_recover_history = new DigitalPlatform.GUI.ListViewQU();
+            this.columnHeader1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader2 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader3 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader4 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader5 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader6 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader7 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader8 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer_logRecords)).BeginInit();
             this.splitContainer_logRecords.Panel1.SuspendLayout();
             this.splitContainer_logRecords.Panel2.SuspendLayout();
@@ -93,6 +120,13 @@ namespace dp2Circulation
             this.tabPage_selectFiles.SuspendLayout();
             this.tabPage_logRecords.SuspendLayout();
             this.tabPage_repair.SuspendLayout();
+            this.tabPage_file.SuspendLayout();
+            this.toolStrip_file.SuspendLayout();
+            this.tabPage_restore.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer_recover)).BeginInit();
+            this.splitContainer_recover.Panel1.SuspendLayout();
+            this.splitContainer_recover.Panel2.SuspendLayout();
+            this.splitContainer_recover.SuspendLayout();
             this.SuspendLayout();
             // 
             // label1
@@ -107,7 +141,7 @@ namespace dp2Circulation
             // 
             // textBox_logFileName
             // 
-            this.textBox_logFileName.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            this.textBox_logFileName.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBox_logFileName.Location = new System.Drawing.Point(92, 10);
             this.textBox_logFileName.Margin = new System.Windows.Forms.Padding(2);
@@ -145,7 +179,8 @@ namespace dp2Circulation
             this.columnHeader_operator,
             this.columnHeader_operTime,
             this.columnHeader_seconds,
-            this.columnHeader_attachment});
+            this.columnHeader_attachment,
+            this.columnHeader_comment});
             this.listView_records.Dock = System.Windows.Forms.DockStyle.Fill;
             this.listView_records.FullRowSelect = true;
             this.listView_records.HideSelection = false;
@@ -200,6 +235,11 @@ namespace dp2Circulation
             // 
             this.columnHeader_attachment.Text = "附件";
             this.columnHeader_attachment.Width = 87;
+            // 
+            // columnHeader_comment
+            // 
+            this.columnHeader_comment.Text = "附注";
+            this.columnHeader_comment.Width = 160;
             // 
             // panel_record
             // 
@@ -290,7 +330,7 @@ namespace dp2Circulation
             // 
             // button_loadFromSingleFile
             // 
-            this.button_loadFromSingleFile.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
+            this.button_loadFromSingleFile.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.button_loadFromSingleFile.Location = new System.Drawing.Point(4, 210);
             this.button_loadFromSingleFile.Margin = new System.Windows.Forms.Padding(2);
@@ -303,13 +343,15 @@ namespace dp2Circulation
             // 
             // tabControl_main
             // 
-            this.tabControl_main.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.tabControl_main.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.tabControl_main.Controls.Add(this.tabPage_selectFile);
             this.tabControl_main.Controls.Add(this.tabPage_selectFiles);
             this.tabControl_main.Controls.Add(this.tabPage_logRecords);
             this.tabControl_main.Controls.Add(this.tabPage_repair);
+            this.tabControl_main.Controls.Add(this.tabPage_file);
+            this.tabControl_main.Controls.Add(this.tabPage_restore);
             this.tabControl_main.Location = new System.Drawing.Point(9, 10);
             this.tabControl_main.Margin = new System.Windows.Forms.Padding(2);
             this.tabControl_main.Name = "tabControl_main";
@@ -319,6 +361,8 @@ namespace dp2Circulation
             // 
             // tabPage_selectFile
             // 
+            this.tabPage_selectFile.Controls.Add(this.label7);
+            this.tabPage_selectFile.Controls.Add(this.textBox_filter);
             this.tabPage_selectFile.Controls.Add(this.button_getTodayFilename);
             this.tabPage_selectFile.Controls.Add(this.button_getSingleLogFilename);
             this.tabPage_selectFile.Controls.Add(this.label1);
@@ -331,6 +375,28 @@ namespace dp2Circulation
             this.tabPage_selectFile.TabIndex = 2;
             this.tabPage_selectFile.Text = "从单个日志文件装载";
             this.tabPage_selectFile.UseVisualStyleBackColor = true;
+            // 
+            // label7
+            // 
+            this.label7.AutoSize = true;
+            this.label7.Location = new System.Drawing.Point(2, 38);
+            this.label7.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.label7.Name = "label7";
+            this.label7.Size = new System.Drawing.Size(77, 12);
+            this.label7.TabIndex = 5;
+            this.label7.Text = "日志类型(&F):";
+            this.label7.Visible = false;
+            // 
+            // textBox_filter
+            // 
+            this.textBox_filter.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.textBox_filter.Location = new System.Drawing.Point(92, 35);
+            this.textBox_filter.Margin = new System.Windows.Forms.Padding(2);
+            this.textBox_filter.Name = "textBox_filter";
+            this.textBox_filter.Size = new System.Drawing.Size(183, 21);
+            this.textBox_filter.TabIndex = 6;
+            this.textBox_filter.Visible = false;
             // 
             // button_getTodayFilename
             // 
@@ -384,6 +450,14 @@ namespace dp2Circulation
             "最近 30 天",
             "最近 31 天",
             "最近 365 天",
+            "最近 2 年",
+            "最近 3 年",
+            "最近 4 年",
+            "最近 5 年",
+            "最近 6 年",
+            "最近 7 年",
+            "最近 8 年",
+            "最近 9 年",
             "最近 10 年"});
             this.comboBox_quickSetFilenames.Location = new System.Drawing.Point(89, 30);
             this.comboBox_quickSetFilenames.Name = "comboBox_quickSetFilenames";
@@ -412,7 +486,7 @@ namespace dp2Circulation
             // 
             // button_loadFilenams
             // 
-            this.button_loadFilenams.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            this.button_loadFilenams.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.button_loadFilenams.Location = new System.Drawing.Point(4, 5);
             this.button_loadFilenams.Margin = new System.Windows.Forms.Padding(2);
@@ -425,7 +499,7 @@ namespace dp2Circulation
             // 
             // button_loadLogRecords
             // 
-            this.button_loadLogRecords.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
+            this.button_loadLogRecords.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.button_loadLogRecords.Enabled = false;
             this.button_loadLogRecords.Location = new System.Drawing.Point(4, 210);
@@ -440,8 +514,8 @@ namespace dp2Circulation
             // textBox_filenames
             // 
             this.textBox_filenames.AcceptsReturn = true;
-            this.textBox_filenames.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.textBox_filenames.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBox_filenames.HideSelection = false;
             this.textBox_filenames.Location = new System.Drawing.Point(4, 72);
@@ -490,7 +564,7 @@ namespace dp2Circulation
             // 
             // groupBox1
             // 
-            this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.groupBox1.Location = new System.Drawing.Point(8, 123);
             this.groupBox1.Margin = new System.Windows.Forms.Padding(2);
@@ -535,7 +609,7 @@ namespace dp2Circulation
             // 
             // textBox_repair_verifyFolderName
             // 
-            this.textBox_repair_verifyFolderName.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            this.textBox_repair_verifyFolderName.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBox_repair_verifyFolderName.Location = new System.Drawing.Point(142, 142);
             this.textBox_repair_verifyFolderName.Margin = new System.Windows.Forms.Padding(2);
@@ -578,7 +652,7 @@ namespace dp2Circulation
             // 
             // textBox_repair_targetFilename
             // 
-            this.textBox_repair_targetFilename.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            this.textBox_repair_targetFilename.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBox_repair_targetFilename.Location = new System.Drawing.Point(142, 38);
             this.textBox_repair_targetFilename.Margin = new System.Windows.Forms.Padding(2);
@@ -610,13 +684,213 @@ namespace dp2Circulation
             // 
             // textBox_repair_sourceFilename
             // 
-            this.textBox_repair_sourceFilename.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            this.textBox_repair_sourceFilename.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.textBox_repair_sourceFilename.Location = new System.Drawing.Point(142, 13);
             this.textBox_repair_sourceFilename.Margin = new System.Windows.Forms.Padding(2);
             this.textBox_repair_sourceFilename.Name = "textBox_repair_sourceFilename";
             this.textBox_repair_sourceFilename.Size = new System.Drawing.Size(183, 21);
             this.textBox_repair_sourceFilename.TabIndex = 4;
+            // 
+            // tabPage_file
+            // 
+            this.tabPage_file.Controls.Add(this.listView_file);
+            this.tabPage_file.Controls.Add(this.toolStrip_file);
+            this.tabPage_file.Location = new System.Drawing.Point(4, 22);
+            this.tabPage_file.Name = "tabPage_file";
+            this.tabPage_file.Size = new System.Drawing.Size(368, 233);
+            this.tabPage_file.TabIndex = 4;
+            this.tabPage_file.Text = "物理文件";
+            this.tabPage_file.UseVisualStyleBackColor = true;
+            // 
+            // listView_file
+            // 
+            this.listView_file.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
+            this.columnHeader_file_index,
+            this.columnHeader_file_size,
+            this.columnHeader_file_operation,
+            this.columnHeader_file_operator});
+            this.listView_file.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.listView_file.FullRowSelect = true;
+            this.listView_file.HideSelection = false;
+            this.listView_file.Location = new System.Drawing.Point(0, 0);
+            this.listView_file.Name = "listView_file";
+            this.listView_file.Size = new System.Drawing.Size(368, 208);
+            this.listView_file.TabIndex = 1;
+            this.listView_file.UseCompatibleStateImageBehavior = false;
+            this.listView_file.View = System.Windows.Forms.View.Details;
+            this.listView_file.ColumnClick += new System.Windows.Forms.ColumnClickEventHandler(this.listView_file_ColumnClick);
+            // 
+            // columnHeader_file_index
+            // 
+            this.columnHeader_file_index.Text = "序号";
+            // 
+            // columnHeader_file_size
+            // 
+            this.columnHeader_file_size.Text = "尺寸";
+            this.columnHeader_file_size.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.columnHeader_file_size.Width = 100;
+            // 
+            // columnHeader_file_operation
+            // 
+            this.columnHeader_file_operation.Text = "操作类型";
+            this.columnHeader_file_operation.Width = 100;
+            // 
+            // columnHeader_file_operator
+            // 
+            this.columnHeader_file_operator.Text = "操作者";
+            this.columnHeader_file_operator.Width = 100;
+            // 
+            // toolStrip_file
+            // 
+            this.toolStrip_file.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.toolStrip_file.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.toolStripButton_file_load});
+            this.toolStrip_file.Location = new System.Drawing.Point(0, 208);
+            this.toolStrip_file.Name = "toolStrip_file";
+            this.toolStrip_file.Size = new System.Drawing.Size(368, 25);
+            this.toolStrip_file.TabIndex = 0;
+            this.toolStrip_file.Text = "toolStrip1";
+            // 
+            // toolStripButton_file_load
+            // 
+            this.toolStripButton_file_load.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.toolStripButton_file_load.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton_file_load.Image")));
+            this.toolStripButton_file_load.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.toolStripButton_file_load.Name = "toolStripButton_file_load";
+            this.toolStripButton_file_load.Size = new System.Drawing.Size(36, 22);
+            this.toolStripButton_file_load.Text = "装载";
+            this.toolStripButton_file_load.Click += new System.EventHandler(this.toolStripButton_file_load_Click);
+            // 
+            // tabPage_restore
+            // 
+            this.tabPage_restore.Controls.Add(this.splitContainer_recover);
+            this.tabPage_restore.Location = new System.Drawing.Point(4, 22);
+            this.tabPage_restore.Name = "tabPage_restore";
+            this.tabPage_restore.Size = new System.Drawing.Size(368, 233);
+            this.tabPage_restore.TabIndex = 5;
+            this.tabPage_restore.Text = "恢复记录";
+            this.tabPage_restore.UseVisualStyleBackColor = true;
+            // 
+            // splitContainer_recover
+            // 
+            this.splitContainer_recover.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.splitContainer_recover.Location = new System.Drawing.Point(0, 0);
+            this.splitContainer_recover.Name = "splitContainer_recover";
+            this.splitContainer_recover.Orientation = System.Windows.Forms.Orientation.Horizontal;
+            // 
+            // splitContainer_recover.Panel1
+            // 
+            this.splitContainer_recover.Panel1.Controls.Add(this.listView_restoreList);
+            // 
+            // splitContainer_recover.Panel2
+            // 
+            this.splitContainer_recover.Panel2.Controls.Add(this.listView_recover_history);
+            this.splitContainer_recover.Size = new System.Drawing.Size(368, 233);
+            this.splitContainer_recover.SplitterDistance = 115;
+            this.splitContainer_recover.SplitterWidth = 8;
+            this.splitContainer_recover.TabIndex = 3;
+            // 
+            // listView_restoreList
+            // 
+            this.listView_restoreList.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
+            this.columnHeader_restoreList_no,
+            this.columnHeader_restoreList_recPath,
+            this.columnHeader_restoreList_summary,
+            this.columnHeader_restoreList_history});
+            this.listView_restoreList.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.listView_restoreList.FullRowSelect = true;
+            this.listView_restoreList.HideSelection = false;
+            this.listView_restoreList.Location = new System.Drawing.Point(0, 0);
+            this.listView_restoreList.Name = "listView_restoreList";
+            this.listView_restoreList.Size = new System.Drawing.Size(368, 115);
+            this.listView_restoreList.TabIndex = 2;
+            this.listView_restoreList.UseCompatibleStateImageBehavior = false;
+            this.listView_restoreList.View = System.Windows.Forms.View.Details;
+            this.listView_restoreList.SelectedIndexChanged += new System.EventHandler(this.listView_restoreList_SelectedIndexChanged);
+            this.listView_restoreList.MouseUp += new System.Windows.Forms.MouseEventHandler(this.listView_restoreList_MouseUp);
+            // 
+            // columnHeader_restoreList_no
+            // 
+            this.columnHeader_restoreList_no.Text = "序号";
+            // 
+            // columnHeader_restoreList_recPath
+            // 
+            this.columnHeader_restoreList_recPath.Text = "记录路径";
+            this.columnHeader_restoreList_recPath.Width = 100;
+            // 
+            // columnHeader_restoreList_summary
+            // 
+            this.columnHeader_restoreList_summary.Text = "摘要";
+            this.columnHeader_restoreList_summary.Width = 100;
+            // 
+            // columnHeader_restoreList_history
+            // 
+            this.columnHeader_restoreList_history.Text = "操作历史";
+            this.columnHeader_restoreList_history.Width = 100;
+            // 
+            // listView_recover_history
+            // 
+            this.listView_recover_history.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
+            this.columnHeader1,
+            this.columnHeader2,
+            this.columnHeader3,
+            this.columnHeader4,
+            this.columnHeader5,
+            this.columnHeader6,
+            this.columnHeader7,
+            this.columnHeader8});
+            this.listView_recover_history.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.listView_recover_history.FullRowSelect = true;
+            this.listView_recover_history.HideSelection = false;
+            this.listView_recover_history.Location = new System.Drawing.Point(0, 0);
+            this.listView_recover_history.Margin = new System.Windows.Forms.Padding(2);
+            this.listView_recover_history.Name = "listView_recover_history";
+            this.listView_recover_history.Size = new System.Drawing.Size(368, 110);
+            this.listView_recover_history.TabIndex = 1;
+            this.listView_recover_history.UseCompatibleStateImageBehavior = false;
+            this.listView_recover_history.View = System.Windows.Forms.View.Details;
+            this.listView_recover_history.SelectedIndexChanged += new System.EventHandler(this.listView_recover_history_SelectedIndexChanged);
+            // 
+            // columnHeader1
+            // 
+            this.columnHeader1.Text = "文件名";
+            this.columnHeader1.Width = 150;
+            // 
+            // columnHeader2
+            // 
+            this.columnHeader2.Text = "序号";
+            this.columnHeader2.Width = 100;
+            // 
+            // columnHeader3
+            // 
+            this.columnHeader3.Text = "馆代码";
+            this.columnHeader3.Width = 127;
+            // 
+            // columnHeader4
+            // 
+            this.columnHeader4.Text = "操作类型";
+            this.columnHeader4.Width = 200;
+            // 
+            // columnHeader5
+            // 
+            this.columnHeader5.Text = "操作者";
+            this.columnHeader5.Width = 200;
+            // 
+            // columnHeader6
+            // 
+            this.columnHeader6.Text = "操作时间";
+            this.columnHeader6.Width = 200;
+            // 
+            // columnHeader7
+            // 
+            this.columnHeader7.Text = "耗时(秒)";
+            this.columnHeader7.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            // 
+            // columnHeader8
+            // 
+            this.columnHeader8.Text = "附件";
+            this.columnHeader8.Width = 87;
             // 
             // OperLogForm
             // 
@@ -652,6 +926,15 @@ namespace dp2Circulation
             this.tabPage_logRecords.ResumeLayout(false);
             this.tabPage_repair.ResumeLayout(false);
             this.tabPage_repair.PerformLayout();
+            this.tabPage_file.ResumeLayout(false);
+            this.tabPage_file.PerformLayout();
+            this.toolStrip_file.ResumeLayout(false);
+            this.toolStrip_file.PerformLayout();
+            this.tabPage_restore.ResumeLayout(false);
+            this.splitContainer_recover.Panel1.ResumeLayout(false);
+            this.splitContainer_recover.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.splitContainer_recover)).EndInit();
+            this.splitContainer_recover.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -704,5 +987,32 @@ namespace dp2Circulation
         private System.Windows.Forms.ToolStrip toolStrip_panelFixed;
         private System.Windows.Forms.ToolStripButton toolStripButton_closeDownPanel;
         private System.Windows.Forms.ColumnHeader columnHeader_seconds;
+        private System.Windows.Forms.Label label7;
+        private System.Windows.Forms.TextBox textBox_filter;
+        private System.Windows.Forms.TabPage tabPage_file;
+        private System.Windows.Forms.ListView listView_file;
+        private System.Windows.Forms.ToolStrip toolStrip_file;
+        private System.Windows.Forms.ColumnHeader columnHeader_file_index;
+        private System.Windows.Forms.ColumnHeader columnHeader_file_size;
+        private System.Windows.Forms.ColumnHeader columnHeader_file_operation;
+        private System.Windows.Forms.ToolStripButton toolStripButton_file_load;
+        private System.Windows.Forms.ColumnHeader columnHeader_file_operator;
+        private System.Windows.Forms.TabPage tabPage_restore;
+        private DigitalPlatform.GUI.ListViewQU listView_restoreList;
+        private System.Windows.Forms.ColumnHeader columnHeader_restoreList_no;
+        private System.Windows.Forms.ColumnHeader columnHeader_restoreList_recPath;
+        private System.Windows.Forms.ColumnHeader columnHeader_restoreList_summary;
+        private System.Windows.Forms.ColumnHeader columnHeader_restoreList_history;
+        private System.Windows.Forms.SplitContainer splitContainer_recover;
+        private DigitalPlatform.GUI.ListViewQU listView_recover_history;
+        private System.Windows.Forms.ColumnHeader columnHeader1;
+        private System.Windows.Forms.ColumnHeader columnHeader2;
+        private System.Windows.Forms.ColumnHeader columnHeader3;
+        private System.Windows.Forms.ColumnHeader columnHeader4;
+        private System.Windows.Forms.ColumnHeader columnHeader5;
+        private System.Windows.Forms.ColumnHeader columnHeader6;
+        private System.Windows.Forms.ColumnHeader columnHeader7;
+        private System.Windows.Forms.ColumnHeader columnHeader8;
+        private System.Windows.Forms.ColumnHeader columnHeader_comment;
     }
 }

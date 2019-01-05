@@ -443,7 +443,7 @@ namespace DigitalPlatform.LibraryServer
             out byte[] timestamp,
             out string strError)
         {
-            aPath = null;
+            aPath = new List<string>();
 
             strXml = "";
             strError = "";
@@ -509,7 +509,6 @@ namespace DigitalPlatform.LibraryServer
                     return 0;
                 }
 
-
                 strError = strText + " 的事项没有找到";
                 return 0;
             }
@@ -554,7 +553,7 @@ namespace DigitalPlatform.LibraryServer
                 goto ERROR1;
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -567,17 +566,12 @@ namespace DigitalPlatform.LibraryServer
             // RmsChannelCollection channels,
             RmsChannel channel,
             List<string> locateParams,
-            /*
-            string strIssueDbName,
-            string strParentID,
-            string strPublishTime,
-             * */
             int nMax,
             out List<string> aPath,
             out string strError)
         {
             strError = "";
-            aPath = null;
+            aPath = new List<string>();
 
             // 构造检索式
             string strQueryXml = "";
@@ -646,14 +640,13 @@ namespace DigitalPlatform.LibraryServer
             }
 
             return (int)lHitCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
         // 删除事项记录的操作
         int DoOperDelete(
             SessionInfo sessioninfo,
-            bool bForce,
             RmsChannel channel,
             EntityInfo info,
             List<string> oldLocateParams,
@@ -663,6 +656,8 @@ namespace DigitalPlatform.LibraryServer
             string strOldPublishTime,
              * */
             XmlDocument domOldRec,
+            bool bForce,
+            bool bSimulate,
             ref XmlDocument domOperLog,
             ref List<EntityInfo> ErrorInfos)
         {
@@ -711,7 +706,6 @@ namespace DigitalPlatform.LibraryServer
             // 如果记录路径为空, 则先获得记录路径
             if (String.IsNullOrEmpty(info.NewRecPath) == true)
             {
-                List<string> aPath = null;
 
                 nRet = IsLocateParamNullOrEmpty(
                     oldLocateParams,
@@ -742,14 +736,13 @@ namespace DigitalPlatform.LibraryServer
                     channel,
                     oldLocateParams,
                     100,
-                    out aPath,
+                    out List<string> aPath,
                     out strError);
                 if (nRet == -1)
                 {
                     strError = "删除操作中事项查重阶段发生错误:" + strError;
                     goto ERROR1;
                 }
-
 
                 if (nRet == 0)
                 {
@@ -782,7 +775,7 @@ namespace DigitalPlatform.LibraryServer
             string strMetaData = "";
             string strExistingXml = "";
 
-        REDOLOAD:
+            REDOLOAD:
 
             // 先读出数据库中此位置的已有记录
             lRet = channel.GetRes(info.NewRecPath,
@@ -910,6 +903,7 @@ namespace DigitalPlatform.LibraryServer
 
             lRet = channel.DoDeleteRes(info.NewRecPath,
                 info.OldTimestamp,
+                bSimulate ? "simulate" : "",
                 out output_timestamp,
                 out strError);
             if (lRet == -1)
@@ -951,7 +945,7 @@ namespace DigitalPlatform.LibraryServer
             }
 
             return 0;
-        ERROR1:
+            ERROR1:
             error = new EntityInfo(info);
             error.ErrorInfo = strError;
             error.ErrorCode = ErrorCodeValue.CommonError;
@@ -971,6 +965,7 @@ namespace DigitalPlatform.LibraryServer
             // string strUserID,
             RmsChannel channel,
             EntityInfo info,
+            bool bSimulate,
             ref XmlDocument domOperLog,
             ref List<EntityInfo> ErrorInfos)
         {
@@ -1105,7 +1100,6 @@ namespace DigitalPlatform.LibraryServer
                 goto ERROR1;
             }
 
-
             // 观察时间戳是否发生变化
             nRet = ByteArray.Compare(info.OldTimestamp, exist_source_timestamp);
             if (nRet != 0)
@@ -1180,12 +1174,14 @@ out strError);
             if (nRet == -1)
                 goto ERROR1;
 
+            string part_type = "";
             string strWarning = "";
             // 合并新旧记录
             // return:
             //      -1  出错
             //      0   正确
             //      1   有部分修改没有兑现。说明在strError中
+            //      2   全部修改都没有兑现。说明在strError中 (2018/10/9)
             string strNewXml = "";
             nRet = MergeTwoItemXml(
                 sessioninfo,
@@ -1195,19 +1191,24 @@ out strError);
                 out strError);
             if (nRet == -1)
                 goto ERROR1;
-            if (nRet == 1)
+            if (nRet == 1 || nRet == 2)
+            {
+                if (nRet == 1)
+                    part_type = "部分";
+                else
+                    part_type = "全部都没有";
                 strWarning = strError;
-
+            }
 
             // 移动记录
-            byte[] output_timestamp = null;
-
             // TODO: Copy后还要写一次？因为Copy并不写入新记录。
             // 其实Copy的意义在于带走资源。否则还不如用Save+Delete
             lRet = channel.DoCopyRecord(info.OldRecPath,
                 info.NewRecPath,
                 true,   // bDeleteSourceRecord
-                out output_timestamp,
+                bSimulate ? "simulate" : "",
+                out string strIdChangeList,
+                out byte[] output_timestamp,
                 out strOutputPath,
                 out strError);
             if (lRet == -1)
@@ -1222,14 +1223,14 @@ out strError);
             lRet = channel.DoSaveTextRes(strTargetPath,
                 strNewXml,
                 false,   // include preamble?
-                "content",
+                "content" + (bSimulate ? ",simulate" : ""),
                 output_timestamp,
                 out output_timestamp,
                 out strOutputPath,
                 out strError);
             if (lRet == -1)
             {
-                strError = "移动操作中，" + this.ItemName + "记录 '" + info.OldRecPath + "' 已经被成功移动到 '" + strTargetPath + "' ，但在写入新内容时发生错误: " + strError;
+                strError = "移动操作中，" + this.ItemName + "记录 '" + info.OldRecPath + "' 已经成功移动到 '" + strTargetPath + "' ，但在写入新内容时发生错误: " + strError;
 
                 if (channel.ErrorCode == ChannelErrorCode.TimestampMismatch)
                 {
@@ -1237,8 +1238,11 @@ out strError);
                     // 因为源已经移动，情况很复杂
                 }
 
-                // 仅仅写入错误日志即可。没有Undo
-                this.App.WriteErrorLog(strError);
+                if (bSimulate == false)
+                {
+                    // 仅仅写入错误日志即可。没有Undo
+                    this.App.WriteErrorLog(strError);
+                }
 
                 error = new EntityInfo(info);
                 error.ErrorInfo = "移动操作发生错误:" + strError;
@@ -1270,7 +1274,7 @@ out strError);
                 error.ErrorInfo = "移动操作成功。NewRecPath中返回了实际保存的路径, NewTimeStamp中返回了新的时间戳，NewRecord中返回了实际保存的新记录(可能和提交的源记录稍有差异)。";
                 if (string.IsNullOrEmpty(strWarning) == false)
                 {
-                    error.ErrorInfo = "移动操作成功。但" + strWarning;
+                    error.ErrorInfo = "移动操作" + part_type + "兑现。" + strWarning;
                     error.ErrorCode = ErrorCodeValue.PartialDenied;
                 }
                 else
@@ -1279,8 +1283,7 @@ out strError);
             }
 
             return 0;
-
-        ERROR1:
+            ERROR1:
             error = new EntityInfo(info);
             error.ErrorInfo = strError;
             error.ErrorCode = ErrorCodeValue.CommonError;
@@ -1296,11 +1299,12 @@ out strError);
         //      -1  出错
         //      0   成功
         public int DoOperChange(
-            bool bForce,
             // string strUserID,
             SessionInfo sessioninfo,
             RmsChannel channel,
             EntityInfo info,
+            bool bForce,
+            bool bSimulate,
             ref XmlDocument domOperLog,
             ref List<EntityInfo> ErrorInfos)
         {
@@ -1346,8 +1350,7 @@ out strError);
 
 
             // 先读出数据库中即将覆盖位置的已有记录
-        REDOLOAD:
-
+            REDOLOAD:
             lRet = channel.GetRes(info.NewRecPath,
                 out strExistXml,
                 out strMetaData,
@@ -1400,7 +1403,6 @@ out strError);
                 goto ERROR1;
             }
 
-
             // 观察时间戳是否发生变化
             nRet = ByteArray.Compare(info.OldTimestamp, exist_timestamp);
             if (nRet != 0)
@@ -1450,6 +1452,7 @@ out strError);
                 // exist_timestamp此时已经反映了库中被修改后的记录的时间戳
             }
 
+            string part_type = "";
 
             // 合并新旧记录
             string strWarning = "";
@@ -1474,6 +1477,13 @@ out strError);
                     return -1;
                 }
 
+                // 2017/3/2
+                {
+                    string strOldRefID = DomUtil.GetElementText(domNew.DocumentElement, "refID");
+                    if (string.IsNullOrEmpty(strOldRefID))
+                        DomUtil.SetElementText(domNew.DocumentElement, "refID", Guid.NewGuid().ToString());
+                }
+
                 // 2010/4/8
                 nRet = this.App.SetOperation(
                     ref domNew,
@@ -1488,6 +1498,7 @@ out strError);
                 //      -1  出错
                 //      0   正确
                 //      1   有部分修改没有兑现。说明在strError中
+                //      2   全部修改都没有兑现。说明在strError中 (2018/10/9)
                 nRet = MergeTwoItemXml(
                     sessioninfo,
                     domExist,
@@ -1496,8 +1507,14 @@ out strError);
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;
-                if (nRet == 1)
+                if (nRet == 1 || nRet == 2)
+                {
+                    if (nRet == 1)
+                        part_type = "部分";
+                    else
+                        part_type = "全部都没有";
                     strWarning = strError;
+                }
             }
             else
             {
@@ -1505,20 +1522,18 @@ out strError);
                 strNewXml = domNew.OuterXml;
             }
 
-
             // 保存新记录
             byte[] output_timestamp = null;
             lRet = channel.DoSaveTextRes(info.NewRecPath,
                 strNewXml,
                 false,   // include preamble?
-                "content",
+                "content" + (bSimulate ? ",simulate" : ""),
                 exist_timestamp,
                 out output_timestamp,
                 out strOutputPath,
                 out strError);
             if (lRet == -1)
             {
-
                 if (channel.ErrorCode == ChannelErrorCode.TimestampMismatch)
                 {
                     if (nRedoCount > 10)
@@ -1557,10 +1572,10 @@ out strError);
                 error.NewTimestamp = output_timestamp;
                 error.NewRecord = strNewXml;
 
-                error.ErrorInfo = "保存操作成功。NewTimeStamp中返回了新的时间戳，NewRecord中返回了实际保存的新记录(可能和提交的新记录稍有差异)。";
+                error.ErrorInfo = "保存操作成功。NewTimeStamp 中返回了新的时间戳，NewRecord 中返回了实际保存的新记录(可能和提交的新记录稍有差异)。";
                 if (string.IsNullOrEmpty(strWarning) == false)
                 {
-                    error.ErrorInfo = "保存操作成功。但" + strWarning;
+                    error.ErrorInfo = "保存操作" + part_type + "兑现。" + strWarning;
                     error.ErrorCode = ErrorCodeValue.PartialDenied;
                 }
                 else
@@ -1569,15 +1584,13 @@ out strError);
             }
 
             return 0;
-
-        ERROR1:
+            ERROR1:
             error = new EntityInfo(info);
             error.ErrorInfo = strError;
             error.ErrorCode = ErrorCodeValue.CommonError;
             ErrorInfos.Add(error);
             return -1;
         }
-
 
         // 设置/保存事项信息
         // parameters:
@@ -1619,9 +1632,8 @@ out strError);
             }
 
             // 获得书目库对应的事项库名
-            string strItemDbName = "";
             nRet = this.GetItemDbName(strBiblioDbName,
-                 out strItemDbName,
+                 out string strItemDbName,
                  out strError);
             if (nRet == -1)
                 goto ERROR1;
@@ -1669,9 +1681,9 @@ out strError);
                 goto ERROR1;
             }
 
-            for (int i = 0; i < iteminfos.Length; i++)
+            foreach (EntityInfo info in iteminfos)
             {
-                EntityInfo info = iteminfos[i];
+                // EntityInfo info = iteminfos[i];
                 if (info == null)
                 {
                     Debug.Assert(false, "");
@@ -1685,6 +1697,8 @@ out strError);
                 bool bNoEventLog = false;   // 是否为不记入事件日志?
 
                 string strStyle = info.Style;
+
+                bool bSimulate = StringUtil.IsInList("simulate", strStyle);
 
                 if (StringUtil.IsInList("force", info.Style) == true)
                 {
@@ -1731,7 +1745,7 @@ out strError);
                     }
                 }
 
-                // 对info内的参数进行检查。
+                // 对 info 内的参数进行检查。
                 strError = "";
 
                 if (iteminfos.Length > 1  // 2013/9/26 只有一个记录的时候，不必依靠 refid 定位返回信息，因而也就不需要明显给出这个 RefID 成员了
@@ -1801,7 +1815,6 @@ out strError);
                     ErrorInfos.Add(error);
                     continue;
                 }
-
 
                 // 检查路径中的库名部分
                 if (String.IsNullOrEmpty(info.NewRecPath) == false)
@@ -1948,7 +1961,6 @@ out strError);
                         else
                             bIsOldNewLocateSame = false;
 
-
                         if (info.Action == "new"
                             || info.Action == "change"
                             || info.Action == "move")
@@ -2035,7 +2047,6 @@ out strError);
 
                             // TODO: 对于期记录，oldLocateParm和newLocateParam中的parentid应当相等，预先检查好
 
-                            List<string> aPath = null;
                             // 根据 父记录ID+出版时间 对期库进行查重
                             // 本函数只负责查重, 并不获得记录体
                             // return:
@@ -2046,7 +2057,7 @@ out strError);
                                 channel,
                                 newLocateParam,
                                 100,
-                                out aPath,
+                                out List<string> aPath,
                                 out strError);
                             if (nRet == -1)
                                 goto ERROR1;
@@ -2094,8 +2105,6 @@ out strError);
                                 {
                                     Debug.Assert(false, "这里不可能出现的info.Action值 '" + info.Action + "'");
                                 }
-
-
                             } // end of if (nRet == 1)
                             else
                             {
@@ -2162,7 +2171,6 @@ out strError);
                         }
                         else
                         {
-
                             string strID = ResPath.GetRecordId(info.NewRecPath);
                             if (String.IsNullOrEmpty(strID) == true)
                             {
@@ -2180,13 +2188,12 @@ out strError);
                         }
 
                         // 构造出适合保存的新事项记录
-                        string strNewXml = "";
                         nRet = BuildNewItemRecord(
                             sessioninfo,
                             bForce,
                             strBiblioRecId,
                             info.NewRecord,
-                            out strNewXml,
+                            out string strNewXml,
                             out strError);
                         if (nRet == -1)
                         {
@@ -2210,6 +2217,13 @@ out strError);
                                 error.ErrorCode = ErrorCodeValue.CommonError;
                                 ErrorInfos.Add(error);
                                 continue;
+                            }
+
+                            // 2017/3/2
+                            {
+                                string strOldRefID = DomUtil.GetElementText(domNew.DocumentElement, "refID");
+                                if (string.IsNullOrEmpty(strOldRefID))
+                                    DomUtil.SetElementText(domNew.DocumentElement, "refID", Guid.NewGuid().ToString());
                             }
 
                             // 2011/4/11
@@ -2257,7 +2271,7 @@ out strError);
                         lRet = channel.DoSaveTextRes(info.NewRecPath,
                             strNewXml,
                             false,   // include preamble?
-                            "content",
+                            "content" + (bSimulate ? ",simulate" : ""),
                             info.OldTimestamp,
                             out output_timestamp,
                             out strOutputPath,
@@ -2302,10 +2316,11 @@ out strError);
                     {
                         // 执行SetIssues API中的"change"操作
                         nRet = DoOperChange(
-                            bForce,
                             sessioninfo,
                             channel,
                             info,
+                            bForce,
+                            bSimulate,
                             ref domOperLog,
                             ref ErrorInfos);
                         if (nRet == -1)
@@ -2321,6 +2336,7 @@ out strError);
                             sessioninfo,
                             channel,
                             info,
+                            bSimulate,
                             ref domOperLog,
                             ref ErrorInfos);
                         if (nRet == -1)
@@ -2343,11 +2359,12 @@ out strError);
                         // 删除期记录的操作
                         nRet = DoOperDelete(
                             sessioninfo,
-                            bForce,
                             channel,
                             info,
                             oldLocateParam,
                             domOldRec,
+                            bForce,
+                            bSimulate,
                             ref domOperLog,
                             ref ErrorInfos);
                         if (nRet == -1)
@@ -2365,10 +2382,10 @@ out strError);
                         ErrorInfos.Add(error);
                     }
 
-
                     // 写入日志
                     if (domOperLog != null
-                        && bNoEventLog == false)    // 2008/10/19
+                        && bNoEventLog == false    // 2008/10/19
+                        && bSimulate == false)
                     {
                         string strOperTime = this.App.Clock.GetClock();
                         DomUtil.SetElementText(domOperLog.DocumentElement,
@@ -2405,7 +2422,7 @@ out strError);
 
             result.Value = ErrorInfos.Count;  // 返回信息的数量
             return result;
-        ERROR1:
+            ERROR1:
             // 这里的报错，是比较严重的错误。如果是数组中部分的请求发生的错误，则不在这里报错，而是通过返回错误信息数组的方式来表现
             result.Value = -1;
             result.ErrorInfo = strError;
@@ -2426,6 +2443,25 @@ out strError);
             out string strError)
         {
             strError = "";
+
+            Assembly assembly = null;
+            // return:
+            //      -1  出错
+            //      0   Assembly 为空
+            //      1   找到 Assembly
+            int nRet = this.App.GetAssembly("findBase",
+        out assembly,
+        out strError);
+            if (nRet == -1)
+                return -1;
+            if (nRet == 0)
+            {
+                strError = "未定义<script>脚本代码，无法校验 " + this.ItemName + " 记录。";
+                return -2;
+            }
+
+            Debug.Assert(assembly != null, "");
+#if NO
             if (this.App.m_strAssemblyLibraryHostError != "")
             {
                 strError = this.App.m_strAssemblyLibraryHostError;
@@ -2437,6 +2473,7 @@ out strError);
                 strError = "未定义<script>脚本代码，无法校验册记录。";
                 return -2;
             }
+#endif
 
             Type hostEntryClassType = ScriptManager.GetDerivedClassType(
                 this.App.m_assemblyLibraryHost,
@@ -2500,6 +2537,7 @@ out strError);
         //      strBiblioRecPath    书目记录路径，仅包含库名和id部分
         //      strStyle    "onlygetpath"   仅返回每个路径(OldRecPath)
         //                  "getfirstxml"   是对onlygetpath的补充，仅获得第一个元素的XML记录，其余的依然只返回路径
+        //                  "query:父记录+期号|..." 使用特定的检索途径和检索词。...部分表示检索词，例如 1|2005|1|，默认前方一致
         //      items 返回的事项信息数组
         // 权限：权限要在API外面判断(需要有get...s权限)。
         // return:
@@ -2556,12 +2594,26 @@ out strError);
                 goto ERROR1;
             }
 
+            // 2016/10/6
+            // 从style字符串中得到 format:XXXX子串
+            string strQueryParam = StringUtil.GetStyleParam(strStyle, "query");
+            string strFrom = "父记录";
+            string strWord = strBiblioRecId;
+            string strMatchStyle = "exact";
+            if (string.IsNullOrEmpty(strQueryParam) == false)
+            {
+                List<string> parts = StringUtil.ParseTwoPart(strQueryParam, "|");
+                strFrom = parts[0];
+                strWord = parts[1];
+                strMatchStyle = "left";
+            }
+
             // 检索事项库中全部从属于特定id的记录
             string strQueryXml = "<target list='"
-                + StringUtil.GetXmlStringSimple(strItemDbName + ":" + "父记录")       // 2007/9/14
+                + StringUtil.GetXmlStringSimple(strItemDbName + ":" + strFrom)       // 2007/9/14
                 + "'><item><word>"
-                + strBiblioRecId
-                + "</word><match>exact</match><relation>=</relation><dataType>string</dataType><maxCount>-1</maxCount></item><lang>" + "zh" + "</lang></target>";
+                + strWord
+                + "</word><match>" + strMatchStyle + "</match><relation>=</relation><dataType>string</dataType><maxCount>-1</maxCount></item><lang>" + "zh" + "</lang></target>";
             long lRet = channel.DoSearch(strQueryXml,
                 this.DefaultResultsetName,
                 "", // strOuputStyle
@@ -2744,7 +2796,7 @@ out strError);
                     iteminfo.NewTimestamp = null;
                     iteminfo.Action = "";
 
-                CONTINUE:
+                    CONTINUE:
                     iteminfos.Add(iteminfo);
                 }
 
@@ -2773,7 +2825,7 @@ out strError);
 
             result.Value = nResultCount;    // items.Length;
             return result;
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorInfo = strError;
             result.ErrorCode = ErrorCode.SystemError;
@@ -2798,14 +2850,13 @@ out strError);
             int nRet = 0;
             string strError = "";
 
-            List<string> aPath = null;
 
             nRet = this.SearchItemRecDup(
                 // Channels,
                 channel,
                 locateParam,
                 nMax,
-                out aPath,
+                out List<string> aPath,
                 out strError);
             if (nRet == -1)
                 goto ERROR1;
@@ -2828,7 +2879,7 @@ out strError);
 
             result.Value = paths.Length;
             return result;
-        ERROR1:
+            ERROR1:
             result.Value = -1;
             result.ErrorInfo = strError;
             result.ErrorCode = ErrorCode.SystemError;
@@ -2840,6 +2891,7 @@ out strError);
         // parameters:
         //      strStyle    return_record_xml 要在DeleteEntityInfo结构中返回OldRecord内容
         //                  check_circulation_info 检查是否具有流通信息。如果具有则会报错 2012/12/19 把缺省行为变为此参数
+        //                  当包含 limit: 时，定义最多取得记录的个数。例如希望最多取得 10 条，可以定义 limit:10
         // return:
         //      -1  error
         //      0   not exist item dbname
@@ -2847,6 +2899,8 @@ out strError);
         public int SearchChildItems(RmsChannel channel,
             string strBiblioRecPath,
             string strStyle,
+            DigitalPlatform.LibraryServer.LibraryApplication.Delegate_checkRecord procCheckRecord,
+            object param,
             out long lHitCount,
             out List<DeleteEntityInfo> entityinfos,
             out string strError)
@@ -2860,6 +2914,8 @@ out strError);
             bool bReturnRecordXml = StringUtil.IsInList("return_record_xml", strStyle);
             bool bCheckCirculationInfo = StringUtil.IsInList("check_circulation_info", strStyle);
             bool bOnlyGetCount = StringUtil.IsInList("only_getcount", strStyle);
+
+            string strLimit = StringUtil.GetParameterByPrefix(strStyle, "limit", ":");
 
             string strBiblioDbName = ResPath.GetDbName(strBiblioRecPath);
             string strBiblioRecId = ResPath.GetRecordId(strBiblioRecPath);
@@ -2910,10 +2966,21 @@ out strError);
                 goto ERROR1;
             }
 
+            string strColumnStyle = "id,xml,timestamp";
+
+            int nLimit = -1;
+            if (string.IsNullOrEmpty(strLimit) == false)
+                Int32.TryParse(strLimit, out nLimit);
+
             int nStart = 0;
             int nPerCount = 100;
+
+            if (nLimit != -1 && nPerCount > nLimit)
+                nPerCount = nLimit;
+
             for (; ; )
             {
+#if NO
                 List<string> aPath = null;
                 lRet = channel.DoGetSearchResult(
                     "entities",
@@ -2931,43 +2998,67 @@ out strError);
                     strError = "aPath.Count == 0";
                     goto ERROR1;
                 }
+#endif
+                Record[] searchresults = null;
+                lRet = channel.DoGetSearchResult(
+    "entities",
+    nStart,
+    nPerCount,
+    strColumnStyle,
+    "zh",
+    null,
+    out searchresults,
+    out strError);
+                if (lRet == -1)
+                    goto ERROR1;
+                if (searchresults == null)
+                {
+                    strError = "searchresults == null";
+                    goto ERROR1;
+                }
+                if (searchresults.Length == 0)
+                {
+                    strError = "searchresults.Length == 0";
+                    goto ERROR1;
+                }
 
                 // 获得每条记录
-                for (int i = 0; i < aPath.Count; i++)
+                // for (int i = 0; i < aPath.Count; i++)
+                int i = 0;
+                foreach (Record record in searchresults)
                 {
                     string strMetaData = "";
                     string strXml = "";
                     byte[] timestamp = null;
                     string strOutputPath = "";
 
-                    // TODO: 这里需要改造为直接从结果集中获取 xml,timestamp
-                    lRet = channel.GetRes(aPath[i],
-                        out strXml,
-                        out strMetaData,
-                        out timestamp,
-                        out strOutputPath,
-                        out strError);
                     DeleteEntityInfo entityinfo = new DeleteEntityInfo();
 
-                    if (lRet == -1)
+                    if (record.RecordBody == null || string.IsNullOrEmpty(record.RecordBody.Xml) == true)
                     {
-                        /*
-                        entityinfo.RecPath = aPath[i];
-                        entityinfo.ErrorCode = channel.OriginErrorCode;
-                        entityinfo.ErrorInfo = channel.ErrorInfo;
+                        // TODO: 这里需要改造为直接从结果集中获取 xml,timestamp
+                        lRet = channel.GetRes(record.Path,
+                            out strXml,
+                            out strMetaData,
+                            out timestamp,
+                            out strOutputPath,
+                            out strError);
 
-                        entityinfo.OldRecord = "";
-                        entityinfo.OldTimestamp = null;
-                        entityinfo.NewRecord = "";
-                        entityinfo.NewTimestamp = null;
-                        entityinfo.Action = "";
-                         * */
-                        if (channel.ErrorCode == ChannelErrorCode.NotFound)
-                            continue;
+                        if (lRet == -1)
+                        {
+                            if (channel.ErrorCode == ChannelErrorCode.NotFound)
+                                continue;
 
-                        strError = "获取" + this.ItemName + "记录 '" + aPath[i] + "' 时发生错误: " + strError;
-                        goto ERROR1;
-                        // goto CONTINUE;
+                            strError = "获取" + this.ItemName + "记录 '" + record.Path + "' 时发生错误: " + strError;
+                            goto ERROR1;
+                            // goto CONTINUE;
+                        }
+                    }
+                    else
+                    {
+                        strXml = record.RecordBody.Xml;
+                        strOutputPath = record.Path;
+                        timestamp = record.RecordBody.Timestamp;
                     }
 
                     entityinfo.RecPath = strOutputPath;
@@ -2975,7 +3066,8 @@ out strError);
                     if (bReturnRecordXml == true)
                         entityinfo.OldRecord = strXml;
 
-                    if (bCheckCirculationInfo == true)
+                    if (bCheckCirculationInfo == true
+                        || procCheckRecord != null)
                     {
                         // 检查是否有借阅信息
                         // 把记录装入DOM
@@ -2987,8 +3079,22 @@ out strError);
                         }
                         catch (Exception ex)
                         {
-                            strError = this.ItemName + "记录 '" + aPath[i] + "' 装载进入DOM时发生错误: " + ex.Message;
+                            strError = this.ItemName + "记录 '" + record.Path + "' 装载进入DOM时发生错误: " + ex.Message;
                             goto ERROR1;
+                        }
+
+                        // 2016/11/15
+                        if (procCheckRecord != null)
+                        {
+                            nRet = procCheckRecord(
+                                nStart + i,
+                                strOutputPath,
+                                domExist,
+                                timestamp,
+                                param,
+                                out strError);
+                            if (nRet != 0)
+                                return nRet;
                         }
 
                         /*
@@ -3011,20 +3117,23 @@ out strError);
                             strError = "拟删除的" + this.ItemName + "记录 '" + entityinfo.RecPath + "' 中" + strError + "(此种情况可能不限于这一条)，不能删除。因此全部删除操作均被放弃。";
                             goto ERROR1;
                         }
-
                     }
 
                     // CONTINUE:
                     entityinfos.Add(entityinfo);
+
+                    i++;
                 }
 
-                nStart += aPath.Count;
+                nStart += searchresults.Length;
                 if (nStart >= nResultCount)
+                    break;
+                if (nLimit != -1 && nStart >= nLimit)
                     break;
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -3078,8 +3187,6 @@ out strError);
                 strError = "目标书目记录路径 '" + strTargetBiblioRecPath + "' 不正确，无法获得记录号";
                 return -1;
             }
-
-
 
             List<string> newrecordpaths = new List<string>();
             List<string> oldrecordpaths = new List<string>();
@@ -3168,9 +3275,12 @@ out strError);
                 nOperCount++;
             }
 
+            // 2017/5/30
+            if (nOperCount == 0)
+                root.ParentNode.RemoveChild(root);
 
             return nOperCount;
-        ERROR1:
+            ERROR1:
             // Undo已经进行过的操作
             if (strAction == "copy")
             {
@@ -3181,7 +3291,7 @@ out strError);
                     string strTempError = "";
                     byte[] timestamp = null;
                     byte[] output_timestamp = null;
-                REDO_DELETE:
+                    REDO_DELETE:
                     long lRet = channel.DoDeleteRes(strRecPath,
                         timestamp,
                         out output_timestamp,
@@ -3273,7 +3383,7 @@ out strError);
                 byte[] output_timestamp = null;
                 int nRedoCount = 0;
 
-            REDO_DELETE:
+                REDO_DELETE:
 
                 // this.EntityLocks.LockForWrite(info.ItemBarcode);
                 try
@@ -3387,7 +3497,7 @@ out strError);
 
 
             return nDeletedCount;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -3421,6 +3531,8 @@ out strError);
             int nRet = SearchChildItems(channel,
                 strBiblioRecPath,
                 "check_circulation_info", // 在DeleteEntityInfo结构中*不*返回OldRecord内容
+                (DigitalPlatform.LibraryServer.LibraryApplication.Delegate_checkRecord)null,
+                null,
                 out lHitCount,
                 out entityinfos,
                 out strError);
@@ -3440,7 +3552,7 @@ out strError);
                 goto ERROR1;
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 

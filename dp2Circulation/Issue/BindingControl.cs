@@ -1,24 +1,23 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using System.Drawing.Drawing2D;
 using System.Diagnostics;
 using System.Xml;
 
 using System.Runtime.InteropServices;
+using System.Net;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
 using DigitalPlatform.Xml;
 using DigitalPlatform.IO;
 using DigitalPlatform.Text;
-using DigitalPlatform.CommonControl;
-using DigitalPlatform.Script;
+using DigitalPlatform.Drawing;
+using DigitalPlatform.DataMining;
+using DigitalPlatform.Marc;
 
 namespace dp2Circulation
 {
@@ -27,8 +26,17 @@ namespace dp2Circulation
     /// </summary>
     internal partial class BindingControl : Control
     {
+        // 2017/12/15
+        /// <summary>
+        /// 获得宏的值
+        /// </summary>
+        public event GetMacroValueHandler GetMacroValue = null;
+
+        // 2016/10/8
+        public event GetBiblioEventHandler GetBiblio = null;
+
         // 封面图像 图像管理器
-        public ImageManager ImageManager { get; set; }
+        // public ImageManager ImageManager { get; set; }
 
         public string Operator = "";    // 当前操作者帐户名
         public string LibraryCodeList = "";     // 当前用户管辖的馆代码列表
@@ -435,6 +443,34 @@ namespace dp2Circulation
             Program.MainForm._imageManager.GetObjectComplete += _imageManager_GetObjectComplete;
         }
 
+        void DisposeFonts()
+        {
+            if (this.m_fontLine != null)
+            {
+                this.m_fontLine.Dispose();
+                this.m_fontLine = null;
+            }
+
+            if (this.m_fontTitleSmall != null)
+            {
+                this.m_fontTitleSmall.Dispose();
+                this.m_fontTitleSmall = null;
+            }
+
+            if (this.m_fontTitleLarge != null)
+            {
+                this.m_fontTitleLarge.Dispose();
+                this.m_fontTitleLarge = null;
+            }
+
+            if (this.trackTip != null)
+            {
+                this.trackTip.Dispose();
+                this.trackTip = null;
+            }
+
+        }
+
         void _imageManager_GetObjectComplete(object sender, GetObjectCompleteEventArgs e)
         {
             if (e.TraceObject == null)
@@ -467,6 +503,17 @@ namespace dp2Circulation
         public void Clear()
         {
             this.Issues.Clear();
+        }
+
+        public const int SPLITTER_WIDTH = 4;
+
+        // 2016/10/24
+        void ChangeCoverImageColumnWidth(int delta)
+        {
+            this.m_nCoverImageWidth += delta;
+            if (this.m_nCoverImageWidth < SPLITTER_WIDTH)
+                this.m_nCoverImageWidth = SPLITTER_WIDTH;
+            AfterWidthChanged(true);
         }
 
         public void StartGetCoverImage(IssueBindingItem issue,
@@ -1614,11 +1661,19 @@ namespace dp2Circulation
 
                 this.Issues.Add(issue);
 
-                nRet = issue.InitialLoadItems(issue.PublishTime,
-                    out strError);
-                if (nRet == -1)
+                if (string.IsNullOrEmpty(issue.PublishTime) == false)
                 {
-                    strError = "CreateIssues() InitialLoadItems() error: " + strError;
+                    nRet = issue.InitialLoadItems(issue.PublishTime,
+                        out strError);
+                    if (nRet == -1)
+                    {
+                        strError = "CreateIssues() InitialLoadItems() error: " + strError;
+                        return -1;
+                    }
+                }
+                else
+                {
+                    strError = "数据错误。期记录 (参考ID 为 '" + issue.RefID + "') 中出版日期字段不应为空";
                     return -1;
                 }
             }
@@ -2231,7 +2286,7 @@ namespace dp2Circulation
                 if (String.IsNullOrEmpty(issue.PublishTime) == true)
                     continue;
 
-                string strYearPart = IssueUtil.GetYearPart(issue.PublishTime);
+                string strYearPart = dp2StringUtil.GetYearPart(issue.PublishTime);
 
                 // 检查出版时间
                 if (strYearPart != info.Year)
@@ -2724,6 +2779,11 @@ namespace dp2Circulation
             // parent_item --> member_items
             memberitems_table = new Hashtable();
 
+            // dup_table
+            // 用于检查一个册事项被重复用于多个合订册的 hashtable
+            // memberitem --> parent_item
+            Hashtable dup_table = new Hashtable();
+
             // 遍历合订册对象数组，建立成员对象数组
             for (int i = 0; i < parent_items.Count; i++)
             {
@@ -2760,7 +2820,6 @@ namespace dp2Circulation
                         i--;
                         continue;
                     }
-
 
                     bool bFailed = false;
                     string strFailMessage = "";
@@ -2927,6 +2986,19 @@ namespace dp2Circulation
                             // 没有publishtime，也无法安放
                         }
                     }
+                    else
+                    {
+                        // 2018/8/22
+                        // 检查 refid 是否被不同的合订册重复使用
+                        if (dup_table.ContainsKey(sub_item))
+                        {
+                            ItemBindingItem parent = dup_table[sub_item] as ItemBindingItem;
+                            // TODO: 需要增加一个获得事项描述名称的函数
+                            strError = "数据错误：成员册事项 '" + sub_item.RefID + "' 被重复用于合订册 '" + parent.RefID + "' 和 '" + parent_item.RefID + "'";
+                            return -1;
+                        }
+                        dup_table[sub_item] = parent_item;
+                    }
 
                     // sub_item.Binded = true; // 注：place阶段会设置的
                     sub_item.ParentItem = parent_item;
@@ -2942,7 +3014,7 @@ namespace dp2Circulation
                     // 使用后自然会被丢弃
                 }
 
-            PLACEMEMT:
+                PLACEMEMT:
                 memberitems_table[parent_item] = member_items;
             }
 
@@ -3275,6 +3347,22 @@ namespace dp2Circulation
                 CallNumberItem item = new CallNumberItem();
 
                 item.RecPath = cur_item.RecPath;
+
+#if REF
+                // 2017/4/6
+                if (string.IsNullOrEmpty(item.RecPath))
+                {
+                    if (string.IsNullOrEmpty(cur_item.RefID) == true)
+                    {
+                        // throw new Exception("cur_item 的 RefID 成员不应为空"); // TODO: 可以考虑增加健壮性，当时发生 RefID 字符串
+                        cur_item.RefID = Guid.NewGuid().ToString();
+                        cur_item.Changed = true;
+                    }
+
+                    item.RecPath = "@refID:" + cur_item.RefID;
+                }
+#endif
+
                 item.CallNumber = cur_item.AccessNo;
                 item.Location = cur_item.LocationString;
                 item.Barcode = cur_item.Barcode;
@@ -3640,7 +3728,6 @@ namespace dp2Circulation
         // 内容宽度要变化
         void AfterWidthChanged(bool bAlwaysInvalidate)
         {
-
             int nOldMaxCells = this.m_nMaxItemCountOfOneIssue;
             bool bChanged = false;
 
@@ -3814,7 +3901,6 @@ namespace dp2Circulation
 
         protected override void OnSizeChanged(System.EventArgs e)
         {
-
             try
             {
                 SetScrollBars(ScrollBarMember.Both);
@@ -3823,11 +3909,9 @@ namespace dp2Circulation
             {
             }
 
-
             // 如果client区域足够大，调整org，避免看不见某部分
             DocumentOrgY = DocumentOrgY;
             DocumentOrgX = DocumentOrgX;
-
 
             base.OnSizeChanged(e);
         }
@@ -3904,7 +3988,7 @@ namespace dp2Circulation
                 goto END1;
             }
 
-        END1:
+            END1:
             result.X = x;
             result.Y = y;
             result.Object = null;
@@ -3935,6 +4019,22 @@ namespace dp2Circulation
         void EndDraging()
         {
             this.m_bDraging = false;
+            this.Cursor = Cursors.Arrow;
+        }
+
+        bool _changingCoverImageWidth = false;
+        int _endX = 0;
+        int _startX = 0;
+
+        void BeginChangeCoverImageWidth()
+        {
+            _changingCoverImageWidth = true;
+            this.Cursor = Cursors.SizeWE;
+        }
+
+        void EndChangeCoverImageWidth()
+        {
+            _changingCoverImageWidth = false;
             this.Cursor = Cursors.Arrow;
         }
 
@@ -3978,6 +4078,14 @@ namespace dp2Circulation
                     // 拖拽对象，而不是rect围选
                     this.BeginDraging();
                     this.DragStartObject = (Cell)result.Object;
+                    goto END1;
+                }
+
+                if (result.AreaPortion == AreaPortion.CoverImageEdge)
+                {
+                    this.BeginChangeCoverImageWidth();
+                    this._startX = e.X;
+                    this._endX = e.X;
                     goto END1;
                 }
 
@@ -4070,7 +4178,7 @@ namespace dp2Circulation
                 // this.Update();
             }
 
-        END1:
+            END1:
             base.OnMouseDown(e);
         }
 
@@ -4132,13 +4240,16 @@ namespace dp2Circulation
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
         protected override void OnMouseHover(EventArgs e)
         {
             if (m_bRectSelecting == true)
+                return;
+
+            if (this._changingCoverImageWidth == true)
                 return;
 
             HitTestResult result = null;
@@ -4157,6 +4268,11 @@ namespace dp2Circulation
                 out result);
             if (result == null)
                 goto END1;
+
+            if (result.AreaPortion == AreaPortion.CoverImageEdge)
+                this.Cursor = Cursors.SizeWE;
+            else
+                this.Cursor = Cursors.Arrow;
 
             // 只关注Cell类型
             if (result.Object != null)
@@ -4223,47 +4339,14 @@ namespace dp2Circulation
                     {
                         result.Object = null;
                     }
-
-
                 }
-
             }
 
             if (this.m_bDraging == true)
                 return;
 
             this.HoverObject = (Cell)result.Object;
-
-            /*
-
-            // 仍在上次的hover对象上
-            if (this.m_lastHoverObj == result.Object)
-                goto END1;
-
-            // 在不同的hover对象上，以前的hover对象需要off
-            if (this.m_lastHoverObj != null)
-            {
-                if (this.m_lastHoverObj.m_bHover != false)
-                {
-                    this.m_lastHoverObj.m_bHover = false;
-                    UpdateObjectHover(this.m_lastHoverObj);
-                }
-            }
-
-            this.m_lastHoverObj = (Cell)result.Object;
-
-            if (this.m_lastHoverObj == null)
-                goto END1;
-
-            // 本次的hover对象需要on
-            if (this.m_lastHoverObj.m_bHover != true)
-            {
-                this.m_lastHoverObj.m_bHover = true;
-                UpdateObjectHover(this.m_lastHoverObj);
-            }
-            */
-
-        END1:
+            END1:
             base.OnMouseHover(e);
         }
 
@@ -4433,6 +4516,13 @@ namespace dp2Circulation
         {
             OnMouseHover(null);
 
+            if (this._changingCoverImageWidth == true
+                && e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+                this._endX = e.X;
+                goto END1;
+            }
+
             // 拖动时可以自动卷滚
             if (this.m_bDraging == true
                 && this.Capture == true
@@ -4540,7 +4630,6 @@ namespace dp2Circulation
                             // 重画
                             DrawSelectRect(true);
                         }
-
 
                         if (result.Object.GetType() != typeof(Cell)
                             && result.Object.GetType() != typeof(NullCell))
@@ -4728,7 +4817,7 @@ namespace dp2Circulation
                 }
             }
 
-        END1:
+            END1:
             // Call MyBase.OnMouseHover to activate the delegate.
             base.OnMouseMove(e);
         }
@@ -4742,7 +4831,16 @@ namespace dp2Circulation
 
             this.timer_dragScroll.Stop();
 
-            //
+            // 修改封面图像栏宽度的结束处理
+            if (this._changingCoverImageWidth == true
+                && e.Button == MouseButtons.Left)
+            {
+                this.EndChangeCoverImageWidth();
+                this._endX = e.X;
+                int delta = this._endX - this._startX;
+                ChangeCoverImageColumnWidth(delta);
+                goto END1;
+            }
 
             // 拖拽的结束处理
             if (this.m_bDraging == true
@@ -4807,7 +4905,7 @@ namespace dp2Circulation
                 goto END1;
             }
 
-        END1:
+            END1:
             base.OnMouseUp(e);
         }
 
@@ -4855,7 +4953,7 @@ namespace dp2Circulation
                 }
             }
 
-        END1:
+            END1:
             base.OnMouseDoubleClick(e);
         }
 
@@ -5336,7 +5434,6 @@ namespace dp2Circulation
             if (bHasMemberCell == false)
                 menuItem.Enabled = false;
             contextMenu.Items.Add(menuItem);
-
         }
 
         void BuildAcceptingMeneItems(ContextMenuStrip contextMenu)
@@ -5499,21 +5596,45 @@ namespace dp2Circulation
                 menuItem.Enabled = false;
             contextMenu.Items.Add(menuItem);
 
-            // 从剪贴板插入封面图像
-            menuItem = new ToolStripMenuItem(" 从剪贴板插入封面图像(&C)");
-            menuItem.Tag = point;
-            menuItem.Click += new EventHandler(menuItem_insertCoverImageFromClipboard_Click);
-            if (bHasIssueSelected == false)
-                menuItem.Enabled = false;
+            // 封面图像
+            menuItem = new ToolStripMenuItem(" 封面图像");
             contextMenu.Items.Add(menuItem);
 
-            // 从剪贴板插入封面图像
-            menuItem = new ToolStripMenuItem(" 删除封面图像(&C)");
-            menuItem.Tag = point;
-            menuItem.Click += new EventHandler(menuItem_deleteCoverImage_Click);
-            if (bHasIssueSelected == false)
-                menuItem.Enabled = false;
-            contextMenu.Items.Add(menuItem);
+            {
+                // 从剪贴板插入封面图像
+                ToolStripMenuItem subMenuItem = new ToolStripMenuItem();
+                subMenuItem = new ToolStripMenuItem(" 从剪贴板(&C) ...");
+                subMenuItem.Tag = point;
+                subMenuItem.Click += new EventHandler(menuItem_insertCoverImageFromClipboard_Click);
+                if (bHasIssueSelected == false)
+                    subMenuItem.Enabled = false;
+                menuItem.DropDown.Items.Add(subMenuItem);
+
+                // 从摄像头插入封面图像
+                subMenuItem = new ToolStripMenuItem(" 从摄像头(&A) ...");
+                subMenuItem.Tag = point;
+                subMenuItem.Click += new EventHandler(menuItem_insertCoverImageFromCamera_Click);
+                if (bHasIssueSelected == false)
+                    subMenuItem.Enabled = false;
+                menuItem.DropDown.Items.Add(subMenuItem);
+
+                // 从龙源期刊插入封面图像
+                subMenuItem = new ToolStripMenuItem(" 从龙源期刊(&A) ...");
+                subMenuItem.Tag = point;
+                subMenuItem.Click += new EventHandler(menuItem_insertCoverImageFromLongyuanQikan_Click);
+                if (bHasIssueSelected == false)
+                    subMenuItem.Enabled = false;
+                menuItem.DropDown.Items.Add(subMenuItem);
+
+
+                // 删除封面图像
+                subMenuItem = new ToolStripMenuItem(" 删除(&D)");
+                subMenuItem.Tag = point;
+                subMenuItem.Click += new EventHandler(menuItem_deleteCoverImage_Click);
+                if (bHasIssueSelected == false)
+                    subMenuItem.Enabled = false;
+                menuItem.DropDown.Items.Add(subMenuItem);
+            }
 
             // 切换期布局
             menuItem = new ToolStripMenuItem(" 切换布局(&S)");
@@ -5657,7 +5778,7 @@ namespace dp2Circulation
 
             this.AfterWidthChanged(true);   // content宽度可能改变
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -5742,7 +5863,7 @@ namespace dp2Circulation
 
             this.UpdateObjects(changed_cells);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -5826,7 +5947,7 @@ namespace dp2Circulation
 
             this.UpdateObjects(changed_cells);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6045,7 +6166,7 @@ namespace dp2Circulation
 
             this.Invalidate();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
 
         }
@@ -6085,7 +6206,7 @@ namespace dp2Circulation
             e1.Action = "focus";
             this.EditArea(this, e1);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6197,7 +6318,7 @@ namespace dp2Circulation
             // 修改全部下属格子的volume string和publish time
             string strNewVolumeString =
     VolumeInfo.BuildItemVolumeString(
-    IssueUtil.GetYearPart(issue.PublishTime),
+    dp2StringUtil.GetYearPart(issue.PublishTime),
     issue.Issue,
 issue.Zong,
 issue.Volume);
@@ -6251,7 +6372,7 @@ issue.Volume);
 
             this.AfterWidthChanged(true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6424,7 +6545,7 @@ issue.Volume);
 
             this.AfterWidthChanged(true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6460,7 +6581,7 @@ issue.Volume);
             // UpdateIssues(changed_issues);
             this.AfterWidthChanged(true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6658,7 +6779,7 @@ issue.Volume);
             // UpdateIssues(changed_issues);
             this.AfterWidthChanged(true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -6700,7 +6821,7 @@ issue.Volume);
 
             if (ref_issue == null)
                 ref_issue = GetTailIssue();
-        REDO:
+            REDO:
             // 找到最后一期。如果找不到，则先出现对话框询问第一期
             if (ref_issue == null)
             {
@@ -6737,7 +6858,7 @@ issue.Volume);
                 dlg.EditComment = "当前订购时间范围为 " + strStartDate + "-" + strEndDate;   // 显示可用的订购时间范围
                 dlg.StartPosition = FormStartPosition.CenterScreen;
 
-            REDO_INPUT:
+                REDO_INPUT:
                 dlg.ShowDialog(this);
 
                 if (dlg.DialogResult != DialogResult.OK)
@@ -6917,8 +7038,8 @@ issue.Volume);
                         strNextIssue = "1";
                         // 2010/3/16
                         // 如果预测的下一期出版时间不是参考期的后一年的时间，则需要强制修改
-                        string strNextYear = IssueUtil.GetYearPart(strNextPublishTime);
-                        string strRefYear = IssueUtil.GetYearPart(ref_issue.PublishTime);
+                        string strNextYear = dp2StringUtil.GetYearPart(strNextPublishTime);
+                        string strRefYear = dp2StringUtil.GetYearPart(ref_issue.PublishTime);
 
                         // 2012/5/14
                         // 如果参考期所在年份的各期之间已经跨年，则不必作修正
@@ -6927,7 +7048,7 @@ issue.Volume);
                         IssueBindingItem year_first_issue = GetYearFirstIssue(ref_issue);
                         if (year_first_issue != null)
                         {
-                            strRefFirstYear = IssueUtil.GetYearPart(year_first_issue.PublishTime);
+                            strRefFirstYear = dp2StringUtil.GetYearPart(year_first_issue.PublishTime);
                         }
 
                         if (string.Compare(strNextYear, strRefYear) <= 0
@@ -7079,7 +7200,7 @@ issue.Volume);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7277,7 +7398,7 @@ issue.Volume);
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7456,8 +7577,8 @@ issue.Volume);
 
                     // 2010/3/16
                     // 如果预测的下一期出版时间不是参考期的后一年的时间，则需要强制修改
-                    string strNextYear = IssueUtil.GetYearPart(strNextPublishTime);
-                    string strRefYear = IssueUtil.GetYearPart(ref_issue.PublishTime);
+                    string strNextYear = dp2StringUtil.GetYearPart(strNextPublishTime);
+                    string strRefYear = dp2StringUtil.GetYearPart(ref_issue.PublishTime);
 
                     // 2012/5/14
                     // 如果参考期所在年份的各期之间已经跨年，则不必作修正
@@ -7466,7 +7587,7 @@ issue.Volume);
                     IssueBindingItem year_first_issue = GetYearFirstIssue(ref_issue);
                     if (year_first_issue != null)
                     {
-                        strRefFirstYear = IssueUtil.GetYearPart(year_first_issue.PublishTime);
+                        strRefFirstYear = dp2StringUtil.GetYearPart(year_first_issue.PublishTime);
                     }
 
                     if (string.Compare(strNextYear, strRefYear) <= 0
@@ -7606,7 +7727,7 @@ issue.Volume);
                 if (String.IsNullOrEmpty(issue.PublishTime) == true)
                     continue;
                 // TODO: 注意期号不连续的情况
-                if (issue.Issue == "1")
+                if (IsFirstNumber(issue.Issue))
                     first = issue;
                 if (issue == ref_issue)
                 {
@@ -7619,6 +7740,14 @@ issue.Volume);
                 return null;
 
             return first;
+        }
+
+        static bool IsFirstNumber(string strNumber)
+        {
+            strNumber = strNumber.TrimStart(new char[] { ' ', '0' });
+            if (strNumber == "1")
+                return true;
+            return false;
         }
 
         // 查重
@@ -8133,7 +8262,7 @@ issue.Volume);
                 return -1;
             }
 
-            string strCurYear = IssueUtil.GetYearPart(strPublishTime);
+            string strCurYear = dp2StringUtil.GetYearPart(strPublishTime);
 
             for (int i = 0; i < this.Issues.Count; i++)
             {
@@ -8156,7 +8285,7 @@ issue.Volume);
 
                 // 在当年范围内检查当年期号、在其他年范围内检查卷号
                 {
-                    string strYear = IssueUtil.GetYearPart(issue.PublishTime);
+                    string strYear = dp2StringUtil.GetYearPart(issue.PublishTime);
                     if (strYear == strCurYear)
                     {
                         if (strIssue == issue.Issue
@@ -8982,7 +9111,7 @@ MessageBoxDefaultButton.Button2);
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9110,7 +9239,7 @@ MessageBoxDefaultButton.Button2);
                 }
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9153,6 +9282,84 @@ MessageBoxDefaultButton.Button2);
             }
         }
 
+        void menuItem_insertCoverImageFromCamera_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            List<IssueBindingItem> selected_issues = new List<IssueBindingItem>();
+            foreach (IssueBindingItem issue in this.SelectedIssues)
+            {
+                // 跳过自由期
+                if (String.IsNullOrEmpty(issue.PublishTime) == true)
+                    continue;
+
+                selected_issues.Add(issue);
+            }
+
+            Program.MainForm.DisableCamera();
+            try
+            {
+                int i = 0;
+                foreach (IssueBindingItem issue in selected_issues)
+                {
+                    ImageInfo info = new ImageInfo();
+
+                    try
+                    {
+                        // TODO: 为对话框增加关于即将扫描的期，期号的说明提示
+
+                        // 注： new CameraClipDialog() 可能会抛出异常
+                        using (CameraClipDialog dlg = new CameraClipDialog())
+                        {
+                            dlg.Font = this.Font;
+
+                            dlg.CurrentCamera = Program.MainForm.AppInfo.GetString(
+                                "bindingControl",
+                                "current_camera",
+                                "");
+
+                            Program.MainForm.AppInfo.LinkFormState(dlg, "CameraClipDialog_state");
+                            dlg.ShowDialog(this);
+                            Program.MainForm.AppInfo.UnlinkFormState(dlg);
+
+                            Program.MainForm.AppInfo.SetString(
+                                "bindingControl",
+                                "current_camera",
+                                dlg.CurrentCamera);
+
+                            if (dlg.DialogResult == System.Windows.Forms.DialogResult.Cancel)
+                                return;
+
+                            info = dlg.ImageInfo;
+                            if (Program.MainForm.SaveOriginCoverImage == false)
+                                info.ClearBackupImage();
+                        }
+
+                        GC.Collect();
+
+                        if (issue.SetCoverImage(info, out strError) == -1)
+                            goto ERROR1;
+                    }
+                    finally
+                    {
+                        if (info != null)
+                            info.Dispose();
+                    }
+
+                    i++;
+                }
+            }
+            finally
+            {
+                Application.DoEvents();
+
+                Program.MainForm.EnableCamera();
+            }
+
+            return;
+            ERROR1:
+            MessageBox.Show(this, strError);
+        }
 
         void menuItem_insertCoverImageFromClipboard_Click(object sender, EventArgs e)
         {
@@ -9168,6 +9375,15 @@ MessageBoxDefaultButton.Button2);
                 selected_issues.Add(issue);
             }
 
+            // 从剪贴板中取得图像对象
+            List<Image> images = ImageUtil.GetImagesFromClipboard(out strError);
+            if (images == null)
+            {
+                strError = "。无法创建封面图像";
+                goto ERROR1;
+            }
+
+#if NO
             // 从剪贴板中取得图像对象
             List<Image> images = new List<Image>();
             IDataObject obj1 = Clipboard.GetDataObject();
@@ -9196,6 +9412,7 @@ MessageBoxDefaultButton.Button2);
                 strError = "当前 Windows 剪贴板中没有图形对象。无法创建封面图像";
                 goto ERROR1;
             }
+#endif
 
             {
                 int i = 0;
@@ -9204,7 +9421,9 @@ MessageBoxDefaultButton.Button2);
                     if (i >= images.Count)
                         break;
                     Image image = images[i];
-                    if (issue.SetCoverImage(image, out strError) == -1)
+                    ImageInfo info = new ImageInfo();
+                    info.Image = image;
+                    if (issue.SetCoverImage(info, out strError) == -1)
                         goto ERROR1;
 
                     i++;
@@ -9212,8 +9431,165 @@ MessageBoxDefaultButton.Button2);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
+        }
+
+        void menuItem_insertCoverImageFromLongyuanQikan_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            List<IssueBindingItem> selected_issues = new List<IssueBindingItem>();
+            foreach (IssueBindingItem issue in this.SelectedIssues)
+            {
+                // 跳过自由期
+                if (String.IsNullOrEmpty(issue.PublishTime) == true)
+                    continue;
+
+                selected_issues.Add(issue);
+            }
+
+#if NO
+            // 从剪贴板中取得图像对象
+            List<Image> images = null;
+            if (images == null)
+            {
+                strError = "。无法创建封面图像";
+                goto ERROR1;
+            }
+#endif
+            string strISSN = GetTitle();
+            if (string.IsNullOrEmpty(strISSN))
+            {
+                strError = "本刊书目记录中缺乏 ISSN 号，因此无法获取封面图像";
+                goto ERROR1;
+            }
+
+            {
+                CookieContainer cookie = new CookieContainer();
+                int i = 0;
+                foreach (IssueBindingItem issue in selected_issues)
+                {
+#if NO
+                    string strImageUrl = "";
+                    int nRet = LongyuanQikan.GetCoverImageUrl(
+                        this,
+                        strISSN,
+                        dp2StringUtil.GetYearPart(issue.PublishTime),
+                        issue.Issue,
+                        ref cookie,
+                        out strImageUrl,
+                        out strError);
+                    if (nRet == -1)
+                        goto ERROR1;
+#endif
+                    int nRet = LongyuanQikan.GetCoverImageToClipboard(
+    this,
+    strISSN,
+    dp2StringUtil.GetYearPart(issue.PublishTime),
+    issue.Issue,
+    out strError);
+                    if (nRet == -1)
+                        goto ERROR1;
+
+#if NO
+                   string strLocalFileName = Path.GetTempFileName();
+                    try
+                    {
+                        // return:
+                        //      -1  出错
+                        //      0   没有找到
+                        //      1   找到
+                        nRet = LongyuanQikan.DownloadImageFile(strImageUrl,
+                            strLocalFileName,
+                            ref cookie,
+                            out strError);
+                        if (nRet == -1)
+                            goto ERROR1;
+                        if (nRet == 0)
+                        {
+                            strError = "图像 " + strImageUrl + " 没有找到";
+                            goto ERROR1;
+                        }
+
+                        using (Image image = Image.FromFile(strLocalFileName))
+                        {
+                            if (issue.SetCoverImage(image, out strError) == -1)
+                                goto ERROR1;
+                        }
+                    }
+                    finally
+                    {
+                        File.Delete(strLocalFileName);
+                    }
+#endif
+                    // 从剪贴板中取得图像对象
+                    List<Image> images = ImageUtil.GetImagesFromClipboard(out strError);
+                    if (images == null)
+                    {
+                        strError = "。无法创建封面图像";
+                        goto ERROR1;
+                    }
+                    if (images.Count > 0)
+                    {
+                        try
+                        {
+                            ImageInfo info = new ImageInfo();
+                            info.Image = images[0];
+                            if (issue.SetCoverImage(info, out strError) == -1)
+                                goto ERROR1;
+                        }
+                        finally
+                        {
+                            foreach (Image image in images)
+                            {
+                                image.Dispose();
+                            }
+                        }
+                    }
+                    i++;
+                }
+            }
+
+            return;
+            ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        string GetIssn()
+        {
+            var func = this.GetBiblio;
+            if (func != null)
+            {
+                GetBiblioEventArgs e = new GetBiblioEventArgs();
+                func(this, e);
+                if (string.IsNullOrEmpty(e.Data))
+                    return "";
+                MarcRecord record = new MarcRecord(e.Data);
+                if (e.Syntax == "unimarc")
+                    return record.select("field[@name='011']/subfield[@name='a']").FirstContent;
+                if (e.Syntax == "usmarc")
+                    return record.select("field[@name='020']/subfield[@name='a']").FirstContent;
+            }
+            return "";
+        }
+
+        string GetTitle()
+        {
+            var func = this.GetBiblio;
+            if (func != null)
+            {
+                GetBiblioEventArgs e = new GetBiblioEventArgs();
+                func(this, e);
+                if (string.IsNullOrEmpty(e.Data))
+                    return "";
+                MarcRecord record = new MarcRecord(e.Data);
+                if (e.Syntax == "unimarc")
+                    return record.select("field[@name='200']/subfield[@name='a']").FirstContent;
+                if (e.Syntax == "usmarc")
+                    return record.select("field[@name='245']/subfield[@name='a']").FirstContent;
+            }
+            return "";
         }
 
         // 恢复若干个期记录
@@ -9295,7 +9671,7 @@ MessageBoxDefaultButton.Button2);
             // this.m_lContentHeight = this.m_nCellHeight * this.Issues.Count;
             this.AfterWidthChanged(true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9428,7 +9804,7 @@ MessageBoxDefaultButton.Button2);
             // this.m_lContentHeight = this.m_nCellHeight * this.Issues.Count;
             this.AfterWidthChanged(true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9511,7 +9887,7 @@ MessageBoxDefaultButton.Button2);
             VerifyAll();
 #endif
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9540,7 +9916,7 @@ MessageBoxDefaultButton.Button2);
                 goto ERROR1;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9569,7 +9945,7 @@ MessageBoxDefaultButton.Button2);
                 goto ERROR1;
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9623,7 +9999,7 @@ MessageBoxDefaultButton.Button2);
             this.EnsureVisible(cell);  // 确保滚入视野
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -10100,10 +10476,10 @@ MessageBoxDefaultButton.Button2);
                     }
                 }
 
-            DODELETE:
+                DODELETE:
                 // 其他单册(订购信息管辖外的单册)，删除
                 issue.RemoveSingleIndex(nCol);
-            CONTINUE:
+                CONTINUE:
                 this.m_bChanged = true;
             }
 
@@ -10182,7 +10558,7 @@ MessageBoxDefaultButton.Button2);
 
             this.AfterWidthChanged(true);
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -10362,11 +10738,11 @@ MessageBoxDefaultButton.Button2);
                     }
                 }
 
-#if DEBUG
                 Cell parent_cell = parent_item.ContainerCell;
                 if (parent_cell != null)
+                {
                     Debug.Assert(parent_cell.IsMember == false, "");
-#endif
+                }
 
                 parent_item.MemberCells.Clear();
 
@@ -10457,7 +10833,7 @@ MessageBoxDefaultButton.Button2);
 
             this.Invalidate();
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -10654,6 +11030,9 @@ MessageBoxDefaultButton.Button2);
                 if (source_parent == null && target_parent != null)
                 {
                     // 将若干单册加入一个合订册
+                    // return:
+                    //      -1  出错。注意函数返回后，parent 格子需要及时清除
+                    //      0   成功
                     nRet = AddToBinding(source_cells,
                         target_parent,
                         out strError);
@@ -10806,6 +11185,9 @@ MessageBoxDefaultButton.Button2);
 #endif
 
                     // 将若干单册加入一个合订册
+                    // return:
+                    //      -1  出错。注意函数返回后，parent 格子需要及时清除
+                    //      0   成功
                     nRet = AddToBinding(source_cells,
                         target_parent,
                         out strError);
@@ -11036,7 +11418,7 @@ MessageBoxDefaultButton.Button2);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -11077,13 +11459,13 @@ MessageBoxDefaultButton.Button2);
 
             string strOldVolumeString =
                 VolumeInfo.BuildItemVolumeString(
-                IssueUtil.GetYearPart(source_issue.PublishTime),
+                dp2StringUtil.GetYearPart(source_issue.PublishTime),
                 source_issue.Issue,
                         source_issue.Zong,
                         source_issue.Volume);
             string strNewVolumeString =
                 VolumeInfo.BuildItemVolumeString(
-                IssueUtil.GetYearPart(target_issue.PublishTime),
+                dp2StringUtil.GetYearPart(target_issue.PublishTime),
                 target_issue.Issue,
             target_issue.Zong,
             target_issue.Volume);
@@ -11293,6 +11675,9 @@ MessageBoxDefaultButton.Button2);
         }
 
         // 将若干单册加入一个合订册
+        // return:
+        //      -1  出错。注意函数返回后，parent 格子需要及时清除
+        //      0   成功
         int AddToBinding(List<Cell> singles,
             Cell parent,
             out string strError)
@@ -11342,6 +11727,10 @@ MessageBoxDefaultButton.Button2);
                 }
             }
 
+#if NO
+            // 不允许进行合订的册状态
+            string[] states = new string[] { "注销", "丢失" };
+
             // 检查单册，“注销”状态的不能加入合订范围
             // 预测状态的不能加入合订范围
             for (int i = 0; i < singles.Count; i++)
@@ -11364,10 +11753,13 @@ MessageBoxDefaultButton.Button2);
                 if (single.item == null)
                     continue;
 
-                if (StringUtil.IsInList("注销", single.item.State) == true)
+                foreach (string state in states)
                 {
-                    strError = "出版日期为 '" + single.item.PublishTime + "' 的单册记录状态为“注销”，不能加入合订范围";
-                    return -1;
+                    if (StringUtil.IsInList(state, single.item.State) == true)   // "注销"
+                    {
+                        strError = "出版日期为 '" + single.item.PublishTime + "' 的单册记录状态为“" + state + "”，不能加入合订范围";
+                        return -1;
+                    }
                 }
 
                 if (String.IsNullOrEmpty(single.item.Borrower) == false)
@@ -11382,6 +11774,8 @@ MessageBoxDefaultButton.Button2);
                     return -1;
                 }
             }
+
+#endif
 
             int nCol = -1;
 
@@ -11808,7 +12202,7 @@ MessageBoxDefaultButton.Button2);
                     }
                 }
 
-            END1:
+                END1:
                 if (bBackSetParent == true)
                     parent_cell.item.AfterMembersChanged();
                 return;
@@ -12179,6 +12573,7 @@ MessageBoxDefaultButton.Button2);
         }
          * */
 
+        // 检查参与装订的册。检查应该尽量在这里进行，以避免创建合订册格子以后，再检查成员格子发现不合格去删除合订册格子
         // 检查是否一期只有一个册。期可以不连续
         // 检查：一期只能有一个册参与。也就是说，每个册的Container不能相同
         // return:
@@ -12202,14 +12597,14 @@ MessageBoxDefaultButton.Button2);
                 if (cell.item != null
                     && StringUtil.IsInList("注销", cell.item.State) == true)
                 {
-                    strError = "出版日期为 '" + cell.item.PublishTime + "' 的单册记录状态为“注销”，不能加入合订范围";
+                    strError = "出版日期为 '" + cell.item.PublishTime + "' 的单册记录状态为“注销”，不允许加入合订范围";
                     return 1;
                 }
 
                 if (cell.item != null
     && String.IsNullOrEmpty(cell.item.Borrower) == false)
                 {
-                    strError = "出版日期为 '" + cell.item.PublishTime + "' 的单册记录目前处于被借阅状态，不能加入合订范围";
+                    strError = "出版日期为 '" + cell.item.PublishTime + "' 的单册记录目前处于被借阅状态，不允许加入合订范围";
                     return 1;
                 }
 
@@ -12231,6 +12626,78 @@ MessageBoxDefaultButton.Button2);
                         strError = "有同属于一期 (" + cell.Container.PublishTime + ") 的多册";
                         return 1;
                     }
+                }
+            }
+
+            // 检查参与合订的册的状态
+            // return:
+            //      -1  出错
+            //      0   检查没有发现问题
+            //      1   检查发现有问题
+            int nRet = CheckBindingMemberStates(cells,
+                out strError);
+            if (nRet == -1)
+                return -1;
+            if (nRet == 1)
+                return 1;
+            return 0;
+        }
+
+
+        // 检查参与合订的册的状态
+        // return:
+        //      -1  出错
+        //      0   检查没有发现问题
+        //      1   检查发现有问题
+        static int CheckBindingMemberStates(List<Cell> singles,
+            out string strError)
+        {
+            strError = "";
+
+            // 不允许进行合订的册状态
+            string[] states = new string[] { "注销", "丢失" };
+
+            // 检查单册，“注销”状态的不允许加入合订范围
+            // 预测状态的不能加入合订范围
+            for (int i = 0; i < singles.Count; i++)
+            {
+                Cell single = singles[i];
+                Debug.Assert(single != null, "");
+
+                if (single is GroupCell)
+                {
+                    strError = "订购组首尾格子不能参与合订";
+                    return 1;
+                }
+
+                if (String.IsNullOrEmpty(single.Container.PublishTime) == true)
+                {
+                    strError = "来自于自由期的格子不允许加入合订范围";
+                    return 1;
+                }
+
+                if (single.item == null)
+                    continue;
+
+                foreach (string state in states)
+                {
+                    if (StringUtil.IsInList(state, single.item.State) == true)   // "注销"
+                    {
+                        strError = "出版日期为 '" + single.item.PublishTime + "' 的单册记录状态为“" + state + "”，不允许加入合订范围";
+                        return 1;
+                    }
+                }
+
+                if (String.IsNullOrEmpty(single.item.Borrower) == false)
+                {
+                    strError = "出版日期为 '" + single.item.PublishTime + "' 的单册记录目前处于被借阅状态，不允许加入合订范围";
+                    return 1;
+                }
+
+                if (single.item.Calculated == true)
+                {
+                    strError = "出版日期为 '" + single.item.PublishTime + "' 的格子为预测状态，不允许加入合订范围";
+                    return 1;
                 }
             }
 
@@ -12951,7 +13418,6 @@ MessageBoxDefaultButton.Button2);
             // 以前就存在的属于自由期的册，用于直接作为合订册对象
             List<Cell> target_cells = new List<Cell>();
 
-
             List<Cell> selected_cells = this.SelectedCells;
             if (selected_cells.Count == 0)
             {
@@ -13006,8 +13472,6 @@ MessageBoxDefaultButton.Button2);
                         }
                     }
 
-
-
                     Debug.Assert(cell.item.IsParent == true, "");
 
                     target_cells.Add(cell);
@@ -13036,8 +13500,6 @@ MessageBoxDefaultButton.Button2);
                     strError = "预测格子不能参与合订";
                     goto ERROR1;
                 }
-
-
 
                 if (cell.IsMember == true)
                     binded_cells.Add(cell);
@@ -13145,12 +13607,22 @@ MessageBoxDefaultButton.Button2);
             parent_cell = null;
             if (target_cells.Count == 0)
             {
-
                 ItemBindingItem parent_item = new ItemBindingItem();
                 this.ParentItems.Add(parent_item);
                 bAddToParentItems = true;
+
+                // 2018/6/5
+                // 设置册记录默认值
+                string strXml = "<root />";
+                nRet = this.SetItemDefaultValues("quickRegister_default",
+                    true,
+                    ref strXml,
+                    out strError);
+                if (nRet == -1)
+                    goto ERROR1;
+
                 // 初始化册信息
-                nRet = parent_item.Initial("<root />",
+                nRet = parent_item.Initial(strXml,
                     out strError);
                 if (nRet == -1)
                     goto ERROR1;
@@ -13213,13 +13685,12 @@ MessageBoxDefaultButton.Button2);
                 goto ERROR1;
             }
 
-            string strPreferredLocationString = "";
-            // 检查官仓地点字符串是否在当前用户管辖范围内
+            // 检查馆藏地点字符串是否在当前用户管辖范围内
             // return:
             //      0   在当前用户管辖范围内，不需要修改
             //      1   不在当前用户管辖范围内，需要修改。strPreferredLocationString中已经设置了一个值，但只到了分馆代码一级，库房名称为空
             nRet = CheckLocationString(parent_cell.item.LocationString,
-            out strPreferredLocationString,
+            out string strPreferredLocationString,
             out strError);
             if (nRet == -1)
                 goto ERROR1;
@@ -13271,7 +13742,7 @@ MessageBoxDefaultButton.Button2);
             VerifyAll();
 #endif
             return;
-        ERROR1:
+            ERROR1:
             // 复原
             if (bAddToParentItems == true)
             {
@@ -13332,10 +13803,15 @@ MessageBoxDefaultButton.Button2);
             if (this.AppInfo == null)
                 return "";
 
+#if NO
             string strDefault = this.AppInfo.GetString(
                 "binding_form",
                 "binding_batchno",
                 "");
+#endif
+            // 2017/12/20 改为从默认值模板中获得
+            string strDefault = EntityFormOptionDlg.GetFieldValue("quickRegister_default",
+    "batchNo");
 
             if (this.m_bBindingBatchNoInputed == true)
                 return strDefault;
@@ -13349,16 +13825,22 @@ MessageBoxDefaultButton.Button2);
 
             if (strResult != strDefault)
             {
+#if NO
                 this.AppInfo.SetString(
                 "binding_form",
                 "binding_batchno",
                 strResult);
+#endif
+                EntityFormOptionDlg.SetFieldValue("quickRegister_default",
+    "batchNo",
+    strResult);
             }
 
             this.m_bBindingBatchNoInputed = true;
             return strResult;
         }
 
+#if NO
         /// <summary>
         /// 验收批次号
         /// </summary>
@@ -13384,6 +13866,7 @@ MessageBoxDefaultButton.Button2);
                 }
             }
         }
+#endif
 
         /// <summary>
         /// 验收批次号是否已经在界面被输入了
@@ -13406,7 +13889,12 @@ MessageBoxDefaultButton.Button2);
             if (this.AppInfo == null)
                 return "";
 
+#if NO
             string strDefault = this.AcceptBatchNo;
+#endif
+            // 2017/12/20 改为从默认值模板中获得
+            string strDefault = EntityFormOptionDlg.GetFieldValue("quickRegister_default",
+    "batchNo");
 
             if (this.AcceptBatchNoInputed == true)
                 return strDefault;
@@ -13420,8 +13908,13 @@ MessageBoxDefaultButton.Button2);
 
             if (strResult != strDefault)
             {
+#if NO
                 // 记忆
                 this.AcceptBatchNo = strResult;
+#endif
+                EntityFormOptionDlg.SetFieldValue("quickRegister_default",
+"batchNo",
+strResult);
             }
 
             this.AcceptBatchNoInputed = true;
@@ -14039,7 +14532,7 @@ Color.FromArgb(100, color)
                 return;
 
             // off先前的focus对象
-        OFF_OLD:
+            OFF_OLD:
             if (this.m_lastFocusObj != null
                 && this.m_lastFocusObj.m_bFocus == true)
             {
@@ -14288,7 +14781,8 @@ Color.FromArgb(100, color)
 
                 return EnsureVisible(rectCell, rectCaret);
             }
-            else if (result.Object is Cell)
+            else if (result.Object is Cell
+                || result.Object is IssueBindingItem)   // 2016/8/31
             {
                 RectangleF rectUpdate = GetViewRect(result.Object);
 
@@ -14308,7 +14802,7 @@ Color.FromArgb(100, color)
             }
             else
             {
-                throw new Exception("尚不支持IssueBindingItem/Cell/NullCell以外的其他类型");
+                throw new Exception("尚不支持IssueBindingItem/Cell/NullCell以外的其他类型 " + result.Object.GetType().ToString());
             }
 
         }
@@ -14836,8 +15330,8 @@ Color.FromArgb(100, color)
                 return true;
 
             IssueBindingItem prev_issue = this.Issues[index - 1];
-            string strThisYear = IssueUtil.GetYearPart(issue.PublishTime);
-            string strPrevYear = IssueUtil.GetYearPart(prev_issue.PublishTime);
+            string strThisYear = dp2StringUtil.GetYearPart(issue.PublishTime);
+            string strPrevYear = dp2StringUtil.GetYearPart(prev_issue.PublishTime);
 
             if (String.Compare(strThisYear, strPrevYear) > 0)
                 return true;
@@ -14891,7 +15385,7 @@ Color.FromArgb(100, color)
                     goto CONTINUE;
 
                 issue.Paint(i, (int)x, (int)y, e);
-            CONTINUE:
+                CONTINUE:
                 y += lIssueHeight;
                 //  lHeight += lIssueHeight;
             }
@@ -14961,6 +15455,7 @@ Color.FromArgb(100, color)
                 {
                     Pen penBorder = null;
                     Brush brushInner = null;
+                    Brush brush = null;
                     try
                     {
                         if (CheckProcessingState(parent_item) == false)
@@ -14968,15 +15463,21 @@ Color.FromArgb(100, color)
                             colorBorder = this.FixedBorderColor;
                             penBorder = new Pen(Color.FromArgb(150, colorBorder),
                                 (float)4);  // 固化
+
+                            Debug.Assert(brushInner == null, "");   // 2017/11/10
+
                             brushInner = new SolidBrush(Color.FromArgb(30, Color.Green));
                         }
                         else
                         {
                             colorBorder = this.NewlyBorderColor;
-                            Brush brush = new HatchBrush(HatchStyle.WideDownwardDiagonal,
+                            Debug.Assert(brush == null, "");  // 2017/11/10
+                            brush = new HatchBrush(HatchStyle.WideDownwardDiagonal,
                                 Color.FromArgb(0, 255, 255, 255),
                                 Color.FromArgb(255, colorBorder)
                                 );    // back
+                            // Dispose() penBorder 时是否也会 Dispose() brush?
+                            Debug.Assert(penBorder == null, "");  // 2017/11/10
                             penBorder = new Pen(brush,
                                 (float)4);  // 可修改
                             // penBorder.Alignment = PenAlignment.
@@ -15040,6 +15541,8 @@ Color.FromArgb(100, color)
                             penBorder.Dispose();
                         if (brushInner != null)
                             brushInner.Dispose();
+                        if (brush != null)  // 2017/12/7 修改
+                            brush.Dispose();
                     }
                 }
 
@@ -15667,6 +16170,138 @@ Color.FromArgb(100, color)
             // this.mouseMoveArgs
             this.OnMouseMove(e1);
         }
+
+        internal string DoGetMacroValue(string strMacroName)
+        {
+            if (this.GetMacroValue != null)
+            {
+                GetMacroValueEventArgs e = new GetMacroValueEventArgs();
+                e.MacroName = strMacroName;
+                this.GetMacroValue(this, e);
+
+                return e.MacroValue;
+            }
+
+            return null;
+        }
+
+        // 为 strXml 中设置默认的字段值
+        public int SetItemDefaultValues(
+    string strCfgEntry,
+    bool bGetMacroValue,
+    ref string strXml,
+    // BookItem item,
+    out string strError)
+        {
+            strError = "";
+
+            XmlDocument old_dom = new XmlDocument();
+            try
+            {
+                old_dom.LoadXml(string.IsNullOrEmpty(strXml) ? "<root />" : strXml);
+            }
+            catch (Exception ex)
+            {
+                strError = "原有 XML 记录装入 DOM 时出错: " + ex.Message;
+                return -1;
+            }
+
+            string strNewDefault = Program.MainForm.AppInfo.GetString(
+    "entityform_optiondlg",
+    strCfgEntry,
+    "<root />");
+
+            // 字符串strNewDefault包含了一个XML记录，里面相当于一个记录的原貌。
+            // 但是部分字段的值可能为"@"引导，表示这是一个宏命令。
+            // 需要把这些宏兑现后，再正式给控件
+            XmlDocument new_dom = new XmlDocument();
+            try
+            {
+                new_dom.LoadXml(strNewDefault);
+            }
+            catch (Exception ex)
+            {
+                strError = "默认值定义 XML 记录装入 DOM 时出错: " + ex.Message;
+                return -1;
+            }
+
+            // 合并新旧记录的第一级元素
+            // 合并新旧记录
+            // domExist 中的非空元素内容保留，添加 domNew 中的其余元素
+            int nRet = MergeTwoEntityXml(old_dom,
+                new_dom,
+                out string strMergedXml,
+                out strError);
+            if (nRet == -1)
+                return -1;
+
+            new_dom.LoadXml(strMergedXml);
+
+            if (bGetMacroValue == true)
+            {
+                // 遍历所有一级元素的内容
+                XmlNodeList nodes = new_dom.DocumentElement.SelectNodes("*");
+                for (int i = 0; i < nodes.Count; i++)
+                {
+                    string strText = nodes[i].InnerText;
+                    if (strText.Length > 0
+                        && (strText[0] == '@' || strText.IndexOf("%") != -1))
+                    {
+                        // 兑现宏
+                        nodes[i].InnerText = DoGetMacroValue(strText);
+                    }
+                }
+            }
+
+            DomUtil.RemoveEmptyElements(new_dom.DocumentElement);
+
+            strXml = new_dom.OuterXml;
+#if NO
+            strNewDefault = dom.OuterXml;
+
+            int nRet = item.SetData("",
+                strNewDefault,
+                null,
+                out strError);
+            if (nRet == -1)
+                return -1;
+
+            item.Parent = "";
+            item.RecPath = "";
+#endif
+            return 0;
+        }
+
+        // 合并新旧记录
+        // domExist 中的非空元素内容保留，添加 domNew 中的其余元素
+        static int MergeTwoEntityXml(XmlDocument domExist,
+            XmlDocument domNew,
+            out string strMergedXml,
+            out string strError)
+        {
+            strMergedXml = "";
+            strError = "";
+
+            XmlNodeList nodes = domExist.DocumentElement.SelectNodes("*");
+
+            // 算法的要点是, 把"新记录"中的要害字段, 覆盖到"已存在记录"中
+            foreach (XmlElement node in nodes)
+            {
+                string name = node.Name;
+
+                if (string.IsNullOrEmpty(node.InnerXml.Trim()) == true)
+                    continue;
+
+                string strTextNew = DomUtil.GetElementOuterXml(domExist.DocumentElement,
+                    name);
+                if (string.IsNullOrEmpty(strTextNew) == false)
+                    DomUtil.SetElementOuterXml(domNew.DocumentElement,
+                        name, strTextNew);
+            }
+
+            strMergedXml = domNew.OuterXml;
+            return 0;
+        }
     }
 
     // 点击检测结果
@@ -15700,7 +16335,7 @@ Color.FromArgb(100, color)
         Grab = 9,   // moving grab handle
         CheckBox = 10,  // 格子中央的checkbox
 
-        // NullCell = 10,  // 潜在格子位置
+        CoverImageEdge = 11,   // 封面图像列右侧的可修改大小的竖线位置
     }
 
     // 选择一个对象的动作

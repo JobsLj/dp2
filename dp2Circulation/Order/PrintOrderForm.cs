@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
@@ -11,11 +9,13 @@ using System.Xml;
 using System.Diagnostics;
 using System.Reflection;
 using System.Web;   // HttpUtility
+using System.Linq;
+
+using ClosedXML.Excel;
 
 using DigitalPlatform;
 using DigitalPlatform.GUI;
 using DigitalPlatform.Xml;
-using DigitalPlatform.CirculationClient;
 
 using DigitalPlatform.IO;
 using DigitalPlatform.CommonControl;
@@ -25,10 +25,10 @@ using DigitalPlatform.Script;
 using DigitalPlatform.Marc;
 
 using DigitalPlatform.LibraryClient.localhost;
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Spreadsheet;
-using DigitalPlatform.dp2.Statis;
-using DocumentFormat.OpenXml;
+using DigitalPlatform.LibraryClient;
+using static DigitalPlatform.CommonControl.OrderDesignControl;
+
+// 2017/4/9 从 this.Channel 用法改造为 ChannelPool 用法
 
 namespace dp2Circulation
 {
@@ -45,21 +45,6 @@ namespace dp2Circulation
         public ScriptManager ScriptManager = new ScriptManager();
 
         string BatchNo = "";    // 最近在检索面板输入过的批次号
-
-#if NO
-        public LibraryChannel Channel = new LibraryChannel();
-        public string Lang = "zh";
-
-        public MainForm MainForm
-        {
-            get
-            {
-                return (MainForm)this.MdiParent;
-            }
-        }
-        
-        DigitalPlatform.Stop stop = null;
-#endif
 
         /// <summary>
         /// 事项图标下标: 出错
@@ -96,7 +81,7 @@ namespace dp2Circulation
         /// <summary>
         /// 原始数据列号: 错误信息
         /// </summary>
-        public static int ORIGIN_COLUMN_ERRORINFO = 1;  // 错误信息
+        public static int ORIGIN_COLUMN_ERRORINFO = 1;  // 错误信息 和摘要实际上是同一列
         /// <summary>
         /// 原始数据列号: ISBN/ISSN
         /// </summary>
@@ -129,46 +114,57 @@ namespace dp2Circulation
         /// 原始数据列号: 复本数
         /// </summary>
         public static int ORIGIN_COLUMN_COPY = 9;              // 复本数
+
+        /// <summary>
+        /// 原始数据列号: 码洋
+        /// </summary>
+        public static int ORIGIN_COLUMN_FIXEDPRICE = 10;             // 码洋
+
+        /// <summary>
+        /// 原始数据列号: 折扣
+        /// </summary>
+        public static int ORIGIN_COLUMN_DISCOUNT = 11;             // 折扣
+
         /// <summary>
         /// 原始数据列号: 单价
         /// </summary>
-        public static int ORIGIN_COLUMN_PRICE = 10;             // 单价
+        public static int ORIGIN_COLUMN_PRICE = 12;             // 单价
         /// <summary>
         /// 原始数据列号: 总价格
         /// </summary>
-        public static int ORIGIN_COLUMN_TOTALPRICE = 11;        // 总价格
+        public static int ORIGIN_COLUMN_TOTALPRICE = 13;        // 总价格
         /// <summary>
         /// 原始数据列号: 订购时间
         /// </summary>
-        public static int ORIGIN_COLUMN_ORDERTIME = 12;        // 订购时间
+        public static int ORIGIN_COLUMN_ORDERTIME = 14;        // 订购时间
         /// <summary>
         /// 原始数据列号: 订单号
         /// </summary>
-        public static int ORIGIN_COLUMN_ORDERID = 13;          // 订单号
+        public static int ORIGIN_COLUMN_ORDERID = 15;          // 订单号
         /// <summary>
         /// 原始数据列号: 馆藏分配
         /// </summary>
-        public static int ORIGIN_COLUMN_DISTRIBUTE = 14;       // 馆藏分配
+        public static int ORIGIN_COLUMN_DISTRIBUTE = 16;       // 馆藏分配
         /// <summary>
         /// 原始数据列号: 类别
         /// </summary>
-        public static int ORIGIN_COLUMN_CLASS = 15;             // 类别
+        public static int ORIGIN_COLUMN_CLASS = 17;             // 类别
         /// <summary>
         /// 原始数据列号: 附注
         /// </summary>
-        public static int ORIGIN_COLUMN_COMMENT = 16;          // 附注
+        public static int ORIGIN_COLUMN_COMMENT = 18;          // 附注
         /// <summary>
         /// 原始数据列号: 批次号
         /// </summary>
-        public static int ORIGIN_COLUMN_BATCHNO = 17;          // 批次号
+        public static int ORIGIN_COLUMN_BATCHNO = 19;          // 批次号
         /// <summary>
         /// 原始数据列号: 渠道地址
         /// </summary>
-        public static int ORIGIN_COLUMN_SELLERADDRESS = 18;    // 渠道地址
+        public static int ORIGIN_COLUMN_SELLERADDRESS = 20;    // 渠道地址
         /// <summary>
         /// 原始数据列号: 种记录路径
         /// </summary>
-        public static int ORIGIN_COLUMN_BIBLIORECPATH = 19;    // 种记录路径
+        public static int ORIGIN_COLUMN_BIBLIORECPATH = 21;    // 种记录路径
 
         #endregion
 
@@ -214,57 +210,96 @@ namespace dp2Circulation
         /// 合并后数据的列号: 每套册数
         /// </summary>
         public static int MERGED_COLUMN_SUBCOPY = 8;              // 每套册数
+
+        /// <summary>
+        /// 合并后数据的列号: 码洋
+        /// </summary>
+        public static int MERGED_COLUMN_FIXEDPRICE = 9;             // 码洋
+
+        /// <summary>
+        /// 合并后数据的列号: 折扣
+        /// </summary>
+        public static int MERGED_COLUMN_DISCOUNT = 10;             // 折扣
+
         /// <summary>
         /// 合并后数据的列号: 单价
         /// </summary>
-        public static int MERGED_COLUMN_PRICE = 9;             // 单价
+        public static int MERGED_COLUMN_PRICE = 11;             // 单价
+
         /// <summary>
         /// 合并后数据的列号: 总价格
         /// </summary>
-        public static int MERGED_COLUMN_TOTALPRICE = 10;        // 总价格
+        public static int MERGED_COLUMN_TOTALPRICE = 12;        // 总价格
+
+        /// <summary>
+        /// 合并后数据的列号: 总码洋价格
+        /// </summary>
+        public static int MERGED_COLUMN_TOTALFIXEDPRICE = 13;        // 总码洋价格
+
         /// <summary>
         /// 合并后数据的列号: 订购时间
         /// </summary>
-        public static int MERGED_COLUMN_ORDERTIME = 11;        // 订购时间
+        public static int MERGED_COLUMN_ORDERTIME = 14;        // 订购时间
         /// <summary>
         /// 合并后数据的列号: 订单号
         /// </summary>
-        public static int MERGED_COLUMN_ORDERID = 12;          // 订单号
+        public static int MERGED_COLUMN_ORDERID = 15;          // 订单号
         /// <summary>
         /// 合并后数据的列号: 馆藏分配
         /// </summary>
-        public static int MERGED_COLUMN_DISTRIBUTE = 13;       // 馆藏分配
+        public static int MERGED_COLUMN_DISTRIBUTE = 16;       // 馆藏分配
         /// <summary>
         /// 合并后数据的列号: 已到的套数
         /// </summary>
-        public static int MERGED_COLUMN_ACCEPTCOPY = 14;       // 已到的套数
+        public static int MERGED_COLUMN_ACCEPTCOPY = 17;       // 已到的套数
 
         /// <summary>
         /// 合并后数据的列号: 已到的每套册数
         /// </summary>
-        public static int MERGED_COLUMN_ACCEPTSUBCOPY = 15;       // 已到的每套册数
+        public static int MERGED_COLUMN_ACCEPTSUBCOPY = 18;       // 已到的每套册数
+
+
+        /// <summary>
+        /// 合并后数据的列号: 到书码洋
+        /// </summary>
+        public static int MERGED_COLUMN_ACCEPTFIXEDPRICE = 19;       // 到书码洋
+
+        /// <summary>
+        /// 合并后数据的列号: 到书折扣
+        /// </summary>
+        public static int MERGED_COLUMN_ACCEPTDISCOUNT = 20;       // 到书折扣
 
         /// <summary>
         /// 合并后数据的列号: 到书单价
         /// </summary>
-        public static int MERGED_COLUMN_ACCEPTPRICE = 16;       // 到书单价
+        public static int MERGED_COLUMN_ACCEPTPRICE = 21;       // 到书单价
+
+        /// <summary>
+        /// 合并后数据的列号: 到书总价格
+        /// </summary>
+        public static int MERGED_COLUMN_ACCEPTTOTALPRICE = 22;        // 到书总价格
+
+        /// <summary>
+        /// 合并后数据的列号: 到书总码洋价格
+        /// </summary>
+        public static int MERGED_COLUMN_ACCEPTTOTALFIXEDPRICE = 23;        // 到书总码洋价格
 
         /// <summary>
         /// 合并后数据的列号: 类别
         /// </summary>
-        public static int MERGED_COLUMN_CLASS = 17;             // 类别
+        public static int MERGED_COLUMN_CLASS = 24;             // 类别
         /// <summary>
         /// 合并后数据的列号: 附注
         /// </summary>
-        public static int MERGED_COLUMN_COMMENT = 18;          // 附注
+        public static int MERGED_COLUMN_COMMENT = 25;          // 附注
         /// <summary>
         /// 合并后数据的列号: 渠道地址
         /// </summary>
-        public static int MERGED_COLUMN_SELLERADDRESS = 19;    // 渠道地址
+        public static int MERGED_COLUMN_SELLERADDRESS = 26;    // 渠道地址
         /// <summary>
         /// 合并后数据的列号: 种记录路径
         /// </summary>
-        public static int MERGED_COLUMN_BIBLIORECPATH = 20;    // 种记录路径
+        public static int MERGED_COLUMN_BIBLIORECPATH = 27;    // 种记录路径
 
         #endregion
 
@@ -280,41 +315,31 @@ namespace dp2Circulation
 
         private void PrintOrderForm_Load(object sender, EventArgs e)
         {
-            if (this.MainForm != null)
+            if (Program.MainForm != null)
             {
-                MainForm.SetControlFont(this, this.MainForm.DefaultFont);
+                MainForm.SetControlFont(this, Program.MainForm.DefaultFont);
             }
             CreateOriginColumnHeader(this.listView_origin);
             CreateMergedColumnHeader(this.listView_merged);
 
-#if NO
-            this.Channel.Url = this.MainForm.LibraryServerUrl;
-
-            this.Channel.BeforeLogin -= new BeforeLoginEventHandle(Channel_BeforeLogin);
-            this.Channel.BeforeLogin += new BeforeLoginEventHandle(Channel_BeforeLogin);
-
-            stop = new DigitalPlatform.Stop();
-            stop.Register(MainForm.stopManager, true);	// 和容器关联
-#endif
-
-            this.comboBox_load_type.Text = this.MainForm.AppInfo.GetString(
+            this.comboBox_load_type.Text = Program.MainForm.AppInfo.GetString(
                 "printorder_form",
                 "publication_type",
                 "图书");
 
             // 验收情况
-            this.checkBox_print_accepted.Checked = this.MainForm.AppInfo.GetBoolean(
+            this.checkBox_print_accepted.Checked = Program.MainForm.AppInfo.GetBoolean(
                 "printorder_form",
                 "print_accepted",
                 false);
 
             API.PostMessage(this.Handle, WM_LOADSIZE, 0, 0);
 
-            ScriptManager.applicationInfo = this.MainForm.AppInfo;
+            ScriptManager.applicationInfo = Program.MainForm.AppInfo;
             ScriptManager.CfgFilePath = Path.Combine(
-                this.MainForm.UserDir,
+                Program.MainForm.UserDir,
                 "output_order_projects.xml");  // 导入的方案，是不分出版物类型的
-            ScriptManager.DataDir = this.MainForm.UserDir;
+            ScriptManager.DataDir = Program.MainForm.UserDir;
 
             ScriptManager.CreateDefaultContent -= new CreateDefaultContentEventHandler(scriptManager_CreateDefaultContent);
             ScriptManager.CreateDefaultContent += new CreateDefaultContentEventHandler(scriptManager_CreateDefaultContent);
@@ -331,6 +356,8 @@ namespace dp2Circulation
             {
                 MessageBox.Show(this, ExceptionUtil.GetAutoText(ex));
             }
+
+            this.Channel = null;    // testing
         }
 
         private void PrintOrderForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -373,14 +400,14 @@ namespace dp2Circulation
                 stop = null;
             }
 #endif
-            if (this.MainForm != null && this.MainForm.AppInfo != null)
+            if (Program.MainForm != null && Program.MainForm.AppInfo != null)
             {
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "printorder_form",
                     "publication_type",
                     this.comboBox_load_type.Text);
 
-                this.MainForm.AppInfo.SetBoolean(
+                Program.MainForm.AppInfo.SetBoolean(
         "printorder_form",
         "print_accepted",
         this.checkBox_print_accepted.Checked);
@@ -398,7 +425,7 @@ namespace dp2Circulation
                 "mdi_form_state");
 #endif
 
-            string strWidths = this.MainForm.AppInfo.GetString(
+            string strWidths = Program.MainForm.AppInfo.GetString(
                 "printorder_form",
                 "list_origin_width",
                 "");
@@ -409,7 +436,7 @@ namespace dp2Circulation
                     true);
             }
 
-            strWidths = this.MainForm.AppInfo.GetString(
+            strWidths = Program.MainForm.AppInfo.GetString(
     "printorder_form",
     "list_merged_width",
     "");
@@ -431,18 +458,18 @@ namespace dp2Circulation
 
             /*
             // 如果MDI子窗口不是MainForm刚刚准备退出时的状态，恢复它。为了记忆尺寸做准备
-            if (this.WindowState != this.MainForm.MdiWindowState)
-                this.WindowState = this.MainForm.MdiWindowState;
+            if (this.WindowState != Program.MainForm.MdiWindowState)
+                this.WindowState = Program.MainForm.MdiWindowState;
              * */
 
             string strWidths = ListViewUtil.GetColumnWidthListString(this.listView_origin);
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "printorder_form",
                 "list_origin_width",
                 strWidths);
 
             strWidths = ListViewUtil.GetColumnWidthListString(this.listView_merged);
-            this.MainForm.AppInfo.SetString(
+            Program.MainForm.AppInfo.SetString(
                 "printorder_form",
                 "list_merged_width",
                 strWidths);
@@ -682,6 +709,8 @@ namespace dp2Circulation
             return nRedCount;
         }
 
+        List<RecordForm> _changed_recpaths = new List<RecordForm>();
+
         // parameters:
         //      bAutoSetSeriesType  是否根据文件第一行中的路径中的数据库名来自东设置Combobox_type
         // return:
@@ -709,6 +738,8 @@ namespace dp2Circulation
             int nDupCount = 0;
             int nRet = 0;
 
+            LibraryChannel channel = this.GetChannel();
+
             StreamReader sr = null;
             try
             {
@@ -716,13 +747,12 @@ namespace dp2Circulation
                 sr = new StreamReader(strFilename);
 
                 EnableControls(false);
-                // MainForm.ShowProgress(true);
 
                 stop.OnStop += new StopEventHandler(this.DoStop);
                 stop.Initial("正在初始化浏览器组件 ...");
                 stop.BeginLoop();
                 this.Update();
-                this.MainForm.Update();
+                Program.MainForm.Update();
 
                 try
                 {
@@ -753,20 +783,18 @@ namespace dp2Circulation
 
                     }
 
+                    _changed_recpaths = Program.MainForm.GetChangedRecords("order");
+
                     // 逐行读入文件内容
                     // 测算文件行数
                     int nLineCount = 0;
                     for (; ; )
                     {
-                        if (stop != null)
+                        if (stop != null && stop.State != 0)
                         {
-                            if (stop.State != 0)
-                            {
-                                strError = "用户中断1";
-                                goto ERROR1;
-                            }
+                            strError = "用户中断1";
+                            goto ERROR1;
                         }
-
 
                         string strOrderRecPath = "";
                         strOrderRecPath = sr.ReadLine();
@@ -784,13 +812,13 @@ namespace dp2Circulation
                         // 检查订购库路径
                         {
                             string strDbName = Global.GetDbName(strOrderRecPath);
-                            string strBiblioDbName = this.MainForm.GetBiblioDbNameFromOrderDbName(strDbName);
+                            string strBiblioDbName = Program.MainForm.GetBiblioDbNameFromOrderDbName(strDbName);
                             if (string.IsNullOrEmpty(strBiblioDbName) == true)
                             {
                                 strError = "记录路径 '" + strOrderRecPath + "' 中的数据库名 '" + strDbName + "' 不是订购库名";
                                 goto ERROR1;
                             }
-                            BiblioDbProperty prop = this.MainForm.GetBiblioDbProperty(strBiblioDbName);
+                            BiblioDbProperty prop = Program.MainForm.GetBiblioDbProperty(strBiblioDbName);
                             if (prop == null)
                             {
                                 strError = "数据库名 '" + strBiblioDbName + "' 不是书目库名";
@@ -831,26 +859,16 @@ namespace dp2Circulation
 
                     // 设置进度范围
                     stop.SetProgressRange(0, nLineCount);
-                    // stop.SetProgressValue(0);
-
-                    // 逐行处理
-                    // 文件回头?
-                    // sr.BaseStream.Seek(0, SeekOrigin.Begin);
 
                     sr.Close();
 
                     sr = new StreamReader(strFilename);
-
-
                     for (int i = 0; ; i++)
                     {
-                        if (stop != null)
+                        if (stop != null && stop.State != 0)
                         {
-                            if (stop.State != 0)
-                            {
-                                strError = "用户中断2";
-                                goto ERROR1;
-                            }
+                            strError = "用户中断2";
+                            goto ERROR1;
                         }
 
                         string strOrderRecPath = "";
@@ -876,9 +894,13 @@ namespace dp2Circulation
                         //      -2  路径已经在list中存在了
                         //      -1  出错
                         //      1   成功
-                        nRet = LoadOneItem(strOrderRecPath,
+                        nRet = LoadOneItem(
+                            channel,
+                            strOrderRecPath,
                             this.listView_origin,
                             out strError);
+                        if (nRet == -1)
+                            goto ERROR1;
                         if (nRet == -2)
                             nDupCount++;
                     }
@@ -891,7 +913,6 @@ namespace dp2Circulation
                     stop.HideProgress();
 
                     EnableControls(true);
-                    // MainForm.ShowProgress(false);
                 }
             }
             catch (Exception ex)
@@ -902,6 +923,8 @@ namespace dp2Circulation
             finally
             {
                 sr.Close();
+
+                this.ReturnChannel(channel);
             }
 
             // 记忆文件名
@@ -920,7 +943,6 @@ namespace dp2Circulation
             if (nRet == -1)
                 goto ERROR1;
 
-
             // 汇报数据装载情况。
             // return:
             //      0   尚未装载任何数据    
@@ -931,7 +953,8 @@ namespace dp2Circulation
                 goto ERROR1;
 
             return 1;
-        ERROR1:
+            ERROR1:
+            this.ShowMessage(strError, "red", true);
             return -1;
         }
 
@@ -963,7 +986,7 @@ namespace dp2Circulation
                 goto ERROR1;
 
             return;
-        ERROR1:
+            ERROR1:
             this.Text = "打印订单";
             MessageBox.Show(this, strError);
         }
@@ -990,7 +1013,7 @@ namespace dp2Circulation
             // strXml中为书目记录
             string strBiblioDbName = Global.GetDbName(strBiblioRecPath);
 
-            string strSyntax = this.MainForm.GetBiblioSyntax(strBiblioDbName);
+            string strSyntax = Program.MainForm.GetBiblioSyntax(strBiblioDbName);
             if (String.IsNullOrEmpty(strSyntax) == true)
                 strSyntax = "unimarc";
 
@@ -1029,6 +1052,7 @@ namespace dp2Circulation
             return -1;
         }
 
+
         // 获得书目数据(XML格式)
         // return:
         //      -1  error
@@ -1053,44 +1077,53 @@ namespace dp2Circulation
             strError = "";
             strXmlRecord = "";
 
-            string[] formats = new string[1];
-            formats[0] = "xml";
-            string[] results = null;
-            byte[] timestamp = null;
+            LibraryChannel channel = this.GetChannel();
 
-            if (String.IsNullOrEmpty(strBiblioRecPath) == true)
+            try
             {
-                strError = "strBiblioRecPath参数值不能为空";
-                return -1;
-            }
+                string[] formats = new string[1];
+                formats[0] = "xml";
+                string[] results = null;
+                byte[] timestamp = null;
 
-            long lRet = Channel.GetBiblioInfos(
-                stop,
-                strBiblioRecPath,
-                "",
-                formats,
-                out results,
-                out timestamp,
-                out strError);
-            if (lRet == 0)
-            {
-                if (String.IsNullOrEmpty(strError) == true)
-                    strError = "记录 " + strBiblioRecPath + " 没有找到";
+                if (String.IsNullOrEmpty(strBiblioRecPath) == true)
+                {
+                    strError = "strBiblioRecPath参数值不能为空";
+                    return -1;
+                }
 
-                return 0;   // not found
-            }
-            if (lRet == -1)
-            {
-                strError = "获得书目记录时发生错误: " + strError;
-                return -1;
-            }
-            else
-            {
-                Debug.Assert(results != null && results.Length == 1, "results必须包含1个元素");
-                strXmlRecord = results[0];
-            }
+                long lRet = channel.GetBiblioInfos(
+                    stop,
+                    strBiblioRecPath,
+                    "",
+                    formats,
+                    out results,
+                    out timestamp,
+                    out strError);
+                if (lRet == 0)
+                {
+                    if (String.IsNullOrEmpty(strError) == true)
+                        strError = "记录 " + strBiblioRecPath + " 没有找到";
 
-            return (int)lRet;
+                    return 0;   // not found
+                }
+                if (lRet == -1)
+                {
+                    strError = "获得书目记录时发生错误: " + strError;
+                    return -1;
+                }
+                else
+                {
+                    Debug.Assert(results != null && results.Length == 1, "results必须包含1个元素");
+                    strXmlRecord = results[0];
+                }
+
+                return (int)lRet;
+            }
+            finally
+            {
+                this.ReturnChannel(channel);
+            }
         }
 
         // 根据记录路径，装入订购记录
@@ -1098,31 +1131,40 @@ namespace dp2Circulation
         //      -2  路径已经在list中存在了
         //      -1  出错
         //      1   成功
-        int LoadOneItem(string strRecPath,
+        int LoadOneItem(
+            LibraryChannel channel,
+            string strRecPath,
             ListView list,
             out string strError)
         {
             strError = "";
 
-            string strItemXml = "";
-            string strBiblioText = "";
+            // 检查订购记录是否在其他窗口内处于被修改状态
+            RecordForm record = _changed_recpaths.Find((o) =>
+            {
+                if (o.RecPath == strRecPath)
+                    return true;
+                return false;
+            });
 
-            string strOutputOrderRecPath = "";
-            string strOutputBiblioRecPath = "";
+            if (record != null)
+            {
+                record.Form.Activate();
+                strError = "订购记录 '" + strRecPath + "' 正在编辑状态。为避免和打印订单操作发生冲突，请先保存修改";
+                return -1;
+            }
 
-            byte[] item_timestamp = null;
-
-            long lRet = Channel.GetOrderInfo(
+            long lRet = channel.GetOrderInfo(
                 stop,
                 "@path:" + strRecPath,
                 // "",
                 "xml",
-                out strItemXml,
-                out strOutputOrderRecPath,
-                out item_timestamp,
+                out string strItemXml,
+                out string strOutputOrderRecPath,
+                out byte[] item_timestamp,
                 "recpath",
-                out strBiblioText,
-                out strOutputBiblioRecPath,
+                out string strBiblioText,
+                out string strOutputBiblioRecPath,
                 out strError);
             if (lRet == -1 || lRet == 0)
             {
@@ -1179,7 +1221,7 @@ namespace dp2Circulation
 
                 Debug.Assert(String.IsNullOrEmpty(strOutputBiblioRecPath) == false, "strBiblioRecPath值不能为空");
 
-                lRet = Channel.GetBiblioInfos(
+                lRet = channel.GetBiblioInfos(
                     stop,
                     strOutputBiblioRecPath,
                     "",
@@ -1232,17 +1274,12 @@ namespace dp2Circulation
                 data.Timestamp = item_timestamp;
                 data.Xml = strItemXml;
 
-                /*
-                // 图标
-                SetItemColor(item, TYPE_NORMAL);
-                 * */
-
                 // 将新加入的事项滚入视野
                 list.EnsureVisible(list.Items.Count - 1);
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -1390,6 +1427,8 @@ namespace dp2Circulation
             ListViewItem item)
         {
             int nRet = 0;
+            string strError = "";
+
             OriginItemData data = null;
             data = (OriginItemData)item.Tag;
             if (data == null)
@@ -1415,9 +1454,23 @@ namespace dp2Circulation
             string strIssueCount = DomUtil.GetElementText(dom.DocumentElement,
                 "issueCount");
 
+            if (string.IsNullOrEmpty(strIssueCount))
+                strIssueCount = "1";
+            if (Int32.TryParse(strIssueCount, out int nIssueCount) == false)
+            {
+                throw new Exception("订购记录 '" + strRecPath + "' 中 issueCount 元素格式错误: 应为纯数字");
+            }
+
             // TODO: 是否只将订购复本字符串放入复本列?
             string strCopy = DomUtil.GetElementText(dom.DocumentElement,
                 "copy");
+
+            OldNewCopy copy = OldNewCopy.Parse(strCopy, "订购记录 '" + strRecPath + "' 中复本数字段");
+
+            string strFixedPrice = DomUtil.GetElementText(dom.DocumentElement,
+    "fixedPrice");  // 注意，可能为 {} 形态
+            string strDiscount = DomUtil.GetElementText(dom.DocumentElement,
+     "discount");
 
             // TODO: 是否只将订购价放入价格列?
             string strPrice = DomUtil.GetElementText(dom.DocumentElement,
@@ -1435,8 +1488,7 @@ namespace dp2Circulation
 
             List<int> textchanged_columns = new List<int>();
 
-
-            int nIssueCount = 1;
+            // int nIssueCount = 1;
             if (strPubType == "连续出版物")
             {
                 try
@@ -1456,18 +1508,17 @@ namespace dp2Circulation
             }
 
             {
-                string strOldCopy = "";
-                string strNewCopy = "";
+#if NO
                 // 分离 "old[new]" 内的两个值
-                OrderDesignControl.ParseOldNewValue(strCopy,
-                    out strOldCopy,
-                    out strNewCopy);
+                dp2StringUtil.ParseOldNewValue(strCopy,
+                    out string strOldCopy,
+                    out string strNewCopy);
                 // strCopy = strOldCopy;
 
                 int nCopy = 0;
                 try
                 {
-                    nCopy = Convert.ToInt32(OrderDesignControl.GetCopyFromCopyString(strOldCopy));
+                    nCopy = Convert.ToInt32(dp2StringUtil.GetCopyFromCopyString(strOldCopy));
                 }
                 catch (Exception ex)
                 {
@@ -1475,33 +1526,126 @@ namespace dp2Circulation
                     SetItemColor(item,
                             TYPE_ERROR);
                 }
+#endif
 
-                string strCurrentOldPrice = "";
-                string strCurrentNewPrice = "";
+                // *** 处理单价
+                OldNewValue price = OldNewValue.Parse(strPrice);
+                OldNewValue fixedPrice = OldNewValue.Parse(strFixedPrice);
+                OldNewValue discount = OldNewValue.Parse(strDiscount);
+
+                // 如果单价为空，而总价不为空，这时需要从总价算出单价。公式为 单价 = 总价/(复本套数*期数)
+                if (string.IsNullOrEmpty(price.OldValue))
+                {
+                    if (string.IsNullOrEmpty(strTotalPrice) == false)
+                    {
+                        int nCount = (copy.OldCopy.Copy * nIssueCount);
+                        if (nCount == 1)
+                            price.OldValue = strTotalPrice;
+                        else
+                            price.OldValue = strTotalPrice + "/" + nCount;
+
+                        strPrice = "*" + price.ToString();
+
+                        {
+                            data.Changed = true;
+                            SetItemColor(item,
+                                TYPE_CHANGED);
+
+                            textchanged_columns.Add(ORIGIN_COLUMN_PRICE);
+                            // 单价被改变了
+                        }
+                    }
+                    else
+                    {
+                        // 2018/9/44
+                        // 总价为空。尝试从码洋、折扣里面计算单价
+                        // return:
+                        //      -1  计算过程出现错误
+                        //      0   strFixedPrice 为空，无法计算
+                        //      1   计算成功
+                        nRet = OrderDesignControl.ComputeOrderPriceByFixedPrice(fixedPrice.OldValue,
+                            discount.OldValue,
+                            out string strResultPrice,
+                            out strError);
+                        if (nRet == 1)
+                        {
+                            price.OldValue = strResultPrice;
+                            strPrice = "*" + price.ToString();
+
+                            data.Changed = true;
+                            SetItemColor(item,
+                                TYPE_CHANGED);
+
+                            textchanged_columns.Add(ORIGIN_COLUMN_PRICE);
+                            // 单价被改变了
+                        }
+                    }
+                }
+
+                // *** 这一段决定了是否主动在订购记录里面补充 {} 形态的码洋字符串
+
+                // 如果码洋为空，而折扣和单价不为空，这时需要从单价反向计算出码洋。
+                if (string.IsNullOrEmpty(fixedPrice.OldValue) == true
+                    && string.IsNullOrEmpty(price.OldValue) == false
+                    && string.IsNullOrEmpty(strDiscount) == false)
+                {
+                    nRet = OrderDesignControl.ComputeFixedPriceByOrderPrice(
+                        price.OldValue,
+discount.OldValue,
+out string strResultPrice,
+out strError);
+                    if (nRet == -1)
+                    {
+                        strBiblioSummary = "反向计算码洋时发生错误: " + strError;
+                        SetItemColor(item,
+                                TYPE_ERROR);
+                    }
+                    else if (nRet == 1)
+                    {
+                        fixedPrice.OldValue = strResultPrice;
+                        fixedPrice.IsVirtual = true;
+
+                        strFixedPrice = "*" + fixedPrice.ToString();
+
+                        data.Changed = true;
+                        SetItemColor(item,
+                            TYPE_CHANGED);
+
+                        textchanged_columns.Add(ORIGIN_COLUMN_FIXEDPRICE);
+                        // 码洋被改变了
+                    }
+
+                }
+
+
+
+#if NO
 
                 // 分离 "old[new]" 内的两个值
-                OrderDesignControl.ParseOldNewValue(strPrice,
-                    out strCurrentOldPrice,
-                    out strCurrentNewPrice);
+                dp2StringUtil.ParseOldNewValue(strPrice,
+                    out string strCurrentOldPrice,
+                    out string strCurrentNewPrice);
 
                 string strCurrentPrice = strCurrentOldPrice;
-
+#endif
 
                 // 汇总价格
                 string strCurTotalPrice = "";
-                string strError = "";
 
                 // 2009/11/9 changed
                 // 只有原始数据中总价格为空时，才有必要汇总价格
                 if (String.IsNullOrEmpty(strTotalPrice) == true)
                 {
-                    nRet = PriceUtil.MultiPrice(strCurrentPrice,
-                        nCopy,
+                    nRet = PriceUtil.MultiPrice(price.OldValue, // strCurrentPrice,
+                        copy.OldCopy.Copy,   // nCopy,
                         out strCurTotalPrice,
                         out strError);
                     if (nRet == -1)
                     {
-                        strBiblioSummary = "价格字符串 '" + strCurrentPrice + "' 格式不正确: " + strError;
+                        strBiblioSummary = "价格字符串 '"
+                            // + strCurrentPrice 
+                            + price.OldValue
+                            + "' 格式不正确: " + strError;
                         SetItemColor(item,
                                 TYPE_ERROR);
                     }
@@ -1543,8 +1687,6 @@ namespace dp2Circulation
                     }
 
                 }
-
-
             }
 
             // 检查和修改 状态
@@ -1617,6 +1759,9 @@ namespace dp2Circulation
             ListViewUtil.ChangeItemText(item, ORIGIN_COLUMN_ISSUECOUNT, strIssueCount);
             ListViewUtil.ChangeItemText(item, ORIGIN_COLUMN_COPY, strCopy);
 
+            ListViewUtil.ChangeItemText(item, ORIGIN_COLUMN_FIXEDPRICE, strFixedPrice);  // 
+            ListViewUtil.ChangeItemText(item, ORIGIN_COLUMN_DISCOUNT, strDiscount.ToString());
+
             ListViewUtil.ChangeItemText(item, ORIGIN_COLUMN_PRICE, strPrice);
             ListViewUtil.ChangeItemText(item, ORIGIN_COLUMN_TOTALPRICE, strTotalPrice);
             ListViewUtil.ChangeItemText(item, ORIGIN_COLUMN_ORDERTIME, strOrderTime);
@@ -1644,11 +1789,8 @@ namespace dp2Circulation
                     new System.Drawing.Font(item.SubItems[index].Font, FontStyle.Bold);
             }
 
-
-
             if (item.ImageIndex == TYPE_NORMAL)
                 SetItemColor(item, TYPE_NORMAL);
-
         }
 
         // 设置 原始数据listview 的栏目标题
@@ -1664,6 +1806,9 @@ namespace dp2Circulation
             ColumnHeader columnHeader_range = new ColumnHeader();
             ColumnHeader columnHeader_issueCount = new ColumnHeader();
             ColumnHeader columnHeader_copy = new ColumnHeader();
+            ColumnHeader columnHeader_fixedprice = new ColumnHeader();
+            ColumnHeader columnHeader_discount = new ColumnHeader();
+
             ColumnHeader columnHeader_price = new ColumnHeader();
 
             ColumnHeader columnHeader_totalPrice = new ColumnHeader();
@@ -1690,6 +1835,8 @@ namespace dp2Circulation
             columnHeader_range,
             columnHeader_issueCount,
             columnHeader_copy,
+            columnHeader_fixedprice,
+            columnHeader_discount,
             columnHeader_price,
             columnHeader_totalPrice,
             columnHeader_orderTime,
@@ -1700,7 +1847,6 @@ namespace dp2Circulation
             columnHeader_batchNo,
             columnHeader_sellerAddress,
             columnHeader_biblioRecpath});
-
 
             // 
             // columnHeader_recpath
@@ -1758,6 +1904,18 @@ namespace dp2Circulation
             columnHeader_copy.Text = "复本数";
             columnHeader_copy.Width = 150;
             columnHeader_copy.TextAlign = HorizontalAlignment.Right;
+            // 
+            // columnHeader_fixedprice
+            // 
+            columnHeader_fixedprice.Text = "码洋";
+            columnHeader_fixedprice.Width = 150;
+            columnHeader_fixedprice.TextAlign = HorizontalAlignment.Right;
+            // 
+            // columnHeader_discount
+            // 
+            columnHeader_discount.Text = "折扣";
+            columnHeader_discount.Width = 150;
+            columnHeader_discount.TextAlign = HorizontalAlignment.Right;
             // 
             // columnHeader_price
             // 
@@ -1828,14 +1986,22 @@ namespace dp2Circulation
             ColumnHeader columnHeader_issueCount = new ColumnHeader();
             ColumnHeader columnHeader_copy = new ColumnHeader();
             ColumnHeader columnHeader_subcopy = new ColumnHeader();
+            ColumnHeader columnHeader_fixedprice = new ColumnHeader();
+            ColumnHeader columnHeader_discount = new ColumnHeader();
             ColumnHeader columnHeader_price = new ColumnHeader();
             ColumnHeader columnHeader_totalPrice = new ColumnHeader();
+            ColumnHeader columnHeader_totalFixedPrice = new ColumnHeader();
             ColumnHeader columnHeader_orderTime = new ColumnHeader();
             ColumnHeader columnHeader_orderID = new ColumnHeader();
             ColumnHeader columnHeader_distribute = new ColumnHeader();
             ColumnHeader columnHeader_acceptcopy = new ColumnHeader();
             ColumnHeader columnHeader_acceptsubcopy = new ColumnHeader();
             ColumnHeader columnHeader_acceptprice = new ColumnHeader();
+            ColumnHeader columnHeader_acceptfixedprice = new ColumnHeader();
+            ColumnHeader columnHeader_acceptdiscount = new ColumnHeader();
+            ColumnHeader columnHeader_acceptTotalPrice = new ColumnHeader();
+            ColumnHeader columnHeader_acceptTotalFixedPrice = new ColumnHeader();
+
             ColumnHeader columnHeader_class = new ColumnHeader();
             ColumnHeader columnHeader_comment = new ColumnHeader();
             ColumnHeader columnHeader_sellerAddress = new ColumnHeader();
@@ -1853,19 +2019,25 @@ namespace dp2Circulation
             columnHeader_issueCount,
             columnHeader_copy,
             columnHeader_subcopy,
+            columnHeader_fixedprice,
+            columnHeader_discount,
             columnHeader_price,
             columnHeader_totalPrice,
+            columnHeader_totalFixedPrice,
             columnHeader_orderTime,
             columnHeader_orderID,
             columnHeader_distribute,
             columnHeader_acceptcopy,
             columnHeader_acceptsubcopy,
+            columnHeader_acceptfixedprice,
+            columnHeader_acceptdiscount,
             columnHeader_acceptprice,
+            columnHeader_acceptTotalPrice,
+            columnHeader_acceptTotalFixedPrice,
             columnHeader_class,
             columnHeader_comment,
             columnHeader_sellerAddress,
             columnHeader_biblioRecpath});
-
 
             // 
             // columnHeader_seller
@@ -1916,6 +2088,18 @@ namespace dp2Circulation
             columnHeader_subcopy.Width = 100;
             columnHeader_subcopy.TextAlign = HorizontalAlignment.Right;
             // 
+            // columnHeader_fixedprice
+            // 
+            columnHeader_fixedprice.Text = "码洋";
+            columnHeader_fixedprice.Width = 150;
+            columnHeader_fixedprice.TextAlign = HorizontalAlignment.Right;
+            // 
+            // columnHeader_discount
+            // 
+            columnHeader_discount.Text = "折扣";
+            columnHeader_discount.Width = 150;
+            columnHeader_discount.TextAlign = HorizontalAlignment.Right;
+            // 
             // columnHeader_price
             // 
             columnHeader_price.Text = "单价";
@@ -1927,6 +2111,12 @@ namespace dp2Circulation
             columnHeader_totalPrice.Text = "总价";
             columnHeader_totalPrice.Width = 150;
             columnHeader_totalPrice.TextAlign = HorizontalAlignment.Right;
+            // 
+            // columnHeader_totalFixedPrice
+            // 
+            columnHeader_totalFixedPrice.Text = "总码洋";
+            columnHeader_totalFixedPrice.Width = 150;
+            columnHeader_totalFixedPrice.TextAlign = HorizontalAlignment.Right;
             // 
             // columnHeader_orderTime
             // 
@@ -1957,6 +2147,28 @@ namespace dp2Circulation
             // 
             columnHeader_acceptprice.Text = "到书单价";
             columnHeader_acceptprice.Width = 100;
+            // 
+            // columnHeader_acceptfixedprice
+            // 
+            columnHeader_acceptfixedprice.Text = "到书码洋";
+            columnHeader_acceptfixedprice.Width = 100;
+            // 
+            // columnHeader_acceptdiscount
+            // 
+            columnHeader_acceptdiscount.Text = "到书折扣";
+            columnHeader_acceptdiscount.Width = 100;
+            // 
+            // columnHeader_acceptTotalPrice
+            // 
+            columnHeader_acceptTotalPrice.Text = "到书总价";
+            columnHeader_acceptTotalPrice.Width = 150;
+            columnHeader_acceptTotalPrice.TextAlign = HorizontalAlignment.Right;
+            // 
+            // columnHeader_acceptTotalFixedPrice
+            // 
+            columnHeader_acceptTotalFixedPrice.Text = "到书总码洋";
+            columnHeader_acceptTotalFixedPrice.Width = 150;
+            columnHeader_acceptTotalFixedPrice.TextAlign = HorizontalAlignment.Right;
             // 
             // columnHeader_class
             // 
@@ -2078,15 +2290,17 @@ namespace dp2Circulation
         // 打印订单
         private void button_print_printOrderList_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = PrintOrder("html", out strError);
+            int nRet = PrintOrder("html",
+                true,
+                out string strError);
             if (nRet == -1)
                 goto ERROR1;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
+#if NO
         private static Stylesheet GenerateStyleSheet()
         {
             return new Stylesheet(
@@ -2118,7 +2332,8 @@ namespace dp2Circulation
                     new Fill(                                                           // Index 2 - The yellow fill.
                         new PatternFill(
                             new ForegroundColor() { Rgb = new HexBinaryValue() { Value = "FFFFFF00" } }
-                        ) { PatternType = PatternValues.Solid })
+                        )
+                        { PatternType = PatternValues.Solid })
                 ),
                 new Borders(
                     new Border(                                                         // Index 0 - The default border.
@@ -2130,16 +2345,20 @@ namespace dp2Circulation
                     new Border(                                                         // Index 1 - Applies a Left, Right, Top, Bottom border to a cell
                         new LeftBorder(
                             new DocumentFormat.OpenXml.Spreadsheet.Color() { Auto = true }
-                        ) { Style = BorderStyleValues.Thin },
+                        )
+                        { Style = BorderStyleValues.Thin },
                         new RightBorder(
                             new DocumentFormat.OpenXml.Spreadsheet.Color() { Auto = true }
-                        ) { Style = BorderStyleValues.Thin },
+                        )
+                        { Style = BorderStyleValues.Thin },
                         new TopBorder(
                             new DocumentFormat.OpenXml.Spreadsheet.Color() { Auto = true }
-                        ) { Style = BorderStyleValues.Thin },
+                        )
+                        { Style = BorderStyleValues.Thin },
                         new BottomBorder(
                             new DocumentFormat.OpenXml.Spreadsheet.Color() { Auto = true }
-                        ) { Style = BorderStyleValues.Thin },
+                        )
+                        { Style = BorderStyleValues.Thin },
                         new DiagonalBorder())
                 ),
                 new CellFormats(
@@ -2150,12 +2369,13 @@ namespace dp2Circulation
                     new CellFormat() { FontId = 0, FillId = 2, BorderId = 0, ApplyFill = true },       // Index 4 - Yellow Fill
                     new CellFormat(                                                                   // Index 5 - Alignment
                         new Alignment() { Horizontal = HorizontalAlignmentValues.Center, Vertical = VerticalAlignmentValues.Center }
-                    ) { /*FontId = 1, FillId = 0, BorderId = 0, */ApplyAlignment = true },
+                    )
+                    { /*FontId = 1, FillId = 0, BorderId = 0, */ApplyAlignment = true },
                     new CellFormat() { FontId = 0, FillId = 0, BorderId = 1, ApplyBorder = true }      // Index 6 - Border
                 )
             ); // return
         }
-
+#endif
         string ExportExcelFilename = "";
 
         // 打印订单
@@ -2163,13 +2383,15 @@ namespace dp2Circulation
         //      strStyle    excel / html 之一或者逗号联接组合。 excel: 输出 Excel 文件
         int PrintOrder(
             string strStyle,
+            bool bLaunchExcel,
             out string strError)
         {
             strError = "";
 
             int nErrorCount = 0;
 
-            ExcelDocument doc = null;
+            /*ExcelDocument*/
+            XLWorkbook doc = null;
 
             if (StringUtil.IsInList("excel", strStyle) == true)
             {
@@ -2191,7 +2413,7 @@ namespace dp2Circulation
                 this.ExportExcelFilename = dlg.FileName;
 
 #if NO
-                // string filepath = Path.Combine(this.MainForm.UserDir, "test.xlsx");
+                // string filepath = Path.Combine(Program.MainForm.UserDir, "test.xlsx");
                 SpreadsheetDocument spreadsheetDocument = null;
                 spreadsheetDocument = SpreadsheetDocument.Create(this.ExportExcelFilename, SpreadsheetDocumentType.Workbook);
 
@@ -2199,7 +2421,11 @@ namespace dp2Circulation
 #endif
                 try
                 {
-                    doc = ExcelDocument.Create(this.ExportExcelFilename);
+                    // doc = ExcelDocument.Create(this.ExportExcelFilename);
+
+                    doc = new XLWorkbook(XLEventTracking.Disabled);
+                    File.Delete(this.ExportExcelFilename);
+
                 }
                 catch (Exception ex)
                 {
@@ -2207,8 +2433,7 @@ namespace dp2Circulation
                     goto ERROR1;
                 }
 
-                doc.Stylesheet = GenerateStyleSheet();
-                // doc.Initial();
+                // doc.Stylesheet = GenerateStyleSheet();
             }
 
             this.tabControl_items.SelectedTab = this.tabPage_mergedItems;
@@ -2266,7 +2491,9 @@ namespace dp2Circulation
                         }
 
                         List<string> temp_filenames = null;
-                        int nRet = PrintMergedList(lists[i],
+                        int nRet = PrintMergedList(
+                            i,
+                            lists[i],
                             ref doc,
                             out temp_filenames,
                             out strError);
@@ -2286,12 +2513,12 @@ namespace dp2Circulation
                         }
 
                         // 按渠道打印分类统计页
-                        List<string> temp_filenames = null;
                         int nRet = PrintClassStatisList(
+                            i,
                             "class",
                             lists[i],
                             ref doc,
-                            out temp_filenames,
+                            out List<string> temp_filenames,
                             out strError);
                         if (nRet == -1)
                             goto ERROR1;
@@ -2304,6 +2531,7 @@ namespace dp2Circulation
                         // 按渠道打印出版社统计页
                         temp_filenames = null;
                         nRet = PrintClassStatisList(
+                            i,
                             "publisher",
                             lists[i],
                             ref doc,
@@ -2323,11 +2551,11 @@ namespace dp2Circulation
                         HtmlPrintForm printform = new HtmlPrintForm();
 
                         printform.Text = "打印订单";
-                        printform.MainForm = this.MainForm;
+                        // printform.MainForm = Program.MainForm;
                         printform.Filenames = filenames;
-                        this.MainForm.AppInfo.LinkFormState(printform, "printorder_htmlprint_formstate");
+                        Program.MainForm.AppInfo.LinkFormState(printform, "printorder_htmlprint_formstate");
                         printform.ShowDialog(this);
-                        this.MainForm.AppInfo.UnlinkFormState(printform);
+                        Program.MainForm.AppInfo.UnlinkFormState(printform);
                     }
                 }
                 finally
@@ -2354,19 +2582,36 @@ namespace dp2Circulation
             if (doc != null)
             {
                 // Close the document.
-                doc.Close();
+                // doc.Close();
+
+                // TODO: 当没有装载任何数据时候输出 Excel，这里会抛出异常
+                doc.SaveAs(this.ExportExcelFilename);
+                doc.Dispose();
+
+                if (bLaunchExcel)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(this.ExportExcelFilename);
+                    }
+                    catch
+                    {
+
+                    }
+                }
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
         // 打印一个渠道的分类统计表
         int PrintClassStatisList(
+            int nSheetIndex,
             string strStatisType,
             NamedListViewItems items,
-            ref ExcelDocument doc,
+            ref /*ExcelDocument*/ XLWorkbook doc,
             out List<string> filenames,
             out string strError)
         {
@@ -2383,6 +2628,7 @@ namespace dp2Circulation
 
                 // 构造html页面
                 int nRet = BuildStatisHtml(
+                    nSheetIndex,
                     strStatisType,
                     items,
                     ref doc,
@@ -2406,8 +2652,10 @@ namespace dp2Circulation
         }
 
         // 打印一个渠道的订单
-        int PrintMergedList(NamedListViewItems items,
-            ref ExcelDocument doc,
+        int PrintMergedList(
+            int nSheetIndex,
+            NamedListViewItems items,
+            ref /*ExcelDocument*/ XLWorkbook doc,
             out List<string> html_filenames,
             out string strError)
         {
@@ -2423,6 +2671,7 @@ namespace dp2Circulation
 
                 // 构造html页面
                 int nRet = BuildMergedHtml(
+                    nSheetIndex,
                     items,
                     ref doc,
                     out html_filenames,
@@ -2449,19 +2698,18 @@ namespace dp2Circulation
             // 配置标题和风格
             string strNamePath = "printorder_printoption";
 
-            PrintOrderPrintOption option = new PrintOrderPrintOption(this.MainForm.DataDir,
+            PrintOrderPrintOption option = new PrintOrderPrintOption(Program.MainForm.UserDir, // Program.MainForm.DataDir,
                 this.comboBox_load_type.Text);
-            option.LoadData(this.MainForm.AppInfo,
+            option.LoadData(Program.MainForm.AppInfo,
                 strNamePath);
-
 
             PrintOptionDlg dlg = new PrintOptionDlg();
             MainForm.SetControlFont(dlg, this.Font, false);
 
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.Text = this.comboBox_load_type.Text + " 订单 打印参数";
             dlg.PrintOption = option;
-            dlg.DataDir = this.MainForm.DataDir;
+            dlg.DataDir = Program.MainForm.UserDir; // .DataDir;
             dlg.ColumnItems = new string[] {
                 "no -- 序号",
                 "seller -- 渠道",
@@ -2472,15 +2720,29 @@ namespace dp2Circulation
                 "range -- 时间范围",
                 "issueCount -- 包含期数",
                 "copy -- 复本数",
-                                "subcopy -- 每套册数",
-                                "series -- 套数",
+                "subcopy -- 每套册数",
+                "series -- 套数",
+                                "series1 -- 套数(每套册)",
 
                 "price -- 单价",
+
+                "fixedPrice -- 码洋", // 2018/8/3
+                "discount -- 折扣", // 2018/8/3
+
                 "totalPrice -- 总价格",
+
+                "totalFixedPrice -- 总码洋", // 2018/8/3
+
                 "orderTime -- 订购时间",
                 "orderID -- 订单号",
                 "distribute -- 馆藏分配",
                 "acceptCopy -- 已到套数",  // 2012/8/29
+                "acceptCopy1 -- 已到套数(每套册)",  // 2012/8/29
+                "acceptSubCopy -- 已到每套册数",  // 2012/8/29
+                "acceptPrice -- 到书单价",  // 2012/8/29
+                "acceptFixedPrice -- 到书码洋",  // 2012/8/29
+                "acceptDiscount -- 到书折扣",  // 2012/8/29
+
                 "class -- 类别",
 
                 "comment -- 注释",
@@ -2501,14 +2763,14 @@ namespace dp2Circulation
             };
 
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "printorder_printoption_formstate");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "printorder_printoption_formstate");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
 
-            option.SaveData(this.MainForm.AppInfo,
+            option.SaveData(Program.MainForm.AppInfo,
                 strNamePath);
         }
 
@@ -2677,13 +2939,14 @@ namespace dp2Circulation
             return results.Count;
         }
 
-        // 构造分类统计html页面
+        // 构造分类统计 html 或 Excel 页面
         // parameters:
         //      strStatisType   统计表类型 "class" "publisher"
         int BuildStatisHtml(
+            int nSheetIndex,
             string strStatisType,
             NamedListViewItems items,
-            ref ExcelDocument doc,
+            ref /*ExcelDocument*/ XLWorkbook doc,
             out List<string> filenames,
             out string strError)
         {
@@ -2693,9 +2956,9 @@ namespace dp2Circulation
             int nRet = 0;
 
             // 获得打印参数
-            PrintOrderPrintOption option = new PrintOrderPrintOption(this.MainForm.DataDir,
+            PrintOrderPrintOption option = new PrintOrderPrintOption(Program.MainForm.UserDir, // Program.MainForm.DataDir,
                 this.comboBox_load_type.Text);
-            option.LoadData(this.MainForm.AppInfo,
+            option.LoadData(Program.MainForm.AppInfo,
                 "printorder_printoption");
 
 #if NO
@@ -2776,10 +3039,10 @@ namespace dp2Circulation
                 {
                     /*
                     // 如果没有配置MARC过滤器，则使用一个缺省的能支持UNIMARC和USMARC的提取中图法类号的过滤器
-                    strMarcFilterFilePath = PathUtil.MergePath(this.MainForm.DataDir, "~printorder_default_class_filter.fltx");
+                    strMarcFilterFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "~printorder_default_class_filter.fltx");
                     CreateDefaultClassFilterFile(strMarcFilterFilePath);
                      * */
-                    strMarcFilterFilePath = PathUtil.MergePath(this.MainForm.DataDir, "default_getclass.fltx");
+                    strMarcFilterFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "default_getclass.fltx");
                 }
                 if (File.Exists(strMarcFilterFilePath) == false)
                 {
@@ -2826,21 +3089,21 @@ namespace dp2Circulation
                 strTableTitle = "%date% %seller% 分类统计表";
                 if (this.checkBox_print_accepted.Checked == false)
                 {
-                    strSheetName = "分类统计页";
+                    strSheetName = "分类统计";
                     strStatisTemplateFilePath = option.GetTemplatePageFilePath("分类统计页");
                 }
                 else
                 {
-                    strSheetName = "分类统计页(含验收)";    // 不允许使用方括号
+                    strSheetName = "分类统计(含验收)";    // 不允许使用方括号
                     strStatisTemplateFilePath = option.GetTemplatePageFilePath("分类统计页[含验收]");
                 }
 
                 if (String.IsNullOrEmpty(strStatisTemplateFilePath) == true)
                 {
                     if (this.checkBox_print_accepted.Checked == false)
-                        strStatisTemplateFilePath = PathUtil.MergePath(this.MainForm.DataDir, "default_printorder_classstatis.template");
+                        strStatisTemplateFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "default_printorder_classstatis.template");
                     else
-                        strStatisTemplateFilePath = PathUtil.MergePath(this.MainForm.DataDir, "default_printorder_classstatis_accept.template");
+                        strStatisTemplateFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "default_printorder_classstatis_accept.template");
                 }
 
             }
@@ -2849,21 +3112,21 @@ namespace dp2Circulation
                 strTableTitle = "%date% %seller% 出版社统计表";
                 if (this.checkBox_print_accepted.Checked == false)
                 {
-                    strSheetName = "出版社统计页";
+                    strSheetName = "出版社统计";
                     strStatisTemplateFilePath = option.GetTemplatePageFilePath("出版社统计页");
                 }
                 else
                 {
-                    strSheetName = "出版社统计页(含验收)"; // 不能使用方括号
+                    strSheetName = "出版社统计(含验收)"; // 不能使用方括号
                     strStatisTemplateFilePath = option.GetTemplatePageFilePath("出版社统计页[含验收]");
                 }
 
                 if (String.IsNullOrEmpty(strStatisTemplateFilePath) == true)
                 {
                     if (this.checkBox_print_accepted.Checked == false)
-                        strStatisTemplateFilePath = PathUtil.MergePath(this.MainForm.DataDir, "default_printorder_publisherstatis.template");
+                        strStatisTemplateFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "default_printorder_publisherstatis.template");
                     else
-                        strStatisTemplateFilePath = PathUtil.MergePath(this.MainForm.DataDir, "default_printorder_publisherstatis_accept.template");
+                        strStatisTemplateFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "default_printorder_publisherstatis_accept.template");
                 }
             }
 
@@ -2879,14 +3142,13 @@ namespace dp2Circulation
             }
             {
                 // 根据模板打印
-                string strContent = "";
                 // 能自动识别文件内容的编码方式的读入文本文件内容模块
                 // return:
                 //      -1  出错
                 //      0   文件不存在
                 //      1   文件存在
                 nRet = Global.ReadTextFileContent(strStatisTemplateFilePath,
-                    out strContent,
+                    out string strContent,
                     out strError);
                 if (nRet == -1)
                     return -1;
@@ -2898,13 +3160,18 @@ namespace dp2Circulation
             filenames = new List<string>();    // 每页一个文件，这个数组存放了所有文件名
 
             // 需要将属于不同渠道的文件名前缀区别开来
-            string strFileName = this.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_" + strStatisType + "statis";
+            string strFileName = Program.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_" + strStatisType + "statis";
 
             filenames.Add(strFileName);
 
-            Sheet sheet = null;
+            /*
+                        Sheet sheet = null;
+                        if (doc != null)
+                            sheet = doc.NewSheet(strSheetName);
+                            */
+            IXLWorksheet sheet = null;
             if (doc != null)
-                sheet = doc.NewSheet(strSheetName);
+                sheet = doc.Worksheets.Add(strSheetName + (nSheetIndex + 1).ToString());
 
             bool bWiledMatched = false; // 是否遇到过通配符
 
@@ -2977,7 +3244,6 @@ namespace dp2Circulation
                 }
 
                 // 匹配行
-                List<StatisLine> results = null;
                 // 用分类号匹配统计结果行。
                 // return:
                 //      -1  出错
@@ -2986,7 +3252,7 @@ namespace dp2Circulation
                     main_lines,
                     strStatisType == "class" ? false : true,
                     strStatisType == "class" ? false : true,
-                    out results,
+                    out List<StatisLine> results,
                     out strError);
                 if (nRet == -1)
                     return -1;
@@ -3042,7 +3308,6 @@ namespace dp2Circulation
                             }
                         }
 
-                        List<StatisLine> temp_results = null;
                         // 匹配行
                         // 用分类号匹配统计结果行。
                         // return:
@@ -3052,7 +3317,7 @@ namespace dp2Circulation
                             line.InnerLines,
                             false,
                             false,
-                            out temp_results,
+                            out List<StatisLine> temp_results,
                             out strError);
                         if (nRet == -1)
                             return -1;
@@ -3091,8 +3356,6 @@ namespace dp2Circulation
 
                         new_results.AddRange(temp_results);
                     }
-
-
                 }
 
                 string strTotalPrice = ListViewUtil.GetItemText(item, MERGED_COLUMN_TOTALPRICE);
@@ -3101,18 +3364,34 @@ namespace dp2Circulation
 
                 string strAcceptCopy = ListViewUtil.GetItemText(item, MERGED_COLUMN_ACCEPTCOPY);
                 string strAcceptSubCopy = ListViewUtil.GetItemText(item, MERGED_COLUMN_ACCEPTSUBCOPY);
-                string strPrice = ListViewUtil.GetItemText(item, MERGED_COLUMN_PRICE);
-                // string strAcceptPrice = ListViewUtil.GetItemText(item, MERGED_COLUMN_ACCEPTPRICE);
 
+                string strPrice = ListViewUtil.GetItemText(item, MERGED_COLUMN_PRICE);
+
+                string strFixedPrice = ListViewUtil.GetItemText(item, MERGED_COLUMN_FIXEDPRICE);
+                if (string.IsNullOrEmpty(strFixedPrice))
+                    strFixedPrice = strPrice;
+
+                // 去掉 {} 符号
+                strFixedPrice = StringUtil.Unquote(strFixedPrice, "{}");
+
+                string strDiscount = ListViewUtil.GetItemText(item, MERGED_COLUMN_DISCOUNT);
+                if (string.IsNullOrEmpty(strFixedPrice) == false && string.IsNullOrEmpty(strDiscount))
+                    strDiscount = "1.0";
+
+                string strFixedTotalPrice = ListViewUtil.GetItemText(item, MERGED_COLUMN_TOTALFIXEDPRICE);
+
+#if NO
+                // 码洋总价。这是通过码洋乘以套数得来的，不是订购记录中的原生字段
+                string strFixedTotalPrice = "";
+                if (string.IsNullOrEmpty(strFixedPrice) == false)
+                    strFixedTotalPrice = Multiple(strFixedPrice, strAcceptCopy);
+#endif
+                // TODO: 这里遇到 Parse 错误是否报错?
                 // 套数
-                int nSeries = 0;
-                Int32.TryParse(strCopy, out nSeries);
-                int nAcceptSeries = 0;
-                Int32.TryParse(strAcceptCopy, out nAcceptSeries);
-                int nSubCopy = 1;
-                Int32.TryParse(strSubCopy, out nSubCopy);
-                int nAcceptSubCopy = 1;
-                Int32.TryParse(strAcceptSubCopy, out nAcceptSubCopy);
+                Int32.TryParse(strCopy, out int nSeries);
+                Int32.TryParse(strAcceptCopy, out int nAcceptSeries);
+                Int32.TryParse(strSubCopy, out int nSubCopy);
+                Int32.TryParse(strAcceptSubCopy, out int nAcceptSubCopy);
 
                 ////
                 nRet = AddValue(
@@ -3120,10 +3399,13 @@ namespace dp2Circulation
                     nSeries,
                     nSeries * nSubCopy,
                     strTotalPrice,
+                    strFixedTotalPrice,
+                    strDiscount,
                     1,
                     nAcceptSeries,
                     nAcceptSeries * nAcceptSubCopy,
                     strPrice,
+                    strFixedPrice,
                     results,
                     out strError);
 
@@ -3134,10 +3416,13 @@ namespace dp2Circulation
     nSeries,
     nSeries * nSubCopy,
     strTotalPrice,
+                    strFixedTotalPrice,
+                    strDiscount,
     1,
     nAcceptSeries,
     nAcceptSeries * nAcceptSubCopy,
     strPrice,
+                    strFixedPrice,
     new_results,
     out strError);
                 }
@@ -3155,12 +3440,14 @@ namespace dp2Circulation
                 strTableContent += "<td class='seriescount'>套数</td>";
                 strTableContent += "<td class='itemcount'>册数</td>";
                 strTableContent += "<td class='orderprice'>订购价</td>";
+                strTableContent += "<td class='fixedprice'>码洋</td>";
                 if (this.checkBox_print_accepted.Checked == true)
                 {
                     strTableContent += "<td class='accept_bibliocount'>已到种数</td>";
                     strTableContent += "<td class='accept_seriescount'>已到套数</td>";
                     strTableContent += "<td class='accept_itemcount'>已到册数</td>";
                     strTableContent += "<td class='accept_orderprice'>已到订购价</td>";
+                    strTableContent += "<td class='accept_fixedprice'>已到码洋</td>";
                 }
 
                 #endregion
@@ -3177,6 +3464,7 @@ namespace dp2Circulation
                     cols.Add("套数");
                     cols.Add("册数");
                     cols.Add("订购价");
+                    cols.Add("码洋");
 
                     if (this.checkBox_print_accepted.Checked == true)
                     {
@@ -3184,33 +3472,51 @@ namespace dp2Circulation
                         cols.Add("已到套数");
                         cols.Add("已到册数");
                         cols.Add("已到订购价");
+                        cols.Add("已到码洋");
                     }
 
                     // 输出标题
-                    doc.WriteExcelTitle(0,
+                    WriteExcelTitle(
+                        sheet,
+                        TABLE_TOP_BLANK_LINES,
+                        TABLE_LEFT_BLANK_COLUMS,
     cols.Count,
     strTableTitle,
-    5);
+    XLColor.DarkRed);   // 订单统计页
 
+                    IXLCell title_first = null;
+                    IXLCell title_last = null;
                     foreach (string s in cols)
                     {
-                        doc.WriteExcelCell(
-            2,
-            nColIndex++,
-            s,
-            true);
+                        IXLCell cell = WriteExcelCell(
+                            sheet,
+            TABLE_TOP_BLANK_LINES + 2,
+            TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+            s/*,
+            true*/);
+                        if (title_first == null)
+                            title_first = cell;
+                        title_last = cell;
                     }
+
+                    SetColumnLineStyle(sheet,
+title_first,
+title_last,
+"",
+XLColor.LightGray);
                 }
 
                 #endregion
             }
 
             string strSumPrice = "";
+            string strSumFixedPrice = "";
             long lBiblioCount = 0;
             long lSeriesCount = 0;
             long lItemCount = 0;
 
             string strAcceptSumPrice = "";
+            string strAcceptSumFixedPrice = "";
             long lAcceptBiblioCount = 0;
             long lAcceptSeriesCount = 0;
             long lAcceptItemCount = 0;
@@ -3219,6 +3525,10 @@ namespace dp2Circulation
             {
                 main_lines.Sort(new CellStatisLineComparer());
             }
+
+            IXLCell sum_first = null;
+            IXLCell sum_last = null;
+            List<int> column_max_chars = new List<int>();
 
             // 嵌套的子表
             List<InnerTableLine> inner_tables = new List<InnerTableLine>();
@@ -3230,16 +3540,21 @@ namespace dp2Circulation
                 if (line.Class == "*")
                     continue;
 
-                string strCurrentPrices = "";
                 // 2012/3/7
                 // 将形如"-123.4+10.55-20.3"的价格字符串归并汇总
                 nRet = PriceUtil.SumPrices(line.Price,
-        out strCurrentPrices,
+        out string strCurrentPrices,
         out strError);
                 if (nRet == -1)
                     strCurrentPrices = strError;
+                nRet = PriceUtil.SumPrices(line.FixedPrice,
+out string strCurrentFixedPrices,
+out strError);
+                if (nRet == -1)
+                    strCurrentFixedPrices = strError;
 
                 string strAcceptCurrentPrices = "";
+                string strAcceptCurrentFixedPrices = "";
 
                 if (this.checkBox_print_accepted.Checked == true)
                 {
@@ -3249,6 +3564,11 @@ namespace dp2Circulation
             out strError);
                     if (nRet == -1)
                         strAcceptCurrentPrices = strError;
+                    nRet = PriceUtil.SumPrices(line.AcceptFixedPrice,
+out strAcceptCurrentFixedPrices,
+out strError);
+                    if (nRet == -1)
+                        strAcceptCurrentFixedPrices = strError;
                 }
 
                 string strNoSumClass = "";
@@ -3265,12 +3585,14 @@ namespace dp2Circulation
                 strTableContent += "<td class='seriescount'>" + GetTdValueString(line.SeriesCount) + "</td>";
                 strTableContent += "<td class='itemcount'>" + GetTdValueString(line.ItemCount) + "</td>";
                 strTableContent += "<td class='orderprice'>" + HttpUtility.HtmlEncode(strCurrentPrices) + "</td>";
+                strTableContent += "<td class='fixedprice'>" + HttpUtility.HtmlEncode(strCurrentFixedPrices) + "</td>";
                 if (this.checkBox_print_accepted.Checked == true)
                 {
                     strTableContent += "<td class='accept_bibliocount'>" + GetTdValueString(line.AcceptBiblioCount) + "</td>";
                     strTableContent += "<td class='accept_seriescount'>" + GetTdValueString(line.AcceptSeriesCount) + "</td>";
                     strTableContent += "<td class='accept_itemcount'>" + GetTdValueString(line.AcceptItemCount) + "</td>";
                     strTableContent += "<td class='accept_orderprice'>" + HttpUtility.HtmlEncode(strAcceptCurrentPrices) + "</td>";
+                    strTableContent += "<td class='accept_fixedprice'>" + HttpUtility.HtmlEncode(strAcceptCurrentFixedPrices) + "</td>";
                 }
 
                 #endregion
@@ -3280,46 +3602,98 @@ namespace dp2Circulation
                 if (doc != null)
                 {
                     int nColIndex = 0;
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-line.Class,
-true);
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-line.BiblioCount.ToString());
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-line.SeriesCount.ToString());
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-line.ItemCount.ToString());
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
+
+                    // 记载第一列最大字符数
+                    SetMaxChars(ref column_max_chars,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex,
+    line.Class.Length);
+
+                    IXLCell left = WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+line.Class/*,
+true*/);
+
+
+
+                    /*
+                    if (line.AllowSum == false)
+                        left.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    */
+
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+line.BiblioCount/*.ToString()*/);
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+line.SeriesCount/*.ToString()*/);
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+line.ItemCount/*.ToString()*/);
+
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
 strCurrentPrices);
+
+                    // 记载最后一列最大字符数
+                    SetMaxChars(ref column_max_chars,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex,
+    strCurrentFixedPrices.Length);
+                    IXLCell right = WriteExcelCell(
+        sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+strCurrentFixedPrices);
 
                     if (this.checkBox_print_accepted.Checked == true)
                     {
-                        doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-line.AcceptBiblioCount.ToString());
-                        doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-line.AcceptSeriesCount.ToString());
-                        doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-line.AcceptItemCount.ToString());
-                        doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
+                        WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+line.AcceptBiblioCount/*.ToString()*/);
+                        WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+line.AcceptSeriesCount/*.ToString()*/);
+                        WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+line.AcceptItemCount/*.ToString()*/);
+
+                        WriteExcelCell(
+    sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
 strAcceptCurrentPrices);
+
+                        // 记载最后一列最大字符数
+                        SetMaxChars(ref column_max_chars,
+        TABLE_LEFT_BLANK_COLUMS + nColIndex,
+        strAcceptCurrentFixedPrices.Length);
+
+                        right = WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+strAcceptCurrentFixedPrices);
+                    }
+
+                    if (line.AllowSum == false)
+                    {
+                        IXLRange range = sheet.Range(left, right);
+                        range.Style.Font.Italic = true;
                     }
 
                     nExcelLineIndex++;
@@ -3343,6 +3717,8 @@ strAcceptCurrentPrices);
                 {
                     strSumPrice = PriceUtil.JoinPriceString(strSumPrice,
     strCurrentPrices);
+                    strSumFixedPrice = PriceUtil.JoinPriceString(strSumFixedPrice,
+strCurrentFixedPrices);
                     lBiblioCount += line.BiblioCount;
                     lSeriesCount += line.SeriesCount;
                     lItemCount += line.ItemCount;
@@ -3351,23 +3727,29 @@ strAcceptCurrentPrices);
                     {
                         strAcceptSumPrice = PriceUtil.JoinPriceString(strAcceptSumPrice,
                             strAcceptCurrentPrices);
+                        strAcceptSumFixedPrice = PriceUtil.JoinPriceString(strAcceptSumFixedPrice,
+    strAcceptCurrentFixedPrices);
                         lAcceptBiblioCount += line.AcceptBiblioCount;
                         lAcceptSeriesCount += line.AcceptSeriesCount;
                         lAcceptItemCount += line.AcceptItemCount;
                     }
-
                 }
             }
 
             // 汇总行
             #region 输出 HTML
             {
-                string strOutputPrice = "";
                 nRet = PriceUtil.SumPrices(strSumPrice,
-        out strOutputPrice,
+        out string strOutputPrice,
         out strError);
                 if (nRet == -1)
                     strOutputPrice = strError;
+
+                nRet = PriceUtil.SumPrices(strSumFixedPrice,
+out string strOutputFixedPrice,
+out strError);
+                if (nRet == -1)
+                    strOutputFixedPrice = strError;
 
                 strTableContent += "<tr class='totalize'>";
                 strTableContent += "<td class='class'>合计</td>";
@@ -3375,20 +3757,26 @@ strAcceptCurrentPrices);
                 strTableContent += "<td class='seriescount'>" + GetTdValueString(lSeriesCount) + "</td>";
                 strTableContent += "<td class='itemcount'>" + GetTdValueString(lItemCount) + "</td>";
                 strTableContent += "<td class='orderprice'>" + HttpUtility.HtmlEncode(strOutputPrice) + "</td>";
+                strTableContent += "<td class='fixedprice'>" + HttpUtility.HtmlEncode(strOutputFixedPrice) + "</td>";
 
                 if (this.checkBox_print_accepted.Checked == true)
                 {
-                    string strAcceptOutputPrice = "";
                     nRet = PriceUtil.SumPrices(strAcceptSumPrice,
-            out strAcceptOutputPrice,
+            out string strAcceptOutputPrice,
             out strError);
                     if (nRet == -1)
                         strAcceptOutputPrice = strError;
+                    nRet = PriceUtil.SumPrices(strAcceptSumFixedPrice,
+out string strAcceptOutputFixedPrice,
+out strError);
+                    if (nRet == -1)
+                        strAcceptOutputFixedPrice = strError;
 
                     strTableContent += "<td class='accept_bibliocount'>" + GetTdValueString(lAcceptBiblioCount) + "</td>";
                     strTableContent += "<td class='accept_seriescount'>" + GetTdValueString(lAcceptSeriesCount) + "</td>";
                     strTableContent += "<td class='accept_itemcount'>" + GetTdValueString(lAcceptItemCount) + "</td>";
                     strTableContent += "<td class='accept_orderprice'>" + HttpUtility.HtmlEncode(strAcceptOutputPrice) + "</td>";
+                    strTableContent += "<td class='accept_fixedprice'>" + HttpUtility.HtmlEncode(strAcceptOutputFixedPrice) + "</td>";
                 }
             }
             #endregion
@@ -3396,67 +3784,106 @@ strAcceptCurrentPrices);
             #region 输出 Excel
             if (doc != null)
             {
-                string strOutputPrice = "";
                 nRet = PriceUtil.SumPrices(strSumPrice,
-        out strOutputPrice,
+        out string strOutputPrice,
         out strError);
                 if (nRet == -1)
                     strOutputPrice = strError;
+                nRet = PriceUtil.SumPrices(strSumFixedPrice,
+out string strOutputFixedPrice,
+out strError);
+                if (nRet == -1)
+                    strOutputFixedPrice = strError;
 
                 int nColIndex = 0;
-                doc.WriteExcelCell(
-    nExcelLineIndex,
-    nColIndex++,
-    "合计",
-    true);
-                doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-lBiblioCount.ToString());
+                sum_first = WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+    "合计"/*,
+    true*/);
+                WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+lBiblioCount/*.ToString()*/);
 
-                doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-lSeriesCount.ToString());
+                WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+lSeriesCount/*.ToString()*/);
 
-                doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-lItemCount.ToString());
+                WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+lItemCount/*.ToString()*/);
 
-                doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
+                WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
 strOutputPrice);
+
+                sum_last = WriteExcelCell(
+            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+strOutputFixedPrice);
 
                 if (this.checkBox_print_accepted.Checked == true)
                 {
-                    string strAcceptOutputPrice = "";
                     nRet = PriceUtil.SumPrices(strAcceptSumPrice,
-            out strAcceptOutputPrice,
+            out string strAcceptOutputPrice,
             out strError);
                     if (nRet == -1)
                         strAcceptOutputPrice = strError;
+                    nRet = PriceUtil.SumPrices(strAcceptSumFixedPrice,
+out string strAcceptOutputFixedPrice,
+out strError);
+                    if (nRet == -1)
+                        strAcceptOutputFixedPrice = strError;
 
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-lAcceptBiblioCount.ToString());
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+lAcceptBiblioCount/*.ToString()*/);
 
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-lAcceptSeriesCount.ToString());
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-lAcceptItemCount.ToString());
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+lAcceptSeriesCount/*.ToString()*/);
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+lAcceptItemCount/*.ToString()*/);
+                    WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
 strAcceptOutputPrice);
+                    sum_last = WriteExcelCell(
+                            sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+strAcceptOutputFixedPrice);
                 }
+
+                AdjectColumnWidth(sheet, column_max_chars);
+                // 设置合计行样式
+                // parameters:
+                //      strSepStyle every 每个格子左边都有竖线(除了第一个格子)
+                //                  two 除了第一个格子，每两个格子，左边一个的左侧有竖线
+                SetSumLineStyle(sheet,
+                    sum_first,
+                    sum_last,
+                    "");    // 没有竖线
             }
+
             #endregion
 
             strTableContent += "</tr>";
@@ -3478,21 +3905,21 @@ strAcceptOutputPrice);
                 {
                     if (this.checkBox_print_accepted.Checked == false)
                     {
-                        strSheetName = "出版社分类统计页";
+                        strSheetName = "出版社分类统计";
                         strStatisTemplateFilePath = option.GetTemplatePageFilePath("出版社分类统计页");
                     }
                     else
                     {
-                        strSheetName = "出版社分类统计页(含验收)"; // 不能使用方括号
+                        strSheetName = "出版社分类统计(含验收)"; // 不能使用方括号
                         strStatisTemplateFilePath = option.GetTemplatePageFilePath("出版社分类统计页[含验收]");
                     }
 
                     if (String.IsNullOrEmpty(strStatisTemplateFilePath) == true)
                     {
                         if (this.checkBox_print_accepted.Checked == false)
-                            strStatisTemplateFilePath = PathUtil.MergePath(this.MainForm.DataDir, "default_printorder_publisherclassstatis.template");
+                            strStatisTemplateFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "default_printorder_publisherclassstatis.template");
                         else
-                            strStatisTemplateFilePath = PathUtil.MergePath(this.MainForm.DataDir, "default_printorder_publisherclassstatis_accept.template");
+                            strStatisTemplateFilePath = PathUtil.MergePath(Program.MainForm.DataDir, "default_printorder_publisherclassstatis_accept.template");
                     }
                 }
 
@@ -3506,14 +3933,13 @@ strAcceptOutputPrice);
                 }
                 {
                     // 根据模板打印
-                    string strContent = "";
                     // 能自动识别文件内容的编码方式的读入文本文件内容模块
                     // return:
                     //      -1  出错
                     //      0   文件不存在
                     //      1   文件存在
                     nRet = Global.ReadTextFileContent(strStatisTemplateFilePath,
-                        out strContent,
+                        out string strContent,
                         out strError);
                     if (nRet == -1)
                         return -1;
@@ -3522,8 +3948,14 @@ strAcceptOutputPrice);
                         strContent);
                 }
 
+                /*
                 if (doc != null)
                     sheet = doc.NewSheet(strSheetName);
+                    */
+                if (doc != null)
+                    sheet = doc.Worksheets.Add(
+                        // "表格" + strStatisType + (nSheetIndex + 1).ToString()
+                        "出版社分类统计" + (nSheetIndex + 1).ToString());
 
                 strTableTitle = "%date% %seller% 出版社分类号统计表";
                 strTableTitle = StringUtil.MacroString(macro_table,
@@ -3536,14 +3968,15 @@ strAcceptOutputPrice);
                     strStatisTypeName,
                     inner_tables,
                     strTableTitle,
-                    ref doc,
+                    // ref doc,
+                    ref sheet,
                     out strTableContent,
                     out strError);
                 if (nRet == -1)
                     return -1;
 
                 strResult = strResult.Replace("{table}", strTableContent);
-                string strInnerFileName = this.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_" + strStatisType + "statis_inner";
+                string strInnerFileName = Program.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_" + strStatisType + "statis_inner";
                 filenames.Add(strInnerFileName);
                 StreamUtil.WriteText(strInnerFileName,
                     strResult);
@@ -3562,7 +3995,8 @@ strAcceptOutputPrice);
             string strStatisTypeName,
             List<InnerTableLine> table,
             string strTableTitle,
-            ref ExcelDocument doc,
+            // ref /*ExcelDocument*/ XLWorkbook doc,
+            ref IXLWorksheet sheet,
             out string strResult,
             out string strError)
         {
@@ -3584,6 +4018,8 @@ strAcceptOutputPrice);
             if (first_lines == null)
                 return 0;   // 没有任何内容
 
+            List<int> column_max_chars = new List<int>();
+
             StringBuilder strTableContent = new StringBuilder(4096);
             strTableContent.Append("<table class='" + strStatisType + "extendstatis'>");
 
@@ -3602,45 +4038,79 @@ strAcceptOutputPrice);
 
             #region 输出 Excel
 
-            if (doc != null)
+            if (sheet != null)
             {
                 int nColIndex = 0;
+                IXLCell title_first = null;
+                IXLCell title_last = null;
+
 
                 // 表格标题
-                doc.WriteExcelTitle(0,
+                WriteExcelTitle(
+                    sheet,
+                    TABLE_TOP_BLANK_LINES,
+                    TABLE_LEFT_BLANK_COLUMS,
 first_lines.Count * 2 + 1,
 strTableTitle,
-5);
+XLColor.DarkBlue); // 出版社分类
 
-                doc.WriteExcelCell(
-    2,
-    nColIndex++,
-    strStatisTypeName,
-    true);
+                {
+                    title_first = WriteExcelCell(
+                            sheet,
+        TABLE_TOP_BLANK_LINES + 2,
+        TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+        strStatisTypeName/*,
+    true*/);
+                    //cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+                    //cell.Style.Fill.BackgroundColor = XLColor.LightGray;
+                }
                 // 类号标题列
+                int i = 0;
                 foreach (StatisLine line in first_lines)
                 {
                     int nFirstCol = nColIndex;
-                    doc.WriteExcelCell(
-    2,
-    nColIndex++,
-    line.Class,
-    true,
-    5); // 居中
+                    IXLCell first = WriteExcelCell(
+                        sheet,
+    TABLE_TOP_BLANK_LINES + 2,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+    line.Class + (i == 0 ? " (种,册)" : ""),
+    // true,
+    XLAlignmentHorizontalValues.Center); // 居中
+
+                    first.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+
                     // 空白单元
-                    doc.WriteExcelCell(
-    2,
-    nColIndex++,
-    "",
-    true);
+                    IXLCell second = WriteExcelCell(
+                        sheet,
+    TABLE_TOP_BLANK_LINES + 2,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+    ""/*,
+    true*/);
+
+                    IXLRange range = sheet.Range(first, second).Merge();
+                    //range.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+                    //range.Style.Fill.BackgroundColor = XLColor.LightGray;
+
+                    title_last = second;
+                    /*
                     // 把两个单元连接起来
-                    doc.InsertMergeCell(
+                    InsertMergeCell(
+                        sheet,
              2,
              nFirstCol,
              2);
+             */
+                    i++;
                 }
 
-                // nTitleColCount = nColIndex;
+                //sheet.Row(TABLE_TOP_BLANK_LINES + 2 + 1).Height = XLWorkbook.DefaultRowHeight * 1.5;
+                //sheet.Row(TABLE_TOP_BLANK_LINES + 2 + 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                SetColumnLineStyle(sheet,
+title_first,
+title_last,
+"",
+XLColor.LightGray);
             }
             #endregion
 
@@ -3664,13 +4134,19 @@ strTableTitle,
                 #region 输出 Excel
 
                 int nColIndex = 0;
-                if (doc != null)
+                if (sheet != null)
                 {
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-inner_line.Key,
-true);
+                    // 记载第一列最大字符数
+                    SetMaxChars(ref column_max_chars,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex,
+    inner_line.Key.Length);
+
+                    WriteExcelCell(
+                        sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+inner_line.Key/*,
+true*/);
                 }
 
                 #endregion
@@ -3683,16 +4159,22 @@ true);
 
                     #region 输出 Excel
 
-                    if (doc != null)
+                    if (sheet != null)
                     {
-                        doc.WriteExcelCell(
-    nExcelLineIndex,
-    nColIndex++,
-    line.BiblioCount.ToString());
-                        doc.WriteExcelCell(
-    nExcelLineIndex,
-    nColIndex++,
-    line.ItemCount.ToString());
+                        IXLCell cell = WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+    line.BiblioCount/*.ToString()*/,
+    XLAlignmentHorizontalValues.Right);
+                        cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+
+                        WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+    line.ItemCount/*.ToString()*/,
+    XLAlignmentHorizontalValues.Right);
                     }
 
                     #endregion
@@ -3714,9 +4196,12 @@ true);
 
                 strTableContent.Append("</tr>");
 
-                if (doc != null)
+                if (sheet != null)
                     nExcelLineIndex++;
             }
+
+            IXLCell sum_first = null;
+            IXLCell sum_last = null;
 
             // 汇总行
             {
@@ -3726,31 +4211,45 @@ true);
                 #region 输出 Excel
 
                 int nColIndex = 0;
-                if (doc != null)
+                if (sheet != null)
                 {
-                    doc.WriteExcelCell(
-nExcelLineIndex,
-nColIndex++,
-"合计",
-true);
+                    sum_first = WriteExcelCell(
+                        sheet,
+TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+"合计"/*,
+true*/);
+                    // cell.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+
                 }
 
                 #endregion
+
                 foreach (StatisLine line in sum_items)
                 {
                     strTableContent.Append("<td class='bibliocount'>" + GetTdValueString(line.BiblioCount) + "</td>");
                     strTableContent.Append("<td class='itemcount'>" + GetTdValueString(line.ItemCount) + "</td>");
                     #region 输出 Excel
-                    if (doc != null)
+                    if (sheet != null)
                     {
-                        doc.WriteExcelCell(
-    nExcelLineIndex,
-    nColIndex++,
-    line.BiblioCount.ToString());
-                        doc.WriteExcelCell(
-    nExcelLineIndex,
-    nColIndex++,
-    line.ItemCount.ToString());
+                        IXLCell first = WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+    line.BiblioCount/*.ToString()*/,
+    XLAlignmentHorizontalValues.Right);
+                        //first.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+                        //first.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+
+
+                        sum_last = WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nExcelLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + nColIndex++,
+    line.ItemCount/*.ToString()*/,
+    XLAlignmentHorizontalValues.Right);
+                        // second.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+
                     }
                     #endregion
                 }
@@ -3759,6 +4258,20 @@ true);
 
             strTableContent.Append("</tr>");
             strTableContent.Append("</table>");
+
+            if (sheet != null)
+            {
+                AdjectColumnWidth(sheet, column_max_chars);
+
+                // 设置合计行样式
+                // parameters:
+                //      strSepStyle every 每个格子左边都有竖线(除了第一个格子)
+                //                  two 除了第一个格子，每两个格子，左边一个的左侧有竖线
+                SetSumLineStyle(sheet,
+                    sum_first,
+                    sum_last,
+                    "two");
+            }
 
             strResult = strTableContent.ToString();
             return 0;   //  nTitleColCount;
@@ -3787,15 +4300,36 @@ true);
             return result.ToString();
         }
 
+        static string Multiple(string strPrice, string strCount)
+        {
+            Debug.Assert(string.IsNullOrEmpty(strCount) == false, "");
+            Debug.Assert(string.IsNullOrEmpty(strPrice) == false, "");
+
+            if (Int32.TryParse(strCount, out int nCount) == false)
+                return "";
+            int nRet = PriceUtil.MultiPrice(strPrice,
+nCount,
+out string strTemp,
+out string strError);
+            if (nRet != -1)
+                return strTemp;
+            return "";
+        }
+
+        // TODO: 考虑码洋和折扣
         int AddValue(
             int nBiblioCount,
             int nSeriesCount,
             int nItemCount,
             string strPrice,
+            string strFixedPrice,
+            string strDiscount,
             int nAcceptBiblioCount,
             int nAcceptSeriesCount,
             int nAcceptItemCount,
             string strAcceptPrice,
+            string strAcceptFixedPrice,
+            // string strAcceptDiscount,
             List<StatisLine> results,
             out string strError)
         {
@@ -3812,6 +4346,15 @@ true);
                 line.ItemCount += nItemCount;
                 line.Price = PriceUtil.JoinPriceString(line.Price,
                     strPrice);
+                line.FixedPrice = PriceUtil.JoinPriceString(line.FixedPrice,
+    strFixedPrice);
+                {
+                    // TODO: 需要把折扣值规范为都是两位小数以内
+                    if (string.IsNullOrEmpty(strDiscount))
+                        strDiscount = "1.00";
+                    if (line.DiscountList.IndexOf(strDiscount) == -1)
+                        line.DiscountList.Add(strDiscount);
+                }
                 if (this.checkBox_print_accepted.Checked == true)
                 {
                     if (nAcceptSeriesCount > 0)
@@ -3820,16 +4363,31 @@ true);
                         line.AcceptSeriesCount += nAcceptSeriesCount;
                         line.AcceptItemCount += nAcceptItemCount;
 
-                        string strTemp = "";
-                        nRet = PriceUtil.MultiPrice(strAcceptPrice,
-        nAcceptSeriesCount,
-        out strTemp,
-        out strError);
-                        if (nRet != -1)
                         {
-                            line.AcceptPrice = PriceUtil.JoinPriceString(line.AcceptPrice,
-                                strTemp);
+                            nRet = PriceUtil.MultiPrice(strAcceptPrice,
+            nAcceptSeriesCount,
+            out string strTemp,
+            out strError);
+                            if (nRet != -1)
+                            {
+                                line.AcceptPrice = PriceUtil.JoinPriceString(line.AcceptPrice,
+                                    strTemp);
+                            }
                         }
+
+                        // TODO: 下面这一段什么意思，还不是太明白，需要弄清楚
+                        {
+                            nRet = PriceUtil.MultiPrice(strAcceptFixedPrice,
+            nAcceptSeriesCount,
+            out string strTemp,
+            out strError);
+                            if (nRet != -1)
+                            {
+                                line.AcceptFixedPrice = PriceUtil.JoinPriceString(line.AcceptFixedPrice,
+                                    strTemp);
+                            }
+                        }
+
                         // TODO: 是否报错?
                     }
                 }
@@ -3929,6 +4487,7 @@ true);
             return String.Format("{0,3:N}", ((double)value1 / (double)value2) * (double)100) + "%";
         }
 
+#if NO
         static void WriteExcelLine(WorkbookPart wp,
             Worksheet ws,
             int nLineIndex,
@@ -3951,11 +4510,12 @@ true);
                 0,
                 bString);
         }
-
-        // 构造html页面
+#endif
+        // 构造订单页面
         int BuildMergedHtml(
+            int nSheetIndex,
             NamedListViewItems items,
-            ref ExcelDocument doc,
+            ref /*ExcelDocument*/ XLWorkbook doc,
             out List<string> filenames,
             out string strError)
         {
@@ -3968,9 +4528,9 @@ true);
             Hashtable macro_table = new Hashtable();
 
             // 获得打印参数
-            PrintOrderPrintOption option = new PrintOrderPrintOption(this.MainForm.DataDir,
+            PrintOrderPrintOption option = new PrintOrderPrintOption(Program.MainForm.UserDir, // Program.MainForm.DataDir,
                 this.comboBox_load_type.Text);
-            option.LoadData(this.MainForm.AppInfo,
+            option.LoadData(Program.MainForm.AppInfo,
                 "printorder_printoption");
 
             // 准备一般的 MARC 过滤器
@@ -3984,22 +4544,6 @@ true);
                         return -1;
                 }
             }
-
-            /*
-            // 检查当前排序状态和包含种价格列之间是否存在矛盾
-            if (bHasBiblioPriceColumn(option) == true)
-            {
-
-                if (this.SortColumns_in.Count != 0
-                    && this.SortColumns_in[0].No == COLUMN_BIBLIORECPATH)
-                {
-                }
-                else
-                {
-                    MessageBox.Show(this, "警告：打印列中要求了‘种价格’列，但打印前集合内事项并未按‘种记录路径’排序，这样打印出的‘种价格’栏内容将会不准确。\r\n\r\n要避免这种情况，可在打印前用鼠标左键点‘种记录路径’栏标题，确保按其排序。");
-                }
-            }*/
-
 
             // 计算出页总数
             int nTablePageCount = items.Count / option.LinesPerPage;
@@ -4025,67 +4569,47 @@ true);
             // filenames = new List<string>();    // 每页一个文件，这个数组存放了所有文件名
 
             // 需要将属于不同渠道的文件名前缀区别开来
-            string strFileNamePrefix = this.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_";
+            string strFileNamePrefix = Program.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_";
 
             string strFileName = "";
 
-            // 初始化 Excel 文件
-#if NO
-            Sheets sheets = null;
-            WorksheetPart worksheetPart = null;
+            IXLWorksheet sheet = null;
+            if (doc != null)
             {
-                // Add a WorkbookPart to the document.
-                WorkbookPart workbookpart = spreadsheetDocument.AddWorkbookPart();
-                workbookpart.Workbook = new Workbook();
-
-                // Add a WorksheetPart to the WorkbookPart.
-                worksheetPart = workbookpart.AddNewPart<WorksheetPart>();
-                worksheetPart.Worksheet = new Worksheet(new SheetData());
-
-                // Add Sheets to the Workbook.
-                sheets = spreadsheetDocument.WorkbookPart.Workbook.AppendChild<Sheets>(new Sheets());
+                sheet = doc.Worksheets.Add("统计页" + (nSheetIndex + 1).ToString());
             }
 
-            // Append a new worksheet and associate it with the workbook.
-            Sheet sheet = new Sheet() { 
-                Id = spreadsheetDocument.WorkbookPart.GetIdOfPart(worksheetPart),
-                SheetId = (UInt32)filenames.Count + 1,
-                Name = "统计页" };
-            sheets.Append(sheet);
-#endif
-
-            Sheet sheet = null;
-
-            if (doc != null)
-                sheet = doc.NewSheet("统计页");
-
-            // 输出信息页
+            // 输出统计页
             // TODO: 要增加“统计页”模板功能
             {
                 int nItemCount = items.Count;
                 int nTotalSeries = GetMergedTotalSeries(items);
                 int nTotalCopies = GetMergedTotalCopies(items);
                 int nBiblioCount = GetMergedBiblioCount(items);
-                string strTotalPrice = GetMergedTotalPrice(items);
+                string strTotalPrice = GetMergedTotalPrice("price", items);
+                string strTotalFixedPrice = GetMergedTotalPrice("fixedprice", items);
 
                 macro_table["%itemcount%"] = nItemCount.ToString(); // 事项数
                 macro_table["%totalcopies%"] = nTotalCopies.ToString(); // 总册数
                 macro_table["%totalseries%"] = nTotalSeries.ToString(); // 总套数
                 macro_table["%bibliocount%"] = nBiblioCount.ToString(); // 种数
                 macro_table["%totalprice%"] = strTotalPrice;    // 总价格 可能为多个币种的价格串联形态
+                macro_table["%totalfixedprice%"] = strTotalFixedPrice;    // 总码洋价格 可能为多个币种的价格串联形态
 
                 // 已验收的
                 int nAcceptItemCount = items.Count;
                 int nAcceptTotalSeries = GetMergedAcceptTotalSeries(items);
                 int nAcceptTotalCopies = GetMergedAcceptTotalCopies(items);
                 int nAcceptBiblioCount = GetMergedAcceptBiblioCount(items);
-                string strAcceptTotalPrice = GetMergedAcceptTotalPrice(items);
+                string strAcceptTotalPrice = GetMergedAcceptTotalPrice("price", items);
+                string strAcceptTotalFixedPrice = GetMergedAcceptTotalPrice("fixedprice", items);
 
                 macro_table["%accept_itemcount%"] = nAcceptItemCount.ToString(); // 事项数
                 macro_table["%accept_totalcopies%"] = nAcceptTotalCopies.ToString(); // 总册数
                 macro_table["%accept_totalseries%"] = nAcceptTotalSeries.ToString(); // 总套数
                 macro_table["%accept_bibliocount%"] = nAcceptBiblioCount.ToString(); // 种数
                 macro_table["%accept_totalprice%"] = strAcceptTotalPrice;    // 总价格 可能为多个币种的价格串联形态
+                macro_table["%accept_totalfixedprice%"] = strAcceptTotalFixedPrice;    // 总码洋价格 可能为多个币种的价格串联形态
 
                 // 到货率
                 macro_table["%ratio_itemcount%"] = GetRatioString(nAcceptItemCount, nItemCount); // 事项数
@@ -4093,7 +4617,7 @@ true);
                 macro_table["%ratio_totalseries%"] = GetRatioString(nAcceptTotalSeries, nTotalSeries); // 总套数
                 macro_table["%ratio_bibliocount%"] = GetRatioString(nAcceptBiblioCount, nBiblioCount); // 种数
                 macro_table["%ratio_totalprice%"] = GetRatioString(strAcceptTotalPrice, strTotalPrice);    // 总价格 可能为多个币种的价格串联形态
-
+                macro_table["%ratio_totalfixedprice%"] = GetRatioString(strAcceptTotalFixedPrice, strTotalFixedPrice);    // 总码洋 可能为多个币种的价格串联形态
 
                 macro_table["%pageno%"] = "1";
 
@@ -4117,6 +4641,8 @@ true);
                     "<div class='itemcount'>册数: " + nTotalCopies.ToString() + "</div>");  // 2009/1/5 changed
                 StreamUtil.WriteText(strFileName,
                     "<div class='totalprice'>总价: " + HttpUtility.HtmlEncode(strTotalPrice) + "</div>");
+                StreamUtil.WriteText(strFileName,
+    "<div class='totalfixedprice'>总码洋: " + HttpUtility.HtmlEncode(strTotalFixedPrice) + "</div>");
 
                 int nLineIndex = 2;
 
@@ -4124,34 +4650,51 @@ true);
                 {
                     BuildMergedExcelPageTop(option,
                         macro_table,
-                        ref doc,
-                        4,
+                        // ref doc,
+                        ref sheet,
+                        SUM_TOP_BLANK_LINES,
+                        SUM_LEFT_BLANK_COLUMS,
+                        6,  // 4,
                         false);
 
-                    doc.WriteExcelLine(
+                    sheet.Column(SUM_LEFT_BLANK_COLUMS + 1 + 1).Width = 0.5;
+                    sheet.Column(SUM_LEFT_BLANK_COLUMS + 1 + 2).Width = 0.5;
+
+                    WriteExcelLine(
+                        sheet,
                     nLineIndex++,
                     "渠道",
                     items.Seller);
 
-                    doc.WriteExcelLine(
+                    WriteExcelLine(
+                        sheet,
     nLineIndex++,
         "种数",
-        nBiblioCount.ToString());
+        nBiblioCount/*.ToString()*/);
 
-                    doc.WriteExcelLine(
+                    WriteExcelLine(
+                        sheet,
     nLineIndex++,
     "套数",
-    nTotalSeries.ToString());
+    nTotalSeries/*.ToString()*/);
 
-                    doc.WriteExcelLine(
+                    WriteExcelLine(
+                        sheet,
     nLineIndex++,
     "册数",
-    nTotalCopies.ToString());
+    nTotalCopies/*.ToString()*/);
 
-                    doc.WriteExcelLine(
+                    WriteExcelLine(
+                        sheet,
     nLineIndex++,
     "总价",
     strTotalPrice);
+
+                    WriteExcelLine(
+    sheet,
+nLineIndex++,
+"总码洋",
+strTotalFixedPrice);
                 }
 
                 if (this.checkBox_print_accepted.Checked == true)
@@ -4164,6 +4707,8 @@ true);
                         "<div class='accept_itemcount'>已验收册数: " + nAcceptTotalCopies.ToString() + "</div>");  // 2009/1/5 changed
                     StreamUtil.WriteText(strFileName,
                         "<div class='accept_totalprice'>已验收总价: " + HttpUtility.HtmlEncode(strAcceptTotalPrice) + "</div>");
+                    StreamUtil.WriteText(strFileName,
+    "<div class='accept_totalprice'>已验收总码洋: " + HttpUtility.HtmlEncode(strAcceptTotalFixedPrice) + "</div>");
 
                     // 到货率
                     StreamUtil.WriteText(strFileName,
@@ -4174,44 +4719,64 @@ true);
                         "<div class='ratio_itemcount'>册数到货率: " + HttpUtility.HtmlEncode((string)macro_table["%ratio_totalcopies%"]) + "</div>");  // 2009/1/5 changed
                     StreamUtil.WriteText(strFileName,
                         "<div class='ratio_totalprice'>总价到货率: " + HttpUtility.HtmlEncode((string)macro_table["%ratio_totalprice%"]) + "</div>");
+                    StreamUtil.WriteText(strFileName,
+    "<div class='ratio_totalprice'>码洋到货率: " + HttpUtility.HtmlEncode((string)macro_table["%ratio_totalfixedprice%"]) + "</div>");
 
                     if (doc != null)
                     {
-                        doc.WriteExcelLine(
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "已验收种数",
-nAcceptBiblioCount.ToString());
-                        doc.WriteExcelLine(
+nAcceptBiblioCount/*.ToString()*/);
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "已验收套数",
-nAcceptTotalSeries.ToString());
-                        doc.WriteExcelLine(
+nAcceptTotalSeries/*.ToString()*/);
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "已验收册数",
-nAcceptTotalCopies.ToString());
-                        doc.WriteExcelLine(
+nAcceptTotalCopies/*.ToString()*/);
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "已验收总价",
 strAcceptTotalPrice);
+                        WriteExcelLine(
+sheet,
+nLineIndex++,
+"已验收码洋",
+strAcceptTotalFixedPrice);
 
-                        doc.WriteExcelLine(
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "种数到货率",
 (string)macro_table["%ratio_bibliocount%"]);
 
-                        doc.WriteExcelLine(
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "套数到货率",
 (string)macro_table["%ratio_totalseries%"]);
 
-                        doc.WriteExcelLine(
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "册数到货率",
 (string)macro_table["%ratio_totalcopies%"]);
-                        doc.WriteExcelLine(
+                        WriteExcelLine(
+                        sheet,
 nLineIndex++,
 "总价到货率",
 (string)macro_table["%ratio_totalprice%"]);
+                        WriteExcelLine(
+sheet,
+nLineIndex++,
+"码洋到货率",
+(string)macro_table["%ratio_totalfixedprice%"]);
                     }
                 }
 
@@ -4221,13 +4786,22 @@ nLineIndex++,
                     false);
             }
 
+            List<int> column_max_chars = new List<int>();
+
             if (doc != null)
             {
-                sheet = doc.NewSheet("订单"); // "表1"
+                // sheet = doc.NewSheet("订单"); // "表1"
+                sheet = null;
+                sheet = doc.Worksheets.Add("订单" + (nSheetIndex + 1).ToString());
+                column_max_chars.Clear();
+
                 BuildMergedExcelPageTop(option,
     macro_table,
-    ref doc,
-    option.Columns.Count,
+    // ref doc,
+    ref sheet,
+    TABLE_TOP_BLANK_LINES,
+    TABLE_LEFT_BLANK_COLUMS,
+    -1, // option.Columns.Count,
     true);
             }
 
@@ -4241,24 +4815,6 @@ nLineIndex++,
                     strError = "用户中断";
                     return -1;
                 }
-
-#if NO
-                // Append a new worksheet and associate it with the workbook.
-                sheet = new Sheet()
-                {
-                    Id = spreadsheetDocument.WorkbookPart.GetIdOfPart(worksheetPart),
-                    SheetId = (UInt32)filenames.Count + 1,
-                    Name = "表" + (i+1).ToString()
-                };
-                sheets.Append(sheet);
-#endif
-
-
-#if NO
-                SheetInfo sheetinfo = new SheetInfo();
-                sheetinfo.wp = spreadsheetDocument.WorkbookPart;
-                sheetinfo.ws = worksheetPart.Worksheet;
-#endif
 
                 macro_table["%pageno%"] = (i + 1 + 1).ToString();
 
@@ -4285,8 +4841,10 @@ nLineIndex++,
                     BuildMergedTableLine(option,
                         items,
                         strFileName,
-                        doc,    // sheetinfo,
-                        i, j, 3);
+                        // doc,    // sheetinfo,
+                        sheet,
+                        i, j, 3,
+                        ref column_max_chars);
                 }
 
                 BuildMergedPageBottom(option,
@@ -4295,7 +4853,167 @@ nLineIndex++,
                     true);
             }
 
+            if (sheet != null && column_max_chars.Count > 0)
+            {
+                if (stop != null)
+                    stop.SetMessage("正在调整列宽度 ...");
+                Application.DoEvents();
+
+                AdjectColumnWidth(sheet, column_max_chars);
+#if NO
+                List<int> wrap_columns = new List<int>();
+                // 字符数太多的列不要做 width auto adjust
+                foreach (IXLColumn column in sheet.Columns())
+                {
+                    int MAX_CHARS = 50;   // 60
+
+                    int nIndex = column.FirstCell().Address.ColumnNumber - 1;
+                    if (nIndex >= column_max_chars.Count)
+                        break;
+                    int nChars = column_max_chars[nIndex];
+
+                    if (nIndex == 1)
+                    {
+                        column.Width = 10;
+                        continue;
+                    }
+
+#if NO
+                    if (nIndex == 3)
+                        MAX_CHARS = 50;
+                    else
+                        MAX_CHARS = 24;
+#endif
+
+                    if (nChars < MAX_CHARS)
+                        column.AdjustToContents();
+                    else
+                    {
+                        column.Width = Math.Min(MAX_CHARS, nChars);
+                        if (wrap_columns.IndexOf(nIndex) == -1)
+                            wrap_columns.Add(nIndex);
+                    }
+                }
+
+                foreach (int index in wrap_columns)
+                {
+                    sheet.Column(index + 1).Style.Alignment.WrapText = true;
+                }
+#endif
+            }
+
             return 0;
+        }
+
+        // 设置合计行样式
+        // parameters:
+        //      strSepStyle every 每个格子左边都有竖线(除了第一个格子)
+        //                  two 除了第一个格子，每两个格子，左边一个的左侧有竖线
+        static void SetSumLineStyle(IXLWorksheet sheet,
+            IXLCell first,
+            IXLCell last,
+            string strSepStyle)
+        {
+            if (first == null || last == null)
+                return;
+
+            if (last == null)
+                last = first;
+
+            IXLRange range = sheet.Range(first, last);
+            range.Style.Border.TopBorder = XLBorderStyleValues.Medium;
+
+            int i = 0;
+            foreach (IXLCell cell in range.Cells())
+            {
+                if (strSepStyle == "every" && i > 0)
+                    cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+                if (strSepStyle == "two" && i > 0 && (i % 2) == 1)
+                    cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+
+                i++;
+            }
+        }
+
+        static void SetColumnLineStyle(IXLWorksheet sheet,
+    IXLCell first,
+    IXLCell last,
+    string strSepStyle,
+    XLColor backColor)
+        {
+            if (first == null || last == null)
+                return;
+
+            if (last == null)
+                last = first;
+
+            IXLRow row = sheet.Row(first.Address.RowNumber);
+            row.Height = XLWorkbook.DefaultRowHeight * 1.5;
+            row.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // first.WorksheetRow().Height = XLWorkbook.DefaultRowHeight * 1.5;
+
+            IXLRange range = sheet.Range(first, last);
+            range.Style.Border.BottomBorder = XLBorderStyleValues.Medium;
+            range.Style.Fill.BackgroundColor = backColor;
+            range.Style.Font.Bold = true;
+
+            int i = 0;
+            foreach (IXLCell cell in range.Cells())
+            {
+                if (strSepStyle == "every" && i > 0)
+                    cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+                if (strSepStyle == "two" && i > 0 && (i % 2) == 1)
+                    cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+
+                i++;
+            }
+        }
+
+
+        public static void AdjectColumnWidth(IXLWorksheet sheet,
+            List<int> column_max_chars,
+            int MAX_CHARS = 50)
+        {
+            List<int> wrap_columns = new List<int>();
+            // 字符数太多的列不要做 width auto adjust
+            foreach (IXLColumn column in sheet.Columns())
+            {
+                // int MAX_CHARS = 50;   // 60
+
+                int nIndex = column.FirstCell().Address.ColumnNumber - 1;
+                if (nIndex >= column_max_chars.Count)
+                    break;
+                int nChars = column_max_chars[nIndex];
+                if (nChars == 0)
+                    continue;
+#if NO
+                if (nIndex == 1)
+                {
+                    column.Width = 10;
+                    continue;
+                }
+
+                    if (nIndex == 3)
+                        MAX_CHARS = 50;
+                    else
+                        MAX_CHARS = 24;
+#endif
+
+                if (nChars < MAX_CHARS)
+                    column.AdjustToContents();
+                else
+                {
+                    column.Width = Math.Min(MAX_CHARS, nChars);
+                    if (wrap_columns.IndexOf(nIndex) == -1)
+                        wrap_columns.Add(nIndex);
+                }
+            }
+
+            foreach (int index in wrap_columns)
+            {
+                sheet.Column(index + 1).Style.Alignment.WrapText = true;
+            }
         }
 
         // 2009/10/10
@@ -4310,8 +5028,8 @@ nLineIndex++,
                 return strCssFilePath;
             else
             {
-                // return this.MainForm.LibraryServerDir + "/" + strDefaultCssFileName;    // 缺省的
-                return PathUtil.MergePath(this.MainForm.DataDir, strDefaultCssFileName);    // 缺省的
+                // return Program.MainForm.LibraryServerDir + "/" + strDefaultCssFileName;    // 缺省的
+                return PathUtil.MergePath(Program.MainForm.DataDir, strDefaultCssFileName);    // 缺省的
             }
         }
 
@@ -4367,13 +5085,17 @@ nLineIndex++,
         }
 
         // 输出 Excel 页面头部信息
+        // parameters:
+        //      nTitleCols  标题所占据的列数。如果为 -1，表示自动按照表格列数计算
         int BuildMergedExcelPageTop(PrintOption option,
             Hashtable macro_table,
-            ref ExcelDocument doc,
+            // ref /*ExcelDocument*/ XLWorkbook doc,
+            ref IXLWorksheet sheet,
+            int nLineIndex,
+            int nColIndex,
             int nTitleCols,
             bool bOutputTable)
         {
-
             // 页眉
             string strPageHeaderText = option.PageHeader;
 
@@ -4388,29 +5110,14 @@ nLineIndex++,
                 */
             }
 
-            // 表格标题
-            string strTableTitleText = option.TableTitle;
-
-            // 第一行，表格标题
-            if (String.IsNullOrEmpty(strTableTitleText) == false)
-            {
-
-                strTableTitleText = StringUtil.MacroString(macro_table,
-                    strTableTitleText);
-
-                doc.WriteExcelTitle(0,
-                    nTitleCols,
-                    strTableTitleText,
-                    5);
-
-            }
-
+            // 输出表格栏目标题
             if (bOutputTable == true)
             {
-                for (int i = 0; i < option.Columns.Count; i++)
+                if (nTitleCols == -1)
+                    nTitleCols = option.Columns.Count;
+                int col_index = 0;  // Excel 中 Cell 列号
+                foreach (Column column in option.Columns)
                 {
-                    Column column = option.Columns[i];
-
                     string strCaption = column.Caption;
 
                     // 如果没有caption定义，就挪用name定义
@@ -4423,19 +5130,231 @@ nLineIndex++,
                     {
                         // 不输出 已到套数 列
                         if (strClass == "acceptCopy")
+                        {
+                            nTitleCols--;
                             continue;
+                        }
                     }
 
+                    /*
                     doc.WriteExcelCell(
             2,
             i,
             strCaption,
             true);
+            */
+                    IXLCell cell = WriteExcelCell(sheet,
+TABLE_TOP_BLANK_LINES + 2,
+TABLE_LEFT_BLANK_COLUMS + col_index,
+strCaption//,
+          //true
+);
+                    if (col_index == 0)
+                    {
+                        sheet.Row(TABLE_TOP_BLANK_LINES + 2 + 1).Height = XLWorkbook.DefaultRowHeight * 1.5;
+                        sheet.Row(TABLE_TOP_BLANK_LINES + 2 + 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                    }
+                    cell.Style.Font.Bold = true;
+                    cell.Style.Fill.BackgroundColor = XLColor.LightGray;
+                    cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+
+                    col_index++;
                 }
+            }
+
+            string strTableTitleText = option.TableTitle;
+
+            // 第一行，表格标题
+            if (String.IsNullOrEmpty(strTableTitleText) == false)
+            {
+                strTableTitleText = StringUtil.MacroString(macro_table,
+                    strTableTitleText);
+
+                /*
+                doc.WriteExcelTitle(0,
+                    nTitleCols,
+                    strTableTitleText,
+                    5);
+                    */
+                WriteExcelTitle(
+                    sheet,
+                    nLineIndex + 0,
+                    nColIndex,
+nTitleCols,
+strTableTitleText,
+XLColor.DarkGreen); // 订单
+                sheet.Row(nLineIndex + 1).Height = XLWorkbook.DefaultRowHeight * 1.5;
+                sheet.Row(nLineIndex + 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
             }
 
             return 0;
         }
+
+        #region Excel 实用函数
+
+        // 合计页的边沿
+        public static int SUM_TOP_BLANK_LINES = 2;
+        public static int SUM_LEFT_BLANK_COLUMS = 1;
+
+        // 表格页的边沿
+        public static int TABLE_TOP_BLANK_LINES = 2;
+        public static int TABLE_LEFT_BLANK_COLUMS = 1;
+
+        // 一次写左右两个单元，构成统计行
+        public static void WriteExcelLine(
+                        IXLWorksheet sheet,
+    int nLineIndex,
+    string strName,
+    string strValue)
+        {
+            WriteExcelLineName(
+            sheet,
+    nLineIndex,
+    strName);
+            WriteExcelCell(
+                sheet,
+                SUM_TOP_BLANK_LINES + nLineIndex,
+                SUM_LEFT_BLANK_COLUMS + 3,
+                strValue.Trim());
+        }
+
+        public static void WriteExcelLine(
+                IXLWorksheet sheet,
+int nLineIndex,
+string strName,
+long value)
+        {
+            WriteExcelLineName(
+            sheet,
+    nLineIndex,
+    strName);
+            WriteExcelCell(
+                sheet,
+                SUM_TOP_BLANK_LINES + nLineIndex,
+                SUM_LEFT_BLANK_COLUMS + 3,
+                value);
+        }
+
+        static void WriteExcelLineName(
+        IXLWorksheet sheet,
+int nLineIndex,
+string strName)
+        {
+            {
+                IXLCell cell = WriteExcelCell(
+            sheet,
+            SUM_TOP_BLANK_LINES + nLineIndex,
+            SUM_LEFT_BLANK_COLUMS,
+            strName.Trim());
+                // cell.Style.Font.FontColor = XLColor.DarkGray;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                cell.Style.Fill.BackgroundColor = XLColor.LightGray;
+            }
+
+            {
+                IXLCell cell = WriteExcelCell(
+            sheet,
+            SUM_TOP_BLANK_LINES + nLineIndex,
+            SUM_LEFT_BLANK_COLUMS + 1,
+            "");
+                cell.Style.Fill.BackgroundColor = XLColor.LightGray;
+                // 左右单元之间加一道竖线
+                cell.Style.Border.RightBorder = XLBorderStyleValues.Thin;
+
+            }
+        }
+
+        public static IXLCell WriteExcelCell(
+    IXLWorksheet sheet,
+int nLineIndex,
+int nColIndex,
+long value,
+    // bool bString,
+    // int nStyleIndex = 0
+    XLAlignmentHorizontalValues align = XLAlignmentHorizontalValues.Left
+    )
+        {
+            IXLCell cell = sheet.Cell(nLineIndex + 1, nColIndex + 1).SetValue(value);
+            cell.Style.Alignment.Horizontal = align; // XLAlignmentHorizontalValues.Center;
+            return cell;
+        }
+
+        public static IXLCell WriteExcelCell(
+            IXLWorksheet sheet,
+    int nLineIndex,
+    int nColIndex,
+    string strValue,
+            // bool bString,
+            // int nStyleIndex = 0
+            XLAlignmentHorizontalValues align = XLAlignmentHorizontalValues.Left
+            )
+        {
+            // Debug.Assert(strValue != "0", "");
+
+            IXLCell cell = sheet.Cell(nLineIndex + 1, nColIndex + 1).SetValue(DomUtil.ReplaceControlCharsButCrLf(strValue, '*'));
+            cell.Style.Alignment.Horizontal = align; // XLAlignmentHorizontalValues.Center;
+            return cell;
+        }
+
+#if NO
+        static IXLCell WriteExcelTitle(
+            IXLWorksheet sheet,
+            int nLineIndex,
+    int nCols,
+    string strTitle,
+    int nStyleIndex = 0)
+        {
+            IXLCell cell = sheet.Cell(nLineIndex + 1, nCols + 1).SetValue(DomUtil.ReplaceControlCharsButCrLf(strTitle, '*'));
+
+            cell.Style.Font.Bold = true;
+            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            return cell;
+        }
+#endif
+
+        public static IXLRange WriteExcelTitle(
+            IXLWorksheet sheet,
+            int nLineIndex,
+    int nStartCol,
+    int nCols,
+    string strTitle,
+    XLColor titleColor)
+        {
+            IXLRange range = sheet.Range(nLineIndex + 1, nStartCol + 1, nLineIndex + 1, nStartCol + 1 + nCols - 1);
+            range.Merge();
+            range.SetValue(DomUtil.ReplaceControlCharsButCrLf(strTitle, '*'));
+            //IXLCell cell = sheet.Cell(nLineIndex, nStartCol).SetValue(DomUtil.ReplaceControlCharsButCrLf(strTitle, '*'));
+
+            //cell.Style.Alignment.WrapText = true;
+            //cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            range.Style.Font.Bold = true;
+            //    cell.Style.Font.FontName = config.FontName;
+            range.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            range.Style.Border.LeftBorder = XLBorderStyleValues.Thick;
+            range.Style.Border.LeftBorderColor = titleColor;
+            return range;
+        }
+
+#if NO
+        public IXLRange InsertMergeCell(
+            IXLWorksheet sheet,
+    int nLineIndex,
+    int nColIndex,
+    int nColspan)
+        {
+            Debug.Assert(nColspan >= 2, "");
+
+            IXLRange range = sheet.Range(nLineIndex + 1, nColIndex + 1, nLineIndex + 1, nColIndex + 1 + nColspan);
+            range.Merge();
+            // range.SetValue(DomUtil.ReplaceControlCharsButCrLf(strTitle, '*'));
+            // range.Style.Font.Bold = true;
+            // range.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            return range;
+        }
+#endif
+
+        #endregion
 
         int BuildMergedPageTop(PrintOption option,
             Hashtable macro_table,
@@ -4443,7 +5362,7 @@ nLineIndex++,
             bool bOutputTable)
         {
             /*
-            string strLibraryServerUrl = this.MainForm.AppInfo.GetString(
+            string strLibraryServerUrl = Program.MainForm.AppInfo.GetString(
     "config",
     "circulation_server_url",
     "");
@@ -4452,7 +5371,7 @@ nLineIndex++,
                 strLibraryServerUrl = strLibraryServerUrl.Substring(0, pos);
              * */
 
-            // string strCssUrl = this.MainForm.LibraryServerDir + "/printorder.css";
+            // string strCssUrl = Program.MainForm.LibraryServerDir + "/printorder.css";
             // 2009/10/10 changed
             string strCssUrl = GetAutoCssUrl(option, "printorder.css");
 
@@ -4462,7 +5381,7 @@ nLineIndex++,
             if (String.IsNullOrEmpty(strCssFilePath) == false)
                 strCssUrl = strCssFilePath;
             else
-                strCssUrl = this.MainForm.LibraryServerDir + "/printorder.css";    // 缺省的
+                strCssUrl = Program.MainForm.LibraryServerDir + "/printorder.css";    // 缺省的
              * */
 
             string strLink = "<link href='" + strCssUrl + "' type='text/css' rel='stylesheet' />";
@@ -4552,16 +5471,24 @@ nLineIndex++,
         }
 #endif
 
+        string GetItemSummary(ListViewItem item)
+        {
+            // TODO: 行容易让操作者看到行号么？
+            return "合并后列表行 " + (item.ListView.Items.IndexOf(item) + 1).ToString();
+        }
+
         // parameters:
         //      nTopBlankLines  Excel 页面上方留出的空白行数。空白行用于表格标题和栏标题
         int BuildMergedTableLine(PrintOption option,
             List<ListViewItem> items,
             string strFileName,
             // SheetInfo sheetinfo,
-            ExcelDocument doc,
+            // /*ExcelDocument*/ XLWorkbook doc,
+            IXLWorksheet sheet,
             int nPage,
             int nLine,
-            int nTopBlankLines)
+            int nTopBlankLines,
+            ref List<int> column_max_chars)
         {
             string strHtmlLineContent = "";
             int nRet = 0;
@@ -4613,54 +5540,14 @@ nLineIndex++,
                 }
             }
 
-            for (int i = 0; i < option.Columns.Count; i++)
+            int col_index = 0;
+            foreach (Column column in option.Columns)
             {
-                Column column = option.Columns[i];
-
-                /*
-                int nIndex = nPage * option.LinesPerPage + nLine;
-
-                if (nIndex >= items.Count)
-                    break;
-
-                ListViewItem item = items[nIndex];
-                 * */
-
                 string strContent = GetMergedColumnContent(item,
                     column.Name);
 
                 if (strContent == "!!!#")
                     strContent = ((nPage * option.LinesPerPage) + nLine + 1).ToString();
-
-                /*
-                if (strContent == "!!!biblioPrice")
-                {
-                    // 看看自己是不是处在切换边沿
-                    string strCurLineBiblioRecPath = GetColumnContent(item, "biblioRecpath");
-
-                    string strNextLineBiblioRecPath = "";
-
-                    if (nIndex < items.Count - 1)
-                    {
-                        ListViewItem next_item = items[nIndex + 1];
-                        strNextLineBiblioRecPath = GetColumnContent(next_item, "biblioRecpath");
-                    }
-
-                    if (strCurLineBiblioRecPath != strNextLineBiblioRecPath)
-                    {
-                        // 处在切换边沿
-
-                        // 汇总前面的册价格
-                        strContent = ComputeBiblioPrice(items, nIndex).ToString();
-                        bBiblioSumLine = true;
-                    }
-                    else
-                    {
-                        // 其他普通行
-                        strContent = "&nbsp;";
-                    }
-                }
-                 * */
 
                 // 截断字符串
                 if (column.MaxChars != -1)
@@ -4681,16 +5568,40 @@ nLineIndex++,
                         continue;
                 }
 
-                if (doc != null)
+                if (sheet != null)
                 {
                     int nLineIndex = (nPage * option.LinesPerPage) + nLine;
-                    ExcelUtil.UpdateValue(
-                        doc.workbookpart,
-                        doc.worksheetPart.Worksheet,
-                        ExcelDocument.GetCellName(i, nLineIndex + nTopBlankLines),
-                        strContent,
-                        0,
-                        StringUtil.IsNumber(strContent) ? false : true);
+
+                    if (column.Name.StartsWith("no ") == true
+                        || column.Name.StartsWith("acceptCopy ") == true)
+                    {
+                        if (Int64.TryParse(strContent, out long no))
+                            WriteExcelCell(sheet,
+        TABLE_TOP_BLANK_LINES + nLineIndex + nTopBlankLines,
+        TABLE_LEFT_BLANK_COLUMS + col_index,
+        no).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                        else
+                            WriteExcelCell(sheet,
+TABLE_TOP_BLANK_LINES + nLineIndex + nTopBlankLines,
+TABLE_LEFT_BLANK_COLUMS + col_index,
+strContent);
+                    }
+                    else
+                    {
+                        // 2018/11/29
+                        // TODO: 这里的 strContent 可能为 '0'，会引起函数 Assertion 报错。
+                        // 彻底解决的方法，是要有方法能确知这一列是不是数值类型。如果是数值类型则要调用另外一个版本的函数，从而避免写入 text 类型
+                        WriteExcelCell(sheet,
+TABLE_TOP_BLANK_LINES + nLineIndex + nTopBlankLines,
+TABLE_LEFT_BLANK_COLUMS + col_index,
+strContent);
+                    }
+
+                    // 最大字符数
+                    SetMaxChars(ref column_max_chars,
+                        TABLE_LEFT_BLANK_COLUMS + col_index,
+                        strContent.Length);
+                    sheet.Row(TABLE_TOP_BLANK_LINES + nLineIndex + nTopBlankLines + 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
                 }
 
                 if (String.IsNullOrEmpty(strContent) == true)
@@ -4700,10 +5611,11 @@ nLineIndex++,
 
                 strHtmlLineContent +=
                     "<td class='" + strClass + "'>" + strContent + "</td>";
+
+                col_index++;
             }
 
-        END1:
-
+            END1:
             StreamUtil.WriteText(strFileName,
     "<tr class='content'>");
 
@@ -4722,6 +5634,22 @@ nLineIndex++,
             return 0;
         }
 
+        public static void SetMaxChars(ref List<int> column_max_chars, int index, int chars)
+        {
+            // 确保空间足够
+            while (column_max_chars.Count < index + 1)
+            {
+                column_max_chars.Add(0);
+            }
+
+            // 统计最大字符数
+            int nOldChars = column_max_chars[index];
+            if (chars > nOldChars)
+            {
+                column_max_chars[index] = chars;
+            }
+        }
+
         // 获得栏目内容(合并后)
         string GetMergedColumnContent(ListViewItem item,
             string strColumnName)
@@ -4733,6 +5661,7 @@ nLineIndex++,
             if (nRet != -1)
                 strText = strText.Substring(0, nRet).Trim();
              * */
+            string strPosition = GetItemSummary(item);
 
             string strName = "";
             string strParameters = "";
@@ -4795,8 +5724,14 @@ nLineIndex++,
                     case "包含期数":
                         return item.SubItems[MERGED_COLUMN_ISSUECOUNT].Text;
 
+                    // 不含括号部分
                     case "series":
                     case "套数":
+                        return item.SubItems[MERGED_COLUMN_COPY].Text;
+
+                    // 含有括号部分
+                    case "series1":
+                    case "套数1":
                         {
                             string strCopy = item.SubItems[MERGED_COLUMN_COPY].Text;
                             string strSubCopy = item.SubItems[MERGED_COLUMN_SUBCOPY].Text;
@@ -4814,6 +5749,15 @@ nLineIndex++,
                     case "每套册数":
                         return item.SubItems[MERGED_COLUMN_SUBCOPY].Text;
 
+                    case "fixedprice":
+                    case "fixedPrice":
+                    case "码洋":
+                        return item.SubItems[MERGED_COLUMN_FIXEDPRICE].Text;
+
+                    case "discount":
+                    case "折扣":
+                        return dp2StringUtil.CanonicalizeDiscount(item.SubItems[MERGED_COLUMN_DISCOUNT].Text, strPosition);
+
                     case "price":
                     case "单价":
                         return item.SubItems[MERGED_COLUMN_PRICE].Text;
@@ -4821,6 +5765,11 @@ nLineIndex++,
                     case "totalPrice":
                     case "总价格":
                         return item.SubItems[MERGED_COLUMN_TOTALPRICE].Text;
+
+                    case "totalFixedPrice":
+                    case "fixedTotalPrice":
+                    case "总码洋":
+                        return item.SubItems[MERGED_COLUMN_TOTALFIXEDPRICE].Text;
 
                     case "orderTime":
                     case "订购时间":
@@ -4834,10 +5783,31 @@ nLineIndex++,
                     case "馆藏分配":
                         return item.SubItems[MERGED_COLUMN_DISTRIBUTE].Text;
 
+                    // 不含括号部分
+                    case "acceptSeries":
                     case "acceptCopy":
                     case "已到套数":
                     case "已到复本数":
+                    case "到书套数":
+                    case "到书复本数":
                         return item.SubItems[MERGED_COLUMN_ACCEPTCOPY].Text;
+
+                    // 含有括号部分
+                    case "acceptSeries1":
+                    case "acceptCopy1":
+                    case "已到套数1":
+                    case "已到复本数1":
+                    case "到书套数1":
+                    case "到书复本数1":
+                        // return item.SubItems[MERGED_COLUMN_ACCEPTCOPY].Text;
+                        {
+                            string strCopy = item.SubItems[MERGED_COLUMN_ACCEPTCOPY].Text;
+                            string strSubCopy = item.SubItems[MERGED_COLUMN_ACCEPTSUBCOPY].Text;
+                            if (String.IsNullOrEmpty(strSubCopy) == true)
+                                return strCopy;
+
+                            return strCopy + "(每套含 " + strSubCopy + " 册)";
+                        }
 
                     case "acceptSubCopy":
                     case "已到每套册数":
@@ -4846,6 +5816,14 @@ nLineIndex++,
                     case "acceptPrice":
                     case "到书单价":
                         return item.SubItems[MERGED_COLUMN_ACCEPTPRICE].Text;
+
+                    case "acceptFixedPrice":
+                    case "到书码洋":
+                        return item.SubItems[MERGED_COLUMN_ACCEPTFIXEDPRICE].Text;
+
+                    case "acceptDiscount":
+                    case "到书折扣":
+                        return dp2StringUtil.CanonicalizeDiscount(item.SubItems[MERGED_COLUMN_ACCEPTDISCOUNT].Text, strPosition);
 
                     case "class":
                     case "类别":
@@ -4936,7 +5914,6 @@ nLineIndex++,
             {
                 return null;    // 表示没有这个subitem下标
             }
-
         }
 
         /// <summary>
@@ -5361,7 +6338,11 @@ nLineIndex++,
          * */
 
         // 获得已经订购的总价格
-        static string GetMergedTotalPrice(NamedListViewItems items)
+        // parameters:
+        //      strFieldName 要处理的价格字段名。为 price/fixeprice 之一
+        static string GetMergedTotalPrice(
+            string strFieldName,
+            NamedListViewItems items)
         {
             List<string> prices = new List<string>();
             for (int i = 0; i < items.Count; i++)
@@ -5372,7 +6353,10 @@ nLineIndex++,
 
                 try
                 {
-                    strPrice = item.SubItems[MERGED_COLUMN_TOTALPRICE].Text;
+                    if (strFieldName == "price")
+                        strPrice = item.SubItems[MERGED_COLUMN_TOTALPRICE].Text;
+                    else
+                        strPrice = item.SubItems[MERGED_COLUMN_TOTALFIXEDPRICE].Text;
                 }
                 catch
                 {
@@ -5385,13 +6369,11 @@ nLineIndex++,
                 prices.Add(strPrice);
             }
 
-            List<string> results = null;
-            string strError = "";
             // 汇总价格
             // 货币单位不同的，互相独立
             int nRet = PriceUtil.TotalPrice(prices,
-                out results,
-                out strError);
+                out List<string> results,
+                out string strError);
             if (nRet == -1)
                 return strError;
 
@@ -5408,7 +6390,11 @@ nLineIndex++,
         }
 
         // 获得已经验收的总价格
-        static string GetMergedAcceptTotalPrice(NamedListViewItems items)
+        // parameters:
+        //      strFieldName 要处理的价格字段名。为 price/fixeprice 之一
+        static string GetMergedAcceptTotalPrice(
+            string strFieldName,
+            NamedListViewItems items)
         {
             string strError = "";
             int nRet = 0;
@@ -5440,7 +6426,10 @@ nLineIndex++,
 
                 try
                 {
-                    strPrice = item.SubItems[MERGED_COLUMN_ACCEPTPRICE].Text;
+                    if (strFieldName == "price")
+                        strPrice = item.SubItems[MERGED_COLUMN_ACCEPTPRICE].Text;
+                    else
+                        strPrice = item.SubItems[MERGED_COLUMN_ACCEPTFIXEDPRICE].Text;
                 }
                 catch
                 {
@@ -5484,7 +6473,6 @@ nLineIndex++,
             return strResult;
         }
 
-
         private void button_load_loadFromBatchNo_Click(object sender, EventArgs e)
         {
             SearchByBatchnoForm dlg = new SearchByBatchnoForm();
@@ -5503,7 +6491,7 @@ nLineIndex++,
             dlg.GetBatchNoTable += new GetKeyCountListEventHandler(dlg_GetBatchNoTable);
 
             dlg.RefDbName = "";
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
 
             dlg.StartPosition = FormStartPosition.CenterScreen;
             dlg.ShowDialog(this);
@@ -5548,8 +6536,11 @@ nLineIndex++,
                 SortColumns.ClearColumnSortDisplay(this.listView_origin.Columns);
             }
 
+            _changed_recpaths = Program.MainForm.GetChangedRecords("order");
+
             EnableControls(false);
-            // MainForm.ShowProgress(true);
+
+            LibraryChannel channel = this.GetChannel();
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在检索 ...");
@@ -5558,13 +6549,12 @@ nLineIndex++,
             try
             {
                 stop.SetProgressRange(0, 100);
-                // stop.SetProgressValue(0);
 
                 long lRet = 0;
                 if (this.BatchNo == "<不指定>")
                 {
                     // 2013/3/25
-                    lRet = Channel.SearchOrder(
+                    lRet = channel.SearchOrder(
         stop,
         this.comboBox_load_type.Text == "图书" ? "<all book>" : "<all series>",
         "", // dlg.BatchNo,
@@ -5584,7 +6574,7 @@ nLineIndex++,
                 }
                 else
                 {
-                    lRet = Channel.SearchOrder(
+                    lRet = channel.SearchOrder(
                         stop,
                         this.comboBox_load_type.Text == "图书" ? "<all book>" : "<all series>",
                         dlg.BatchNo,
@@ -5611,8 +6601,6 @@ nLineIndex++,
                 long lHitCount = lRet;
 
                 stop.SetProgressRange(0, lHitCount);
-                // stop.SetProgressValue(0);
-
 
                 long lStart = 0;
                 long lCount = lHitCount;
@@ -5623,17 +6611,13 @@ nLineIndex++,
                 {
                     Application.DoEvents();	// 出让界面控制权
 
-                    if (stop != null)
+                    if (stop != null && stop.State != 0)
                     {
-                        if (stop.State != 0)
-                        {
-                            MessageBox.Show(this, "用户中断");
-                            return;
-                        }
+                        MessageBox.Show(this, "用户中断");
+                        return;
                     }
 
-
-                    lRet = Channel.GetSearchResult(
+                    lRet = channel.GetSearchResult(
                         stop,
                         "batchno",   // strResultSetName
                         lStart,
@@ -5664,9 +6648,13 @@ nLineIndex++,
                         //      -2  路径已经在list中存在了
                         //      -1  出错
                         //      1   成功
-                        nRet = LoadOneItem(strRecPath,
+                        nRet = LoadOneItem(
+                            channel,
+                            strRecPath,
                             this.listView_origin,
                             out strError);
+                        if (nRet == -1)
+                            goto ERROR1;
                         if (nRet == -2)
                             nDupCount++;
 
@@ -5682,21 +6670,11 @@ nLineIndex++,
                         break;
                 }
 
-                /*
-                if (this.listView_in.Items.Count == 0
-                    && strMatchLocation != null)
-                {
-                    strError = "虽然批次号 '" + dlg.BatchNo + "' 命中了记录 " + lHitCount.ToString() + " 条, 但它们均未能匹配馆藏地点 '" + strMatchLocation + "' 。";
-                    goto ERROR1;
-                }*/
-
-
                 // 填充合并后数据列表
                 stop.SetMessage("正在合并数据...");
                 nRet = FillMergedList(out strError);
                 if (nRet == -1)
                     goto ERROR1;
-
             }
             finally
             {
@@ -5705,24 +6683,34 @@ nLineIndex++,
                 stop.Initial("");
                 stop.HideProgress();
 
+                this.ReturnChannel(channel);
+
                 EnableControls(true);
-                // MainForm.ShowProgress(false);
             }
 
             return;
-
-        ERROR1:
+            ERROR1:
+            this.ShowMessage(strError, "red", true);
             MessageBox.Show(this, strError);
         }
 
         void dlg_GetBatchNoTable(object sender, GetKeyCountListEventArgs e)
         {
-            Global.GetBatchNoTable(e,
-                this,
-                this.comboBox_load_type.Text,
-                "order",
-                this.stop,
-                this.Channel);
+            LibraryChannel channel = this.GetChannel();
+
+            try
+            {
+                Global.GetBatchNoTable(e,
+                    this,
+                    this.comboBox_load_type.Text,
+                    "order",
+                    this.stop,
+                    channel);
+            }
+            finally
+            {
+                this.ReturnChannel(channel);
+            }
 
 #if NOOOOOOOOOOOOOOOOOOOOOOOOO
             string strError = "";
@@ -6020,8 +7008,8 @@ nLineIndex++,
 
             EntityForm form = new EntityForm();
 
-            form.MainForm = this.MainForm;
-            form.MdiParent = this.MainForm;
+            form.MainForm = Program.MainForm;
+            form.MdiParent = Program.MainForm;
             form.Show();
 
             if (this.comboBox_load_type.Text == "图书")
@@ -6175,7 +7163,8 @@ MessageBoxDefaultButton.Button2);
             string strError = "";
 
             EnableControls(false);
-            // MainForm.ShowProgress(true);
+
+            LibraryChannel channel = this.GetChannel();
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在刷新 ...");
@@ -6184,8 +7173,6 @@ MessageBoxDefaultButton.Button2);
             try
             {
                 stop.SetProgressRange(0, items.Count);
-                // stop.SetProgressValue(0);
-
 
                 for (int i = 0; i < items.Count; i++)
                 {
@@ -6200,7 +7187,7 @@ MessageBoxDefaultButton.Button2);
 
                     stop.SetMessage("正在刷新 " + item.Text + " ...");
 
-                    int nRet = RefreshOneItem(item, out strError);
+                    int nRet = RefreshOneItem(channel, item, out strError);
                     /*
                     if (nRet == -1)
                         MessageBox.Show(this, strError);
@@ -6219,17 +7206,18 @@ MessageBoxDefaultButton.Button2);
                 stop.Initial("刷新完成。");
                 stop.HideProgress();
 
+                this.ReturnChannel(channel);
+
                 EnableControls(true);
-                // MainForm.ShowProgress(false);
             }
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
-
         }
 
-        /*public*/
-        int RefreshOneItem(ListViewItem item,
+        int RefreshOneItem(
+            LibraryChannel channel,
+            ListViewItem item,
             out string strError)
         {
             strError = "";
@@ -6244,7 +7232,7 @@ MessageBoxDefaultButton.Button2);
 
             string strIndex = "@path:" + item.SubItems[ORIGIN_COLUMN_RECPATH].Text;
 
-            long lRet = Channel.GetOrderInfo(
+            long lRet = channel.GetOrderInfo(
                 stop,
                 strIndex,
                 // "",
@@ -6277,7 +7265,7 @@ MessageBoxDefaultButton.Button2);
 
                 Debug.Assert(String.IsNullOrEmpty(strBiblioRecPath) == false, "strBiblioRecPath值不能为空");
 
-                lRet = Channel.GetBiblioInfos(
+                lRet = channel.GetBiblioInfos(
                     stop,
                     strBiblioRecPath,
                     "",
@@ -6298,7 +7286,6 @@ MessageBoxDefaultButton.Button2);
                     strBiblioSummary = results[0];
                     strISBnISSN = results[1];
                 }
-
             }
 
             // 剖析一个册的xml记录，取出有关信息放入listview中
@@ -6332,7 +7319,7 @@ MessageBoxDefaultButton.Button2);
             // item.ImageIndex = TYPE_NORMAL;
             SetItemColor(item, TYPE_NORMAL);
             return 1;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -6398,6 +7385,406 @@ MessageBoxDefaultButton.Button2);
             return 0;
         }
 
+        // 原始行的一行信息
+        internal class LineInfo
+        {
+            public string State { get; set; }
+
+            // 书商
+            public string Seller { get; set; }
+            public string SellerAddress { get; set; }
+
+            // 经费来源
+            // public string Source { get; set; }
+            public OldNewValue Source { get; set; }
+
+            public string IssueCount { get; set; }
+            public int IssueCountValue { get; set; }
+
+            public string Range { get; set; }
+            // 订购记录路径
+            public string RecPath { get; set; }
+            // 书目记录路径
+            public string BiblioRecPath { get; set; }
+            public string CatalogNo { get; set; }
+            public string OrderTime { get; set; }   // 订购时间。本地时间格式
+
+            // TotalPrice 是实有的数据
+            public string TotalPrice { get; set; }
+            public string Comment { get; set; }
+            public string Distribute { get; set; }
+            public string Class { get; set; }
+            // public string Summary { get; set; }
+
+            public OldNewValue Discount { get; set; }
+            public OldNewValue Price { get; set; }
+            public OldNewValue FixedPrice { get; set; }
+            public OldNewCopy Copy { get; set; }
+
+            #region 扩展的属性
+
+            // 订购单价
+            public string OrderPrice
+            {
+                get
+                {
+                    return Price.OldValue;
+                }
+                set
+                {
+                    if (this.Price == null)
+                        this.Price = new OldNewValue();
+
+                    FixedPrice.OldValue = value;
+                }
+            }
+            // 验收单价
+            public string AcceptPrice
+            {
+                get
+                {
+                    return Price.NewValue;
+                }
+                set
+                {
+                    if (this.Price == null)
+                        this.Price = new OldNewValue();
+
+                    Price.NewValue = value;
+                }
+            }
+
+            string _acceptTotalPrice = null;
+
+            // 验收总价
+            public string AcceptTotalPrice
+            {
+                get
+                {
+                    if (_acceptTotalPrice != null)
+                        return _acceptTotalPrice;
+
+                    string acceptPrice = this.AcceptPrice;
+                    if (string.IsNullOrEmpty(acceptPrice))
+                        return "";
+                    int acceptCopy = this.Copy.NewCopy.Copy;
+                    if (acceptCopy == 0)
+                        return "";
+                    int nRet = PriceUtil.MultiPrice(acceptPrice,
+                        acceptCopy,
+                        out string strResult,
+                        out string strError);
+                    if (nRet == -1)
+                        throw new Exception(strError);
+                    return strResult;
+                }
+                set
+                {
+                    _acceptTotalPrice = value;
+                }
+            }
+
+            // 订购码洋单价
+            public string OrderFixedPrice
+            {
+                get
+                {
+                    return FixedPrice.OldValue;
+                }
+                set
+                {
+                    if (this.FixedPrice == null)
+                        this.FixedPrice = new OldNewValue();
+
+                    FixedPrice.OldValue = value;
+                }
+            }
+
+            // 验收码洋单价
+            public string AcceptFixedPrice
+            {
+                get
+                {
+                    return FixedPrice.NewValue;
+                }
+                set
+                {
+                    if (this.FixedPrice == null)
+                        this.FixedPrice = new OldNewValue();
+
+                    FixedPrice.NewValue = value;
+                }
+            }
+
+            string _orderTotalFixedPrice = null;
+
+            // 订购总码洋
+            public string OrderTotalFixedPrice
+            {
+                get
+                {
+                    if (_orderTotalFixedPrice != null)
+                        return _orderTotalFixedPrice;
+
+                    string price = this.OrderFixedPrice;
+                    if (string.IsNullOrEmpty(price))
+                        return "";
+                    int copy = this.Copy.OldCopy.Copy;
+                    if (copy == 0)
+                        return "";
+                    int nRet = PriceUtil.MultiPrice(price,
+                        copy,
+                        out string strResult,
+                        out string strError);
+                    if (nRet == -1)
+                        throw new Exception(strError);
+                    return strResult;
+                }
+                set
+                {
+                    _orderTotalFixedPrice = value;
+                }
+            }
+
+            string _acceptTotalFixedPrice = null;
+
+            // 验收总码洋
+            public string AcceptTotalFixedPrice
+            {
+                get
+                {
+                    if (_acceptTotalFixedPrice != null)
+                        return _acceptTotalFixedPrice;
+
+                    string price = this.AcceptFixedPrice;
+                    if (string.IsNullOrEmpty(price))
+                        return "";
+                    int copy = this.Copy.NewCopy.Copy;
+                    if (copy == 0)
+                        return "";
+                    int nRet = PriceUtil.MultiPrice(price,
+                        copy,
+                        out string strResult,
+                        out string strError);
+                    if (nRet == -1)
+                        throw new Exception(strError);
+                    return strResult;
+                }
+                set
+                {
+                    _acceptTotalFixedPrice = value;
+                }
+            }
+
+            public decimal OrderDiscount
+            {
+                get
+                {
+                    string v = this.Discount?.OldValue;
+                    if (string.IsNullOrEmpty(v))
+                        v = "1.0";
+                    return Convert.ToDecimal(v);
+                }
+                set
+                {
+                    if (this.Discount == null)
+                        this.Discount = new OldNewValue();
+
+                    this.Discount.OldValue = value.ToString();
+                }
+            }
+            public decimal AcceptDiscount
+            {
+                get
+                {
+                    string v = this.Discount?.NewValue;
+                    if (string.IsNullOrEmpty(v))
+                        v = "1.0";
+                    return Convert.ToDecimal(v);
+                }
+                set
+                {
+                    if (this.Discount == null)
+                        this.Discount = new OldNewValue();
+
+                    this.Discount.NewValue = value.ToString();
+                }
+            }
+
+            public string OrderSource
+            {
+                get
+                {
+                    return Source.OldValue;
+                }
+                set
+                {
+                    if (this.Source == null)
+                        this.Source = new OldNewValue();
+
+                    Source.OldValue = value;
+                }
+            }
+            public string AcceptSource
+            {
+                get
+                {
+                    return Source.NewValue;
+                }
+                set
+                {
+                    if (this.Source == null)
+                        this.Source = new OldNewValue();
+
+                    Source.NewValue = value;
+                }
+            }
+
+
+            #endregion
+
+            // 对一些值进行填充和调整
+            // 返回 LineInfo 类型是为了便于链式调用
+            public LineInfo Adjust()
+            {
+                // 如果原始数据中的码洋为空，则用单价来填充
+                if (string.IsNullOrEmpty(FixedPrice.OldValue)
+                    && string.IsNullOrEmpty(Price.OldValue) == false
+                    && string.IsNullOrEmpty(Discount.OldValue) == false)
+                {
+                    // return:
+                    //      -1  计算过程出现错误
+                    //      0   strPrice 为空，无法计算
+                    //      1   计算成功
+
+                    int nRet = OrderDesignControl.ComputeFixedPriceByOrderPrice(
+    Price.OldValue,
+Discount.OldValue,
+out string strResultPrice,
+out string strError);
+                    if (nRet == 1)
+                    {
+                        FixedPrice.OldValue = strResultPrice;
+                        FixedPrice.IsVirtual = true;
+                    }
+                }
+                if (string.IsNullOrEmpty(FixedPrice.NewValue)
+                    && string.IsNullOrEmpty(Price.NewValue) == false
+                    && string.IsNullOrEmpty(Discount.NewValue) == false)
+                {
+                    int nRet = OrderDesignControl.ComputeFixedPriceByOrderPrice(
+    Price.NewValue,
+Discount.NewValue,
+out string strResultPrice,
+out string strError);
+                    if (nRet == 1)
+                    {
+                        FixedPrice.NewValue = strResultPrice;
+                        FixedPrice.IsVirtual = true;
+                    }
+                }
+
+                return this;
+            }
+
+            public static LineInfo Build(ListViewItem source, string strPosition)
+            {
+                string strState = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_STATE);
+                // 渠道
+                string strSeller = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_SELLER);
+                // 渠道地址
+                string strSellerAddress = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_SELLERADDRESS);
+
+                // 经费来源
+                string strSource = ListViewUtil.GetItemText(source, ORIGIN_COLUMN_SOURCE);
+
+                string strIssueCount = ListViewUtil.GetItemText(source,
+    ORIGIN_COLUMN_ISSUECOUNT);
+                int nIssueCount = 1;
+                if (string.IsNullOrEmpty(strIssueCount) == false)
+                {
+                    try
+                    {
+                        nIssueCount = Convert.ToInt32(strIssueCount);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new PositionException("期数 '" + strIssueCount + "' 格式不正确: " + ex.Message, strPosition);
+                    }
+                }
+
+                string strRange = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_RANGE);
+                string strRecPath = ListViewUtil.GetItemText(source, ORIGIN_COLUMN_RECPATH);
+                // 书目记录路径
+                string strBiblioRecPath = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_BIBLIORECPATH);
+                // 书目号
+                string strCatalogNo = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_CATALOGNO);
+                string strOrderTime = RemoveChangedChar(ListViewUtil.GetItemText(source,
+ORIGIN_COLUMN_ORDERTIME));   // 已经是本地时间格式
+
+                string strTotalPrice = RemoveChangedChar(ListViewUtil.GetItemText(source,
+    ORIGIN_COLUMN_TOTALPRICE));
+                string strComment = ListViewUtil.GetItemText(source, ORIGIN_COLUMN_COMMENT);
+                string strDistribute = ListViewUtil.GetItemText(source, ORIGIN_COLUMN_DISTRIBUTE);
+                string strSummary = ListViewUtil.GetItemText(source, ORIGIN_COLUMN_SUMMARY);
+                string strClass = ListViewUtil.GetItemText(source, ORIGIN_COLUMN_CLASS);
+
+                // 折扣
+                string strDiscount = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_DISCOUNT);
+
+                // *** 单价
+                string strPrice = RemoveChangedChar(ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_PRICE));
+                // *** 码洋
+                string strFixedPrice = RemoveChangedChar(ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_FIXEDPRICE));
+                string strTempCopy = ListViewUtil.GetItemText(source,
+ORIGIN_COLUMN_COPY);
+
+                return new LineInfo
+                {
+                    State = strState,
+                    Seller = strSeller,
+                    SellerAddress = strSellerAddress,
+                    Source = OldNewValue.Parse(strSource),
+                    IssueCount = strIssueCount,
+                    IssueCountValue = nIssueCount,
+                    Range = strRange,
+                    RecPath = strRecPath,
+                    BiblioRecPath = strBiblioRecPath,
+                    CatalogNo = strCatalogNo,
+                    OrderTime = strOrderTime,
+                    TotalPrice = strTotalPrice,
+                    Comment = strComment,
+                    Distribute = strDistribute,
+                    Class = strClass,
+                    // Summary = strSummary,
+
+                    Discount = OldNewValue.Parse(strDiscount),
+                    Price = OldNewValue.Parse(strPrice),
+                    FixedPrice = OldNewValue.Parse(strFixedPrice),
+                    Copy = OldNewCopy.Parse(strTempCopy, strPosition),
+                };
+            }
+        }
+
+        static void CopyField(ListViewItem source,
+            int nSourceColumn,
+            ListViewItem target,
+            int nTargetColumn)
+        {
+            ListViewUtil.ChangeItemText(target, nTargetColumn,
+                ListViewUtil.GetItemText(source, nSourceColumn));
+        }
+
+#if BEFORE_REFACTORING
         // 填充合并后数据列表
         int FillMergedList(out string strError)
         {
@@ -6416,11 +7803,12 @@ MessageBoxDefaultButton.Button2);
             // 先将原始数据列表按照 seller/price 列排序
             SortOriginListForMerge();
 
-
             // 循环
             for (int i = 0; i < this.listView_origin.Items.Count; i++)
             {
                 int nCopy = 0;
+
+                string strPosition = "原始数据事项 " + (i + 1).ToString() + " 内";
 
                 ListViewItem source = this.listView_origin.Items[i];
 
@@ -6438,8 +7826,24 @@ MessageBoxDefaultButton.Button2);
                 string strSellerAddress = ListViewUtil.GetItemText(source,
                     ORIGIN_COLUMN_SELLERADDRESS);
 
+                // 折扣
+                string strDiscount = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_DISCOUNT);
 
-                // 单价
+                string strAcceptDiscount = "";
+
+                // 分离新旧两个部分
+                {
+                    // 分离 "old[new]" 内的两个值
+                    OrderDesignControl.ParseOldNewValue(strDiscount,
+                        out string strOldPrice,
+                        out string strNewPrice);
+
+                    strDiscount = strOldPrice;
+                    strAcceptDiscount = strNewPrice;
+                }
+
+                // *** 单价
                 string strPrice = ListViewUtil.GetItemText(source,
                     ORIGIN_COLUMN_PRICE);
 
@@ -6447,17 +7851,40 @@ MessageBoxDefaultButton.Button2);
 
                 // price取其中的订购价部分
                 {
-                    string strOldPrice = "";
-                    string strNewPrice = "";
 
                     // 分离 "old[new]" 内的两个值
                     OrderDesignControl.ParseOldNewValue(strPrice,
-                        out strOldPrice,
-                        out strNewPrice);
+                        out string strOldPrice,
+                        out string strNewPrice);
 
                     strPrice = strOldPrice;
                     strAcceptPrice = strNewPrice;
                 }
+
+                // *** 码洋
+                string strFixedPrice = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_FIXEDPRICE);
+
+                string strAcceptFixedPrice = "";
+
+                // 分离新旧两个部分
+                {
+                    // 分离 "old[new]" 内的两个值
+                    OrderDesignControl.ParseOldNewValue(strFixedPrice,
+                        out string strOldPrice,
+                        out string strNewPrice);
+
+                    strFixedPrice = strOldPrice;
+                    strAcceptFixedPrice = strNewPrice;
+                }
+
+                // 如果原始数据中的码洋为空，则用订购价来填充
+                if (string.IsNullOrEmpty(strFixedPrice) && string.IsNullOrEmpty(strPrice) == false)
+                    strFixedPrice = "{" + strPrice + "}";
+                if (string.IsNullOrEmpty(strAcceptFixedPrice) && string.IsNullOrEmpty(strAcceptPrice) == false)
+                    strAcceptFixedPrice = "{" + strAcceptPrice + "}";
+
+                // 注意，从此处以后，strFiexePrice 和 strAcceptFixedPrice 里面可能会包含花括号了。使用前要 UnQuote() 去掉
 
                 string strIssueCount = ListViewUtil.GetItemText(source,
                     ORIGIN_COLUMN_ISSUECOUNT);
@@ -6476,21 +7903,26 @@ MessageBoxDefaultButton.Button2);
                 string strOrderTime = ListViewUtil.GetItemText(source,
     ORIGIN_COLUMN_ORDERTIME);   // 已经是本地时间格式
 
+                CopyAndSubCopy copy = null;
+                CopyAndSubCopy acceptCopy = null;
 
-                string strTempCopy = ListViewUtil.GetItemText(source,
-ORIGIN_COLUMN_COPY);
-                string strTempAcceptCopy = "";
                 {
-                    string strOldCopy = "";
-                    string strNewCopy = "";
+                    string strTempCopy = ListViewUtil.GetItemText(source,
+ORIGIN_COLUMN_COPY);
+                    //string strTempAcceptCopy = "";
+
                     // 分离 "old[new]" 内的两个值
                     OrderDesignControl.ParseOldNewValue(strTempCopy,
-                        out strOldCopy,
-                        out strNewCopy);
-                    strTempCopy = strOldCopy;
-                    strTempAcceptCopy = strNewCopy;
+                        out string strOldCopy,
+                        out string strNewCopy);
+                    //strTempCopy = strOldCopy;
+                    //strTempAcceptCopy = strNewCopy;
+
+                    copy = CopyAndSubCopy.Build(strOldCopy, strPosition);
+                    acceptCopy = CopyAndSubCopy.Build(strNewCopy, strPosition);
                 }
 
+#if NO
                 int nSubCopy = 1;
                 {
                     string strRightCopy = OrderDesignControl.GetRightFromCopyString(strTempCopy);
@@ -6525,9 +7957,15 @@ ORIGIN_COLUMN_COPY);
                         }
                     }
                 }
+#endif
 
                 string strMergeComment = "";    // 合并注释
                 List<string> totalprices = new List<string>();  // 累积的价格字符串
+                List<string> totalfixedprices = new List<string>();  // 累积的码洋价格字符串
+
+                List<string> accepttotalprices = new List<string>();  // 累积的到书价格字符串
+                List<string> accepttotalfixedprices = new List<string>();  // 累积的到书码洋价格字符串
+
                 List<ListViewItem> origin_items = new List<ListViewItem>();
 
                 string strComments = "";    // 原始注释(积累)
@@ -6542,12 +7980,13 @@ ORIGIN_COLUMN_COPY);
                 {
                     ListViewItem current_source = this.listView_origin.Items[j];
 
+                    string strCurrentPosition = "原始数据事项 " + (j + 1).ToString() + " 内";
+
                     if (current_source.ImageIndex == TYPE_ERROR)
                     {
-                        strError = "事项 " + (i + 1).ToString() + " 的状态为错误，请先排除问题...";
+                        strError = strCurrentPosition + " 的状态为错误，请先排除问题...";
                         return -1;
                     }
-
 
                     // 渠道
                     string strCurrentSeller = ListViewUtil.GetItemText(current_source,
@@ -6564,17 +8003,36 @@ ORIGIN_COLUMN_COPY);
                     string strCurrentAcceptPrice = "";
                     // price取其中的订购价部分
                     {
-                        string strCurrentOldPrice = "";
-                        string strCurrentNewPrice = "";
 
                         // 分离 "old[new]" 内的两个值
                         OrderDesignControl.ParseOldNewValue(strCurrentPrice,
-                            out strCurrentOldPrice,
-                            out strCurrentNewPrice);
+                            out string strCurrentOldPrice,
+                            out string strCurrentNewPrice);
 
                         strCurrentPrice = strCurrentOldPrice;
                         strCurrentAcceptPrice = strCurrentNewPrice;
                     }
+
+                    // 码洋(单价)
+                    string strCurrentFixedPrice = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_FIXEDPRICE);
+
+                    string strCurrentAcceptFixedPrice = "";
+                    // price取其中的订购价部分
+                    {
+
+                        // 分离 "old[new]" 内的两个值
+                        OrderDesignControl.ParseOldNewValue(strCurrentFixedPrice,
+                            out string strCurrentOldPrice,
+                            out string strCurrentNewPrice);
+
+                        strCurrentFixedPrice = strCurrentOldPrice;
+                        strCurrentAcceptFixedPrice = strCurrentNewPrice;
+                    }
+
+                    // 如果码洋值空缺，则需要用订购价来填补。但如果显示出来需要加上特别标记，另外不应该把这个值写回订购记录的码洋字段
+                    if (string.IsNullOrEmpty(strCurrentFixedPrice))
+                        strCurrentFixedPrice = strCurrentPrice;
 
                     string strCurrentIssueCount = ListViewUtil.GetItemText(current_source,
                         ORIGIN_COLUMN_ISSUECOUNT);
@@ -6592,16 +8050,21 @@ ORIGIN_COLUMN_COPY);
                     string strTempCurCopy = ListViewUtil.GetItemText(current_source,
                         ORIGIN_COLUMN_COPY);
 
+                    CopyAndSubCopy current_copy = null;
+                    CopyAndSubCopy current_acceptCopy = null;
+
                     {
-                        string strOldCopy = "";
-                        string strNewCopy = "";
                         // 分离 "old[new]" 内的两个值
                         OrderDesignControl.ParseOldNewValue(strTempCurCopy,
-                            out strOldCopy,
-                            out strNewCopy);
+                            out string strOldCopy,
+                            out string strNewCopy);
                         strTempCurCopy = strOldCopy;
+
+                        current_copy = CopyAndSubCopy.Build(strOldCopy, strCurrentPosition);
+                        current_acceptCopy = CopyAndSubCopy.Build(strNewCopy, strCurrentPosition);
                     }
 
+#if NO
                     int nCurCopy = 0;
                     string strLeftCopy = OrderDesignControl.GetCopyFromCopyString(strTempCurCopy);
                     try
@@ -6628,6 +8091,8 @@ ORIGIN_COLUMN_COPY);
                             return -1;
                         }
                     }
+#endif
+
 
                     if (this.comboBox_load_type.Text == "图书")
                     {
@@ -6637,7 +8102,7 @@ ORIGIN_COLUMN_COPY);
                             || strPrice != strCurrentPrice
                             || strAcceptPrice != strCurrentAcceptPrice
                             || strCatalogNo != strCurrentCatalogNo
-                            || nSubCopy != nCurSubCopy
+                            || copy.SubCopy/*nSubCopy*/ != current_copy.SubCopy // nCurSubCopy
                             || CompareAddress(strSellerAddress, strCurrentSellerAddress) != 0)
                             break;
 
@@ -6652,12 +8117,10 @@ ORIGIN_COLUMN_COPY);
                             || strCatalogNo != strCurrentCatalogNo
                             || strIssueCount != strCurrentIssueCount
                             || strRange != strCurrentRange
-                            || nSubCopy != nCurSubCopy
+                            || copy.SubCopy/*nSubCopy*/ != current_copy.SubCopy // nCurSubCopy
                             || CompareAddress(strSellerAddress, strCurrentSellerAddress) != 0)
                             break;
                     }
-
-
 
                     int nIssueCount = 1;
                     if (this.comboBox_load_type.Text != "图书")
@@ -6668,20 +8131,20 @@ ORIGIN_COLUMN_COPY);
                         }
                         catch (Exception ex)
                         {
-                            strError = "原始数据事项 " + (i + 1).ToString() + " 内期数 '" + strIssueCount + "' 格式不正确: " + ex.Message;
+                            strError = strPosition + "期数 '" + strIssueCount + "' 格式不正确: " + ex.Message;
                             return -1;
                         }
                     }
 
                     // 汇总复本数
-                    nCopy += nCurCopy;
+                    nCopy += current_copy.Copy; // nCurCopy;
 
                     // 汇总合并注释
                     string strSource = ListViewUtil.GetItemText(current_source, ORIGIN_COLUMN_SOURCE);
                     string strRecPath = ListViewUtil.GetItemText(current_source, ORIGIN_COLUMN_RECPATH);
                     if (String.IsNullOrEmpty(strMergeComment) == false)
                         strMergeComment += "; ";
-                    strMergeComment += strSource + ", " + nCurCopy.ToString() + "册 (" + strRecPath + ")";
+                    strMergeComment += strSource + ", " + current_copy.Copy/*nCurCopy*/.ToString() + "册 (" + strRecPath + ")";
 
                     // 汇总价格
                     string strTotalPrice = "";
@@ -6689,12 +8152,12 @@ ORIGIN_COLUMN_COPY);
                     if (String.IsNullOrEmpty(strCurrentPrice) == false)
                     {
                         nRet = PriceUtil.MultiPrice(strCurrentPrice,
-                            nCurCopy * nIssueCount,
+                            current_copy.Copy/*nCurCopy*/ * nIssueCount,
                             out strTotalPrice,
                             out strError);
                         if (nRet == -1)
                         {
-                            strError = "原始数据事项 " + (i + 1).ToString() + " 内价格字符串 '" + strCurrentPrice + "' 格式不正确: " + strError;
+                            strError = strCurrentPosition + "价格字符串 '" + strCurrentPrice + "' 格式不正确: " + strError;
                             return -1;
                         }
                     }
@@ -6706,12 +8169,80 @@ ORIGIN_COLUMN_COPY);
                             ORIGIN_COLUMN_TOTALPRICE);
                         if (String.IsNullOrEmpty(strTotalPrice) == true)
                         {
-                            strError = "原始数据事项 " + (i + 1).ToString() + " 内，当价格字符串为空时，总价格字符串不应为空";
+                            strError = strCurrentPosition + "当价格字符串为空时，总价格字符串不应为空";
                             return -1;
                         }
                     }
 
                     totalprices.Add(strTotalPrice);
+
+                    // 汇总码洋价格
+                    string strTotalFixedPrice = "";
+                    if (String.IsNullOrEmpty(strCurrentFixedPrice) == false)
+                    {
+                        nRet = PriceUtil.MultiPrice(strCurrentFixedPrice,
+                            current_copy.Copy/*nCurCopy*/ * nIssueCount,
+                            out strTotalFixedPrice,
+                            out strError);
+                        if (nRet == -1)
+                        {
+                            strError = strCurrentPosition + "码洋字符串 '" + strCurrentFixedPrice + "' 格式不正确: " + strError;
+                            return -1;
+                        }
+                    }
+                    else
+                    {
+                        strError = strCurrentPosition + " strCurrentFixedPrice 不应为空";
+                        return -1;
+                    }
+
+                    totalfixedprices.Add(strTotalFixedPrice);
+
+                    // 2018/8/3
+                    // 汇总到书价格
+                    string strAcceptTotalPrice = "";
+                    if (String.IsNullOrEmpty(strCurrentAcceptPrice) == false)
+                    {
+                        nRet = PriceUtil.MultiPrice(strCurrentAcceptPrice,
+                            current_acceptCopy.Copy/*nCurAcceptCopy*/ * nIssueCount,
+                            out strAcceptTotalPrice,
+                            out strError);
+                        if (nRet == -1)
+                        {
+                            strError = strCurrentPosition + "价格字符串 '" + strCurrentAcceptPrice + "' 格式不正确: " + strError;
+                            return -1;
+                        }
+                    }
+                    else
+                    {
+                        strError = strCurrentPosition + " strCurrentAcceptPrice 不应为空";
+                        return -1;
+                    }
+
+                    accepttotalprices.Add(strAcceptTotalPrice);
+
+                    // 2018/8/3
+                    // 汇总到书码洋价格
+                    string strAcceptTotalFixedPrice = "";
+                    if (String.IsNullOrEmpty(strCurrentAcceptFixedPrice) == false)
+                    {
+                        nRet = PriceUtil.MultiPrice(strCurrentAcceptFixedPrice,
+                            current_acceptCopy.Copy/*nCurAcceptCopy*/ * nIssueCount,
+                            out strAcceptTotalFixedPrice,
+                            out strError);
+                        if (nRet == -1)
+                        {
+                            strError = strCurrentPosition + "码洋字符串 '" + strCurrentAcceptFixedPrice + "' 格式不正确: " + strError;
+                            return -1;
+                        }
+                    }
+                    else
+                    {
+                        strError = strCurrentPosition + " strCurrentAcceptFixedPrice 不应为空";
+                        return -1;
+                    }
+
+                    accepttotalfixedprices.Add(strAcceptTotalFixedPrice);
 
                     // 汇总注释
                     string strComment = ListViewUtil.GetItemText(current_source, ORIGIN_COLUMN_COMMENT);
@@ -6730,11 +8261,10 @@ ORIGIN_COLUMN_COPY);
                             strDistributes = strCurDistribute;
                         else
                         {
-                            string strLocationString = "";
                             nRet = LocationCollection.MergeTwoLocationString(strDistributes,
                                 strCurDistribute,
                                 false,
-                                out strLocationString,
+                                out string strLocationString,
                                 out strError);
                             if (nRet == -1)
                                 return -1;
@@ -6789,25 +8319,57 @@ ORIGIN_COLUMN_COPY);
 
                 // subcopy
                 ListViewUtil.ChangeItemText(target, MERGED_COLUMN_SUBCOPY,
-                    nSubCopy.ToString());
+                    copy.SubCopy/*nSubCopy*/.ToString());
+
+                // fixedprice
+                ListViewUtil.ChangeItemText(target, MERGED_COLUMN_FIXEDPRICE,
+                    strFixedPrice);
+
+                // discount
+                ListViewUtil.ChangeItemText(target, MERGED_COLUMN_DISCOUNT,
+                    strDiscount);
 
                 // price
                 ListViewUtil.ChangeItemText(target, MERGED_COLUMN_PRICE,
                     strPrice);
 
-                List<string> sum_prices = null;
-                nRet = PriceUtil.TotalPrice(totalprices,
-                    out sum_prices,
-                    out strError);
-                if (nRet == -1)
                 {
-                    return -1;
+#if NO
+                    nRet = PriceUtil.TotalPrice(totalprices,
+                        out List<string> sum_prices,
+                        out strError);
+                    if (nRet == -1)
+                    {
+                        return -1;
+                    }
+
+                    // TODO: 这里是否允许多种货币并存？
+                    // Debug.Assert(sum_prices.Count == 1, "");
+                    string strSumPrice = PriceUtil.JoinPriceString(sum_prices);    // 2017/2/23
+#endif
+
+                    // total price
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_TOTALPRICE,
+                        GetTotalPrice(totalprices, strPosition) // strSumPrice
+                        );
                 }
 
-                Debug.Assert(sum_prices.Count == 1, "");
-                // total price
-                ListViewUtil.ChangeItemText(target, MERGED_COLUMN_TOTALPRICE,
-                    sum_prices[0]);
+                {
+#if NO
+                    nRet = PriceUtil.TotalPrice(totalfixedprices,
+        out List<string> sum_fixedprices,
+        out strError);
+                    if (nRet == -1)
+                    {
+                        return -1;
+                    }
+                    string strSumFixedPrice = PriceUtil.JoinPriceString(sum_fixedprices);    // 2018/8/3
+#endif
+                    // total fixedprice
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_TOTALFIXEDPRICE,
+                        GetTotalPrice(totalfixedprices, strPosition)// strSumFixedPrice
+                        );
+                }
 
                 // order time
                 if (this.checkBox_print_accepted.Checked == false)
@@ -6854,11 +8416,39 @@ ORIGIN_COLUMN_COPY);
 
                 // acceptsubcopy
                 ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTSUBCOPY,
-                    nAcceptSubCopy.ToString());
+                    acceptCopy.SubCopy/*nAcceptSubCopy*/.ToString());
+
+                // acceptfixedprice
+                ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTFIXEDPRICE,
+                    strAcceptFixedPrice);
+
+                // acceptdiscount
+                ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTDISCOUNT,
+                    strAcceptDiscount);
 
                 // acceptprice
                 ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTPRICE,
                     strAcceptPrice);
+
+#if NO
+                ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTTOTALPRICE,
+                    strAcceptTotalPrice);
+                ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTTOTALFIXEDPRICE,
+                    strAcceptTotalFixedPrice);
+#endif
+
+                {
+                    // accept total price
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTTOTALPRICE,
+                        GetTotalPrice(accepttotalprices, strPosition));
+                }
+
+                {
+                    // total fixedprice
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTTOTALFIXEDPRICE,
+                        GetTotalPrice(accepttotalfixedprices, strPosition));
+                }
+
 
                 // class
                 ListViewUtil.ChangeItemText(target, MERGED_COLUMN_CLASS,
@@ -6933,6 +8523,799 @@ ORIGIN_COLUMN_COPY);
             }
 
             return 0;
+        }
+
+#else
+        // 填充合并后数据列表
+        int FillMergedList(out string strError)
+        {
+            strError = "";
+
+            try
+            {
+                int nRet = 0;
+
+                DateTime now = DateTime.Now;
+                int nOrderIdSeed = 1;
+
+                this.listView_merged.Items.Clear();
+                // 2008/11/22
+                this.SortColumns_merged.Clear();
+                SortColumns.ClearColumnSortDisplay(this.listView_merged.Columns);
+
+                // 先将原始数据列表按照 seller/price 列排序
+                SortOriginListForMerge();
+
+                // 循环
+                for (int i = 0; i < this.listView_origin.Items.Count; i++)
+                {
+                    ListViewItem source = this.listView_origin.Items[i];
+                    string strPosition = "原始数据事项 " + (i + 1).ToString() + " ";
+                    if (source.ImageIndex == TYPE_ERROR)
+                    {
+                        strError = strPosition + "的状态为错误，请先排除问题...";
+                        return -1;
+                    }
+
+                    int nCopy = 0;
+
+
+#if NO
+                // 渠道
+                string strSeller = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_SELLER);
+
+                // 渠道地址
+                string strSellerAddress = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_SELLERADDRESS);
+
+                // 折扣
+                string strDiscount = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_DISCOUNT);
+
+                string strAcceptDiscount = "";
+
+                // 分离新旧两个部分
+                {
+                    // 分离 "old[new]" 内的两个值
+                    OrderDesignControl.ParseOldNewValue(strDiscount,
+                        out string strOldPrice,
+                        out string strNewPrice);
+
+                    strDiscount = strOldPrice;
+                    strAcceptDiscount = strNewPrice;
+                }
+
+                // *** 单价
+                string strPrice = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_PRICE);
+
+                string strAcceptPrice = "";
+
+                // price取其中的订购价部分
+                {
+
+                    // 分离 "old[new]" 内的两个值
+                    OrderDesignControl.ParseOldNewValue(strPrice,
+                        out string strOldPrice,
+                        out string strNewPrice);
+
+                    strPrice = strOldPrice;
+                    strAcceptPrice = strNewPrice;
+                }
+
+                // *** 码洋
+                string strFixedPrice = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_FIXEDPRICE);
+
+                string strAcceptFixedPrice = "";
+
+                // 分离新旧两个部分
+                {
+                    // 分离 "old[new]" 内的两个值
+                    OrderDesignControl.ParseOldNewValue(strFixedPrice,
+                        out string strOldPrice,
+                        out string strNewPrice);
+
+                    strFixedPrice = strOldPrice;
+                    strAcceptFixedPrice = strNewPrice;
+                }
+
+                // 如果原始数据中的码洋为空，则用订购价来填充
+                if (string.IsNullOrEmpty(strFixedPrice) && string.IsNullOrEmpty(strPrice) == false)
+                    strFixedPrice = "{" + strPrice + "}";
+                if (string.IsNullOrEmpty(strAcceptFixedPrice) && string.IsNullOrEmpty(strAcceptPrice) == false)
+                    strAcceptFixedPrice = "{" + strAcceptPrice + "}";
+
+                // 注意，从此处以后，strFixedPrice 和 strAcceptFixedPrice 里面可能会包含花括号了。使用前要 UnQuote() 去掉
+
+                string strIssueCount = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_ISSUECOUNT);
+                string strRange = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_RANGE);
+
+                // 书目记录路径
+                string strBiblioRecPath = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_BIBLIORECPATH);
+
+                // 书目号
+                string strCatalogNo = ListViewUtil.GetItemText(source,
+                    ORIGIN_COLUMN_CATALOGNO);
+
+                // 2012/8/30
+                string strOrderTime = ListViewUtil.GetItemText(source,
+    ORIGIN_COLUMN_ORDERTIME);   // 已经是本地时间格式
+
+                CopyAndSubCopy copy = null;
+                CopyAndSubCopy acceptCopy = null;
+
+                {
+                    string strTempCopy = ListViewUtil.GetItemText(source,
+ORIGIN_COLUMN_COPY);
+
+                    // 分离 "old[new]" 内的两个值
+                    OrderDesignControl.ParseOldNewValue(strTempCopy,
+                        out string strOldCopy,
+                        out string strNewCopy);
+
+                    copy = CopyAndSubCopy.Build(strOldCopy, strPosition);
+                    acceptCopy = CopyAndSubCopy.Build(strNewCopy, strPosition);
+                }
+#endif
+                    LineInfo source_line = LineInfo.Build(source, strPosition).Adjust();
+
+                    string strMergeComment = "";    // 合并注释
+                    List<string> totalprices = new List<string>();  // 累积的价格字符串
+                    List<string> totalfixedprices = new List<string>();  // 累积的码洋价格字符串
+
+                    List<string> accepttotalprices = new List<string>();  // 累积的到书价格字符串
+                    List<string> accepttotalfixedprices = new List<string>();  // 累积的到书码洋价格字符串
+
+                    List<ListViewItem> origin_items = new List<ListViewItem>();
+
+                    string strComments = "";    // 原始注释(积累)
+                    string strDistributes = ""; // 合并的馆藏分配字符串
+
+                    // 发现biblioRecPath、price、seller、catalogno均相同的区段
+                    // 如果是连续出版物，还要issuecount和range相同
+                    int nStart = i; // 区段开始位置
+                    int nLength = 0;    // 区段内事项个数
+
+                    for (int j = i; j < this.listView_origin.Items.Count; j++)
+                    {
+                        ListViewItem current = this.listView_origin.Items[j];
+                        string strCurrentPosition = "原始数据事项 " + (j + 1).ToString() + " 内";
+
+                        if (current.ImageIndex == TYPE_ERROR)
+                        {
+                            strError = strCurrentPosition + " 的状态为错误，请先排除问题...";
+                            return -1;
+                        }
+
+#if NO
+                    // 渠道
+                    string strCurrentSeller = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_SELLER);
+
+                    // 渠道地址
+                    string strCurrentSellerAddress = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_SELLERADDRESS);
+
+                    // 单价
+                    string strCurrentPrice = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_PRICE);
+
+                    string strCurrentAcceptPrice = "";
+                    // price取其中的订购价部分
+                    {
+
+                        // 分离 "old[new]" 内的两个值
+                        OrderDesignControl.ParseOldNewValue(strCurrentPrice,
+                            out string strCurrentOldPrice,
+                            out string strCurrentNewPrice);
+
+                        strCurrentPrice = strCurrentOldPrice;
+                        strCurrentAcceptPrice = strCurrentNewPrice;
+                    }
+
+                    // 码洋(单价)
+                    string strCurrentFixedPrice = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_FIXEDPRICE);
+
+                    string strCurrentAcceptFixedPrice = "";
+                    // price取其中的订购价部分
+                    {
+
+                        // 分离 "old[new]" 内的两个值
+                        OrderDesignControl.ParseOldNewValue(strCurrentFixedPrice,
+                            out string strCurrentOldPrice,
+                            out string strCurrentNewPrice);
+
+                        strCurrentFixedPrice = strCurrentOldPrice;
+                        strCurrentAcceptFixedPrice = strCurrentNewPrice;
+                    }
+
+                    // 如果码洋值空缺，则需要用订购价来填补。但如果显示出来需要加上特别标记，另外不应该把这个值写回订购记录的码洋字段
+                    if (string.IsNullOrEmpty(strCurrentFixedPrice))
+                        strCurrentFixedPrice = strCurrentPrice;
+
+                    string strCurrentIssueCount = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_ISSUECOUNT);
+                    string strCurrentRange = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_RANGE);
+
+                    // 书目记录路径
+                    string strCurrentBiblioRecPath = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_BIBLIORECPATH);
+
+                    // 书目号
+                    string strCurrentCatalogNo = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_CATALOGNO);
+
+                    string strTempCurCopy = ListViewUtil.GetItemText(current_source,
+                        ORIGIN_COLUMN_COPY);
+
+                    CopyAndSubCopy current_copy = null;
+                    CopyAndSubCopy current_acceptCopy = null;
+
+                    {
+                        // 分离 "old[new]" 内的两个值
+                        OrderDesignControl.ParseOldNewValue(strTempCurCopy,
+                            out string strOldCopy,
+                            out string strNewCopy);
+                        strTempCurCopy = strOldCopy;
+
+                        current_copy = CopyAndSubCopy.Build(strOldCopy, strCurrentPosition);
+                        current_acceptCopy = CopyAndSubCopy.Build(strNewCopy, strCurrentPosition);
+                    }
+#endif
+                        LineInfo current_line = null;
+
+                        if (i == j)
+                            current_line = source_line; // 优化，提高速度
+                        else
+                            current_line = LineInfo.Build(current, strCurrentPosition).Adjust();
+
+                        if (this.comboBox_load_type.Text == "图书")
+                        {
+                            // 十一元 // 七元组判断 // 五元组判断 // 四元组判断
+                            if (source_line.BiblioRecPath != current_line.BiblioRecPath
+                                || source_line.Seller != current_line.Seller
+
+                                || CurrencyItem.IsEqual(source_line.FixedPrice.OldValue, current_line.FixedPrice.OldValue, "CNY") == false
+                                || CurrencyItem.IsEqual(source_line.FixedPrice.NewValue, current_line.FixedPrice.NewValue, "CNY") == false
+
+                                || dp2StringUtil.CanonicalizeDiscount(source_line.Discount.OldValue, strPosition)
+                                != dp2StringUtil.CanonicalizeDiscount(current_line.Discount.OldValue, strCurrentPosition)
+                                || dp2StringUtil.CanonicalizeDiscount(source_line.Discount.NewValue, strPosition)
+                                != dp2StringUtil.CanonicalizeDiscount(current_line.Discount.NewValue, strCurrentPosition)
+
+                                || source_line.Price.OldValue != current_line.Price.OldValue
+                                || source_line.Price.NewValue != current_line.Price.NewValue
+                                || source_line.CatalogNo != current_line.CatalogNo
+                                || source_line.Copy.OldCopy.SubCopy/*nSubCopy*/ != current_line.Copy.OldCopy.SubCopy // nCurSubCopy
+                                || CompareAddress(source_line.SellerAddress, current_line.SellerAddress) != 0)
+                            {
+                                if (j == i)
+                                    throw new Exception("j == i (j=" + j + ") 十一元组比较不应该出现不相等的结果");
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            // 十三元 // 九元组判断 // 七元组判断 // 六元组判断
+                            if (source_line.BiblioRecPath != current_line.BiblioRecPath
+                                || source_line.Seller != current_line.Seller
+
+                                || CurrencyItem.IsEqual(source_line.FixedPrice.OldValue, current_line.FixedPrice.OldValue, "CNY") == false
+                                || CurrencyItem.IsEqual(source_line.FixedPrice.NewValue, current_line.FixedPrice.NewValue, "CNY") == false
+
+                                || dp2StringUtil.CanonicalizeDiscount(source_line.Discount.OldValue, strPosition)
+                                != dp2StringUtil.CanonicalizeDiscount(current_line.Discount.OldValue, strCurrentPosition)
+                                || dp2StringUtil.CanonicalizeDiscount(source_line.Discount.NewValue, strPosition)
+                                != dp2StringUtil.CanonicalizeDiscount(current_line.Discount.NewValue, strCurrentPosition)
+
+
+                                || source_line.Price.OldValue != current_line.Price.OldValue
+                                || source_line.Price.NewValue != current_line.Price.NewValue
+                                || source_line.CatalogNo != current_line.CatalogNo
+                                || source_line.IssueCount != current_line.IssueCount
+                                || source_line.Range != current_line.Range
+                                || source_line.Copy.OldCopy.SubCopy/*nSubCopy*/ != current_line.Copy.OldCopy.SubCopy // nCurSubCopy
+                                || CompareAddress(source_line.SellerAddress, current_line.SellerAddress) != 0)
+                            {
+                                if (j == i)
+                                    throw new Exception("j == i (j=" + j + ")十三元组比较不应该出现不相等的结果");
+                                break;
+                            }
+                        }
+
+#if NO
+                    int nIssueCount = 1;
+                    if (this.comboBox_load_type.Text != "图书")
+                    {
+                        try
+                        {
+                            nIssueCount = Convert.ToInt32(strIssueCount);
+                        }
+                        catch (Exception ex)
+                        {
+                            strError = strPosition + "期数 '" + strIssueCount + "' 格式不正确: " + ex.Message;
+                            return -1;
+                        }
+                    }
+#endif
+
+                        // 汇总复本数
+                        nCopy += current_line.Copy.OldCopy.Copy; // nCurCopy;
+
+                        // 汇总合并注释
+                        string strSource = current_line.Source.NewValue; // ListViewUtil.GetItemText(current_source, ORIGIN_COLUMN_SOURCE);
+                        if (string.IsNullOrEmpty(strSource))
+                            strSource = current_line.Source.OldValue;
+
+                        string strRecPath = current_line.RecPath; // ListViewUtil.GetItemText(current_source, ORIGIN_COLUMN_RECPATH);
+                        if (String.IsNullOrEmpty(strMergeComment) == false)
+                            strMergeComment += "; ";
+                        strMergeComment += strSource + ", " + current_line.Copy.OldCopy.Copy/*nCurCopy*/.ToString() + "套 (" + strRecPath + ")";
+
+                        // 汇总价格
+                        string strTotalPrice = "";
+
+                        if (String.IsNullOrEmpty(current_line.Price.OldValue) == false)
+                        {
+                            strTotalPrice = MultiplePrice(current_line.Price.OldValue,
+                                current_line.Copy.OldCopy.Copy/*nCurCopy*/ * source_line.IssueCountValue,
+                                strCurrentPosition);
+                        }
+                        else
+                        {
+                            // 原始数据中的总价
+                            strTotalPrice = current_line.TotalPrice;
+                            if (String.IsNullOrEmpty(strTotalPrice) == true)
+                            {
+                                strError = strCurrentPosition + "当价格字符串为空时，总价格字符串不应为空";
+                                return -1;
+                            }
+                        }
+
+                        totalprices.Add(strTotalPrice);
+
+                        // 汇总码洋价格
+                        string strTotalFixedPrice = "";
+                        if (String.IsNullOrEmpty(current_line.FixedPrice.OldValue) == false)
+                        {
+                            strTotalFixedPrice = MultiplePrice(current_line.FixedPrice.OldValue,
+                                current_line.Copy.OldCopy.Copy/*nCurCopy*/ * source_line.IssueCountValue,
+                                strCurrentPosition);
+                        }
+                        else
+                        {
+                            // 2018/8/24
+                            // 码洋可能为空。比如折扣为空，试图从单价返回来计算码洋也不会进行
+                            /*
+                            strError = strCurrentPosition + " 码洋 不应为空";
+                            return -1;
+                            */
+                        }
+
+                        if (string.IsNullOrEmpty(strTotalFixedPrice) == false)
+                            totalfixedprices.Add(strTotalFixedPrice);
+
+                        // 汇总到书价格
+                        string strAcceptTotalPrice = "";
+                        if (String.IsNullOrEmpty(current_line.Price.NewValue) == false)
+                        {
+                            strAcceptTotalPrice = MultiplePrice(current_line.Price.NewValue,
+                                current_line.Copy.NewCopy.Copy/*nCurAcceptCopy*/ * current_line.IssueCountValue,
+                                strCurrentPosition);
+                        }
+                        else
+                        {
+                            //strError = strCurrentPosition + " 验收价 不应为空";
+                            //return -1;
+
+                            // 注：打印订单阶段，验收价可能为空，这是正常情况
+                        }
+
+                        accepttotalprices.Add(strAcceptTotalPrice);
+
+                        // 汇总到书码洋价格
+                        string strAcceptTotalFixedPrice = "";
+                        if (String.IsNullOrEmpty(current_line.FixedPrice.NewValue) == false)
+                        {
+                            strAcceptTotalFixedPrice = MultiplePrice(current_line.FixedPrice.NewValue,
+                                current_line.Copy.NewCopy.Copy/*nCurAcceptCopy*/ * source_line.IssueCountValue,
+                                strCurrentPosition);
+                        }
+                        else
+                        {
+                            //strError = strCurrentPosition + " 到书码洋 不应为空";
+                            //return -1;
+
+                            // 注：打印订单阶段，到书码洋价可能为空，这是正常情况
+                        }
+
+                        accepttotalfixedprices.Add(strAcceptTotalFixedPrice);
+
+                        // 汇总注释
+                        string strComment = current_line.Comment;
+                        if (String.IsNullOrEmpty(strComment) == false)
+                        {
+                            if (String.IsNullOrEmpty(strComments) == false)
+                                strComments += "; ";
+                            strComments += strComment + " @" + strRecPath;
+                        }
+
+                        // 汇总馆藏分配字符串
+                        string strCurDistribute = current_line.Distribute;
+                        if (String.IsNullOrEmpty(strCurDistribute) == false)
+                        {
+                            if (String.IsNullOrEmpty(strDistributes) == true)
+                                strDistributes = strCurDistribute;
+                            else
+                            {
+                                nRet = LocationCollection.MergeTwoLocationString(strDistributes,
+                                    strCurDistribute,
+                                    false,
+                                    out string strLocationString,
+                                    out strError);
+                                if (nRet == -1)
+                                    return -1;
+                                strDistributes = strLocationString;
+                            }
+                        }
+
+                        // 汇总原始事项
+                        origin_items.Add(current);
+
+                        nLength++;
+                    }
+
+                    ListViewItem target = new ListViewItem();
+
+                    if (source.ImageIndex == TYPE_ERROR)
+                        target.ImageIndex = TYPE_ERROR;
+                    else
+                        target.ImageIndex = TYPE_NORMAL;  // 
+
+                    // seller
+                    target.Text = source_line.Seller;
+
+                    // catalog no 
+                    CopyField(source, ORIGIN_COLUMN_CATALOGNO,
+                        target, MERGED_COLUMN_CATALOGNO);
+
+                    // summary
+                    CopyField(source, ORIGIN_COLUMN_SUMMARY,
+                        target, MERGED_COLUMN_SUMMARY);
+
+                    // isbn issn
+                    CopyField(source, ORIGIN_COLUMN_ISBNISSN,
+                        target, MERGED_COLUMN_ISBNISSN);
+
+                    // merge comment
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_MERGECOMMENT,
+                        strMergeComment);
+
+                    // range
+                    CopyField(source, ORIGIN_COLUMN_RANGE,
+                        target, MERGED_COLUMN_RANGE);
+
+                    // issue count
+                    CopyField(source, ORIGIN_COLUMN_ISSUECOUNT,
+                        target, MERGED_COLUMN_ISSUECOUNT);
+
+                    // copy
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_COPY,
+                        nCopy.ToString());
+
+                    // subcopy
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_SUBCOPY,
+                        source_line.Copy.OldCopy.SubCopy/*nSubCopy*/.ToString());
+
+                    // fixedprice
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_FIXEDPRICE,
+                        source_line.FixedPrice.IsVirtual ?
+                        "{" + source_line.FixedPrice.OldValue + "}"
+                        : source_line.FixedPrice.OldValue);
+
+                    // discount
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_DISCOUNT,
+                        source_line.Discount.OldValue);
+
+                    // price
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_PRICE,
+                        source_line.Price.OldValue);
+
+                    {
+                        // total price
+                        ListViewUtil.ChangeItemText(target, MERGED_COLUMN_TOTALPRICE,
+                            GetTotalPrice(totalprices, strPosition) // strSumPrice
+                            );
+                    }
+
+                    {
+                        // total fixedprice
+                        ListViewUtil.ChangeItemText(target, MERGED_COLUMN_TOTALFIXEDPRICE,
+                            GetTotalPrice(totalfixedprices, strPosition)// strSumFixedPrice
+                            );
+                    }
+
+                    // order time
+                    if (this.checkBox_print_accepted.Checked == false)
+                    {
+                        ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ORDERTIME,
+                            now.ToShortDateString());   // TODO: 注意这个时间要返回到原始数据中
+                    }
+                    else
+                    {
+                        ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ORDERTIME,
+                            source_line.OrderTime);
+                    }
+
+                    // order id
+                    string strOrderID = nOrderIdSeed.ToString();
+                    nOrderIdSeed++;
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ORDERID,
+                        strOrderID);    // TODO: 注意这个编号要返回到原始数据中
+
+                    // distribute
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_DISTRIBUTE,
+                        strDistributes);
+
+                    {
+                        string strAcceptSeries = "";
+                        if (string.IsNullOrEmpty(strDistributes) == false)
+                        {
+                            LocationCollection locations = new LocationCollection();
+                            nRet = locations.Build(strDistributes,
+                                out strError);
+                            if (nRet == -1)
+                            {
+                                strError = "馆藏分配字符串 '" + strDistributes + "' 格式错误: " + strError;
+                                return -1;
+                            }
+
+                            // 对于套内多册的验收情况，refid用竖线隔开，形成一组。本函数返回的应该理解为套数，不是册数。但套内可能验收不足
+                            strAcceptSeries = locations.GetArrivedCopy().ToString();
+                        }
+
+                        // acceptcopy
+                        ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTCOPY,
+                            strAcceptSeries);
+                    }
+
+                    // acceptsubcopy
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTSUBCOPY,
+                        source_line.Copy.NewCopy.SubCopy/*nAcceptSubCopy*/.ToString());
+
+                    // acceptfixedprice
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTFIXEDPRICE,
+                        source_line.FixedPrice.NewValue);
+
+                    // acceptdiscount
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTDISCOUNT,
+                        source_line.Discount.NewValue);
+
+                    // acceptprice
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTPRICE,
+                        source_line.Price.NewValue);
+
+                    {
+                        // accept total price
+                        ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTTOTALPRICE,
+                            GetTotalPrice(accepttotalprices, strPosition));
+                    }
+
+                    {
+                        // total fixedprice
+                        ListViewUtil.ChangeItemText(target, MERGED_COLUMN_ACCEPTTOTALFIXEDPRICE,
+                            GetTotalPrice(accepttotalfixedprices, strPosition));
+                    }
+
+                    // class
+                    CopyField(source, ORIGIN_COLUMN_CLASS,
+                        target, MERGED_COLUMN_CLASS);
+
+                    // comment
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_COMMENT,
+                        strComments);
+
+                    // sellerAddress
+                    ListViewUtil.ChangeItemText(target, MERGED_COLUMN_SELLERADDRESS,
+                        source_line.SellerAddress);
+
+                    // biblio record path
+                    CopyField(source, ORIGIN_COLUMN_BIBLIORECPATH,
+                        target, MERGED_COLUMN_BIBLIORECPATH);
+
+                    // 每个合并后事项的Tag都保留了其来源ListViewItem的列表
+                    target.Tag = origin_items;
+
+                    // TODO: 可以移动到一个函数中
+                    // 修改原始事项的orderTime orderID
+#if NO
+                    if (this.checkBox_print_accepted.Checked == false)
+                    {
+                        for (int k = 0; k < origin_items.Count; k++)
+                        {
+                            ListViewItem origin_item = origin_items[k];
+
+                            bool bChanged = false;
+                            string strOldOrderTime = ListViewUtil.GetItemText(origin_item, ORIGIN_COLUMN_ORDERTIME);
+                            if (strOldOrderTime != now.ToShortDateString())
+                            {
+                                ListViewUtil.ChangeItemText(origin_item, ORIGIN_COLUMN_ORDERTIME,
+                                    now.ToShortDateString());
+                                bChanged = true;
+
+                                origin_item.SubItems[ORIGIN_COLUMN_ORDERTIME].BackColor = System.Drawing.Color.Red;
+
+                                // 加粗字体
+                                origin_item.SubItems[ORIGIN_COLUMN_ORDERTIME].Font =
+                                    new System.Drawing.Font(origin_item.SubItems[ORIGIN_COLUMN_ORDERTIME].Font, FontStyle.Bold);
+                            }
+
+                            string strOldOrderID = ListViewUtil.GetItemText(origin_item, ORIGIN_COLUMN_ORDERID);
+                            if (strOrderID != strOldOrderID)
+                            {
+                                ListViewUtil.ChangeItemText(origin_item, ORIGIN_COLUMN_ORDERID,
+                                    strOrderID);
+                                bChanged = true;
+
+                                // 加粗字体
+                                origin_item.SubItems[ORIGIN_COLUMN_ORDERID].Font =
+                                    new System.Drawing.Font(origin_item.SubItems[ORIGIN_COLUMN_ORDERID].Font, FontStyle.Bold);
+                            }
+
+                            if (bChanged == true)
+                                SetItemChanged(origin_item, true);
+                        }
+                    }
+#endif
+                    UpdateOriginItems(origin_items,
+    now,
+    strOrderID);
+
+                    this.listView_merged.Items.Add(target);
+
+                    i = nStart + nLength - 1;
+                }
+
+                // 刷新Origin的深浅间隔色
+                if (this.SortColumns_origin.Count > 0)
+                {
+                    SetGroupBackcolor(
+                        this.listView_origin,
+                        this.SortColumns_origin[0].No);
+                }
+
+                return 0;
+            }
+            catch (PositionException ex)
+            {
+                strError = "合并原始数据时出错: " + ex.Message;
+                // TODO: 是否要进一步把 merged listview 全部行清空，以防止用户打印输出错误的或者不足的合并数据？
+                return -1;
+            }
+            catch (Exception ex)
+            {
+                strError = "FillMergedList() 出现异常: " + ExceptionUtil.GetDebugText(ex);
+                return -1;
+            }
+        }
+
+        void UpdateOriginItems(List<ListViewItem> origin_items,
+            DateTime now,
+            string strOrderID)
+        {
+            if (this.checkBox_print_accepted.Checked == false)
+            {
+                for (int k = 0; k < origin_items.Count; k++)
+                {
+                    ListViewItem origin_item = origin_items[k];
+
+                    bool bChanged = false;
+                    // 注意去掉开头的星号
+                    string strOldOrderTime = RemoveChangedChar(ListViewUtil.GetItemText(origin_item, ORIGIN_COLUMN_ORDERTIME));
+                    if (strOldOrderTime != now.ToShortDateString())
+                    {
+                        ListViewUtil.ChangeItemText(origin_item, ORIGIN_COLUMN_ORDERTIME,
+                            "*" + now.ToShortDateString());
+                        bChanged = true;
+
+                        origin_item.SubItems[ORIGIN_COLUMN_ORDERTIME].BackColor = System.Drawing.Color.Red;
+
+                        // 加粗字体
+                        origin_item.SubItems[ORIGIN_COLUMN_ORDERTIME].Font =
+                            new System.Drawing.Font(origin_item.SubItems[ORIGIN_COLUMN_ORDERTIME].Font, FontStyle.Bold);
+                    }
+
+                    string strOldOrderID = RemoveChangedChar(ListViewUtil.GetItemText(origin_item, ORIGIN_COLUMN_ORDERID));
+                    if (strOrderID != strOldOrderID)
+                    {
+                        ListViewUtil.ChangeItemText(origin_item, ORIGIN_COLUMN_ORDERID,
+                            "*" + strOrderID);
+                        bChanged = true;
+
+                        // 加粗字体
+                        origin_item.SubItems[ORIGIN_COLUMN_ORDERID].Font =
+                            new System.Drawing.Font(origin_item.SubItems[ORIGIN_COLUMN_ORDERID].Font, FontStyle.Bold);
+                    }
+
+                    if (bChanged == true)
+                        SetItemChanged(origin_item, true);
+                }
+            }
+        }
+
+#endif
+
+        public class OldNewCopy : OldNewValue
+        {
+            public CopyAndSubCopy OldCopy { get; set; }
+            public CopyAndSubCopy NewCopy { get; set; }
+
+            public static OldNewCopy Parse(string strValue, string strPosition)
+            {
+                OldNewValue value = OldNewValue.Parse(strValue);
+
+                return new OldNewCopy
+                {
+                    OldCopy = CopyAndSubCopy.Build(value.OldValue, strPosition),
+                    NewCopy = CopyAndSubCopy.Build(value.NewValue, strPosition),
+                };
+            }
+        }
+
+        // 解析复本数 (例如 '3*5') 细节的类
+        public class CopyAndSubCopy
+        {
+            public int Copy { get; set; }   // 套数
+            public int SubCopy { get; set; }    // 每套册数
+
+            // parameters:
+            //      strCopyString   复本数字符串。形如 "3*5"
+            public static CopyAndSubCopy Build(string strCopyString, string strPosition)
+            {
+                if (strCopyString.IndexOf("[") != -1)
+                    throw new ArgumentException("strCopyString 参数中不应包含方括号。新旧复本只能用其中一个", "strCopyString");
+
+                int nCurCopy = 0;
+                string strLeftCopy = dp2StringUtil.GetCopyFromCopyString(strCopyString);
+                if (string.IsNullOrEmpty(strLeftCopy) == false)
+                {
+                    try
+                    {
+                        nCurCopy = Convert.ToInt32(strLeftCopy);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new PositionException("复本字符串 '" + strCopyString + "' 内 表示套数的部分(星号左侧) '" + strLeftCopy + "' 格式不正确: " + ex.Message, strPosition);
+                    }
+                }
+
+                int nCurSubCopy = 1;
+                string strRightCopy = dp2StringUtil.GetRightFromCopyString(strCopyString);
+                if (String.IsNullOrEmpty(strRightCopy) == false)
+                {
+                    try
+                    {
+                        nCurSubCopy = Convert.ToInt32(strRightCopy);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new PositionException("复本字符串 '" + strCopyString + "' 内 表示每套册数的部分(星号右侧) '" + strRightCopy + "' 格式不正确: " + ex.Message, strPosition);
+                    }
+                }
+
+                return new CopyAndSubCopy
+                {
+                    Copy = nCurCopy,
+                    SubCopy = nCurSubCopy
+                };
+            }
         }
 
         // 设置listview item的changed状态
@@ -7100,7 +9483,6 @@ MessageBoxDefaultButton.Button2);
             column.SortStyle = ColumnSortStyle.RecPath;
             sort_columns.Add(column);
 
-
             column = new DigitalPlatform.Column();
             column.Asc = true;
             column.No = MERGED_COLUMN_PRICE;
@@ -7152,18 +9534,18 @@ MessageBoxDefaultButton.Button2);
             // 配置标题和风格
             string strNamePath = "orderorigin_printoption";
 
-            OrderOriginPrintOption option = new OrderOriginPrintOption(this.MainForm.DataDir,
+            OrderOriginPrintOption option = new OrderOriginPrintOption(Program.MainForm.UserDir, // Program.MainForm.DataDir,
                 this.comboBox_load_type.Text);
-            option.LoadData(this.MainForm.AppInfo,
+            option.LoadData(Program.MainForm.AppInfo,
                 strNamePath);
 
             PrintOptionDlg dlg = new PrintOptionDlg();
             MainForm.SetControlFont(dlg, this.Font, false);
 
-            dlg.MainForm = this.MainForm;
+            // dlg.MainForm = Program.MainForm;
             dlg.Text = this.comboBox_load_type.Text + " 原始数据 打印参数";
             dlg.PrintOption = option;
-            dlg.DataDir = this.MainForm.DataDir;
+            dlg.DataDir = Program.MainForm.UserDir; // .DataDir;
             dlg.ColumnItems = new string[] {
                 "no -- 序号",
                 "recpath -- 记录路径",
@@ -7203,14 +9585,14 @@ MessageBoxDefaultButton.Button2);
             };
 
 
-            this.MainForm.AppInfo.LinkFormState(dlg, "orderorigin_printoption_formstate");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "orderorigin_printoption_formstate");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
 
-            option.SaveData(this.MainForm.AppInfo,
+            option.SaveData(Program.MainForm.AppInfo,
                 strNamePath);
         }
 
@@ -7235,11 +9617,11 @@ MessageBoxDefaultButton.Button2);
                 HtmlPrintForm printform = new HtmlPrintForm();
 
                 printform.Text = "打印原始订购数据";
-                printform.MainForm = this.MainForm;
+                // printform.MainForm = Program.MainForm;
                 printform.Filenames = filenames;
-                this.MainForm.AppInfo.LinkFormState(printform, "printorder_htmlprint_formstate");
+                Program.MainForm.AppInfo.LinkFormState(printform, "printorder_htmlprint_formstate");
                 printform.ShowDialog(this);
-                this.MainForm.AppInfo.UnlinkFormState(printform);
+                Program.MainForm.AppInfo.UnlinkFormState(printform);
             }
 
             finally
@@ -7249,7 +9631,7 @@ MessageBoxDefaultButton.Button2);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -7266,9 +9648,9 @@ MessageBoxDefaultButton.Button2);
             Hashtable macro_table = new Hashtable();
 
             // 获得打印参数
-            OrderOriginPrintOption option = new OrderOriginPrintOption(this.MainForm.DataDir,
+            OrderOriginPrintOption option = new OrderOriginPrintOption(Program.MainForm.UserDir, // Program.MainForm.DataDir,
                 this.comboBox_load_type.Text);
-            option.LoadData(this.MainForm.AppInfo,
+            option.LoadData(Program.MainForm.AppInfo,
                 "orderorigin_printoption");
 
             // 准备一般的 MARC 过滤器
@@ -7318,7 +9700,7 @@ MessageBoxDefaultButton.Button2);
             macro_table["%batchno_or_recpathfilename%"] = String.IsNullOrEmpty(this.BatchNo) == true ? strRecPathFilename : this.BatchNo;
 
 
-            string strFileNamePrefix = this.MainForm.DataDir + "\\~printorder";
+            string strFileNamePrefix = Program.MainForm.DataDir + "\\~printorder";
 
             string strFileName = "";
 
@@ -7402,7 +9784,7 @@ MessageBoxDefaultButton.Button2);
             bool bOutputTable)
         {
             /*
-            string strLibraryServerUrl = this.MainForm.AppInfo.GetString(
+            string strLibraryServerUrl = Program.MainForm.AppInfo.GetString(
     "config",
     "circulation_server_url",
     "");
@@ -7411,7 +9793,7 @@ MessageBoxDefaultButton.Button2);
                 strLibraryServerUrl = strLibraryServerUrl.Substring(0, pos);
              * */
 
-            // string strCssUrl = this.MainForm.LibraryServerDir + "/orderorigin.css";
+            // string strCssUrl = Program.MainForm.LibraryServerDir + "/orderorigin.css";
             // 2009/10/10 changed
             string strCssUrl = GetAutoCssUrl(option, "orderorigin.css");
 
@@ -7421,7 +9803,7 @@ MessageBoxDefaultButton.Button2);
             if (String.IsNullOrEmpty(strCssFilePath) == false)
                 strCssUrl = strCssFilePath;
             else
-                strCssUrl = this.MainForm.LibraryServerDir + "/orderorigin.css";    // 缺省的
+                strCssUrl = Program.MainForm.LibraryServerDir + "/orderorigin.css";    // 缺省的
              * */
 
             string strLink = "<link href='" + strCssUrl + "' type='text/css' rel='stylesheet' />";
@@ -7623,7 +10005,7 @@ MessageBoxDefaultButton.Button2);
                     "<td class='" + strClass + "'>" + strContent + "</td>";
             }
 
-        END1:
+            END1:
 
             StreamUtil.WriteText(strFileName,
     "<tr class='content'>");
@@ -7695,7 +10077,8 @@ MessageBoxDefaultButton.Button2);
 
                     case "state":
                     case "状态":
-                        return item.SubItems[ORIGIN_COLUMN_STATE].Text;
+                        // 注意去掉前面的星号
+                        return RemoveChangedChar(item.SubItems[ORIGIN_COLUMN_STATE].Text);
 
                     case "catalogNo":
                     case "书目号":
@@ -7728,15 +10111,16 @@ MessageBoxDefaultButton.Button2);
 
                     case "totalPrice":
                     case "总价格":
-                        return item.SubItems[ORIGIN_COLUMN_TOTALPRICE].Text;
+                        return RemoveChangedChar(item.SubItems[ORIGIN_COLUMN_TOTALPRICE].Text);
 
                     case "orderTime":
                     case "订购时间":
-                        return item.SubItems[ORIGIN_COLUMN_ORDERTIME].Text;
+                        // 注意去掉前面的星号
+                        return RemoveChangedChar(item.SubItems[ORIGIN_COLUMN_ORDERTIME].Text);
 
                     case "orderID":
                     case "订单号":
-                        return item.SubItems[ORIGIN_COLUMN_ORDERID].Text;
+                        return RemoveChangedChar(item.SubItems[ORIGIN_COLUMN_ORDERID].Text);
 
                     case "distribute":
                     case "馆藏分配":
@@ -7925,7 +10309,7 @@ MessageBoxDefaultButton.Button2);
                 strCopy = item.SubItems[ORIGIN_COLUMN_COPY].Text;
                 // TODO: 注意检查是否有[]符号?
 
-                string strLeftCopy = OrderDesignControl.GetCopyFromCopyString(strCopy);
+                string strLeftCopy = dp2StringUtil.GetCopyFromCopyString(strCopy);
                 int nLeftCopy = 0;
                 try
                 {
@@ -7955,8 +10339,8 @@ MessageBoxDefaultButton.Button2);
                 strCopy = item.SubItems[ORIGIN_COLUMN_COPY].Text;
                 // TODO: 注意检查是否有[]符号?
 
-                string strLeftCopy = OrderDesignControl.GetCopyFromCopyString(strCopy);
-                string strRightCopy = OrderDesignControl.GetRightFromCopyString(strCopy);
+                string strLeftCopy = dp2StringUtil.GetCopyFromCopyString(strCopy);
+                string strRightCopy = dp2StringUtil.GetRightFromCopyString(strCopy);
                 int nLeftCopy = 0;
                 try
                 {
@@ -7997,7 +10381,7 @@ MessageBoxDefaultButton.Button2);
 
                 try
                 {
-                    strPrice = item.SubItems[ORIGIN_COLUMN_TOTALPRICE].Text;
+                    strPrice = RemoveChangedChar(item.SubItems[ORIGIN_COLUMN_TOTALPRICE].Text);
                 }
                 catch
                 {
@@ -8008,7 +10392,7 @@ MessageBoxDefaultButton.Button2);
                     continue;
 
                 // 提取出纯数字
-                string strPurePrice = PriceUtil.GetPurePrice(strPrice);
+                string strPurePrice = RemoveChangedChar(PriceUtil.GetPurePrice(strPrice));
 
                 if (String.IsNullOrEmpty(strPurePrice) == true)
                     continue;
@@ -8027,6 +10411,7 @@ MessageBoxDefaultButton.Button2);
         {
             // 组织成批保存 SetOrders
             string strError = "";
+            // TODO: 保存修改后，最好重新合并一次？
             int nRet = SaveOrders(out strError);
             if (nRet == -1)
                 MessageBox.Show(this, strError);
@@ -8068,6 +10453,35 @@ MessageBoxDefaultButton.Button2);
                 RemoveChangedChar(ListViewUtil.GetItemText(item, nCol)));
         }
 
+        public List<RecordForm> GetChangedRecords(string strStyle)
+        {
+            if (string.IsNullOrEmpty(strStyle) || strStyle == "all")
+                strStyle = "biblio,entity,order,issue,comment";
+
+            List<RecordForm> results = new List<RecordForm>();
+            if (StringUtil.IsInList("order", strStyle) == false)
+                return results;
+
+            foreach (ListViewItem item in this.listView_origin.Items)
+            {
+                if (item.ImageIndex == TYPE_ERROR)
+                    continue;
+
+                OriginItemData data = (OriginItemData)item.Tag;
+                if (data == null)
+                {
+                    Debug.Assert(false, "");
+                    continue;
+                }
+                if (data.Changed == false)
+                    continue;
+
+                string strOrderRecPath = ListViewUtil.GetItemText(item, ORIGIN_COLUMN_RECPATH);
+                results.Add(new RecordForm(strOrderRecPath, this));
+            }
+            return results;
+        }
+
         // 保存对原始订购记录的修改
         int SaveOrders(out string strError)
         {
@@ -8075,6 +10489,8 @@ MessageBoxDefaultButton.Button2);
             int nRet = 0;
 
             EnableControls(false);
+
+            LibraryChannel channel = this.GetChannel();
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在保存原始记录 ...");
@@ -8110,7 +10526,9 @@ MessageBoxDefaultButton.Button2);
                         && entity_list.Count > 0)
                     {
                         // 保存一个批次
-                        nRet = SaveOneBatchOrders(entity_list,
+                        nRet = SaveOneBatchOrders(
+                            channel,
+                            entity_list,
                             strPrevBiblioRecPath,
                             out strError);
                         if (nRet == -1)
@@ -8135,12 +10553,24 @@ MessageBoxDefaultButton.Button2);
                         RemoveChangedChar(ListViewUtil.GetItemText(item, ORIGIN_COLUMN_STATE)));
                     RemoveChangedChar(item, ORIGIN_COLUMN_STATE);
 
+                    // 2018/8/22
+                    DomUtil.SetElementText(dom.DocumentElement,
+    "price",
+    RemoveChangedChar(ListViewUtil.GetItemText(item, ORIGIN_COLUMN_PRICE)));
+                    RemoveChangedChar(item, ORIGIN_COLUMN_PRICE);
+
+                    // 2018/8/23
+                    DomUtil.SetElementText(dom.DocumentElement,
+    "fixedPrice",
+    RemoveChangedChar(ListViewUtil.GetItemText(item, ORIGIN_COLUMN_FIXEDPRICE)));
+                    RemoveChangedChar(item, ORIGIN_COLUMN_FIXEDPRICE);
+
                     DomUtil.SetElementText(dom.DocumentElement,
                         "totalPrice",
                         RemoveChangedChar(ListViewUtil.GetItemText(item, ORIGIN_COLUMN_TOTALPRICE)));
                     RemoveChangedChar(item, ORIGIN_COLUMN_TOTALPRICE);
 
-                    string strOrderTime = ListViewUtil.GetItemText(item, ORIGIN_COLUMN_ORDERTIME);
+                    string strOrderTime = RemoveChangedChar(ListViewUtil.GetItemText(item, ORIGIN_COLUMN_ORDERTIME));
                     if (string.IsNullOrEmpty(strOrderTime) == false)
                     {
                         DateTime order_time;
@@ -8158,11 +10588,13 @@ MessageBoxDefaultButton.Button2);
                             "orderTime",
                             // DateTimeUtil.Rfc1123DateTimeString(order_time.ToUniversalTime()));
                             DateTimeUtil.Rfc1123DateTimeStringEx(order_time));
+                        RemoveChangedChar(item, ORIGIN_COLUMN_ORDERTIME);
                     }
 
                     DomUtil.SetElementText(dom.DocumentElement,
                         "orderID",
-                        ListViewUtil.GetItemText(item, ORIGIN_COLUMN_ORDERID));
+                        RemoveChangedChar(ListViewUtil.GetItemText(item, ORIGIN_COLUMN_ORDERID)));
+                    RemoveChangedChar(item, ORIGIN_COLUMN_ORDERID);
 
                     EntityInfo info = new EntityInfo();
 
@@ -8192,7 +10624,9 @@ MessageBoxDefaultButton.Button2);
                         && entity_list.Count > 0)
                 {
                     // 保存一个批次
-                    nRet = SaveOneBatchOrders(entity_list,
+                    nRet = SaveOneBatchOrders(
+                        channel,
+                        entity_list,
                         strPrevBiblioRecPath,
                         out strError);
                     if (nRet == -1)
@@ -8208,13 +10642,17 @@ MessageBoxDefaultButton.Button2);
                 stop.OnStop -= new StopEventHandler(this.DoStop);
                 stop.Initial("");
 
+                this.ReturnChannel(channel);
+
                 EnableControls(true);
             }
 
             return 0;
         }
 
-        int SaveOneBatchOrders(List<EntityInfo> entity_list,
+        int SaveOneBatchOrders(
+            LibraryChannel channel,
+            List<EntityInfo> entity_list,
             string strBiblioRecPath,
             out string strError)
         {
@@ -8224,7 +10662,7 @@ MessageBoxDefaultButton.Button2);
             entity_list.CopyTo(entities);
 
             EntityInfo[] errorinfos = null;
-            long lRet = Channel.SetOrders(
+            long lRet = channel.SetOrders(
                 stop,
                 strBiblioRecPath,
                 entities,
@@ -8242,8 +10680,8 @@ MessageBoxDefaultButton.Button2);
 
                 Debug.Assert(String.IsNullOrEmpty(errorinfo.RefID) == false, "");
 
-                ListViewItem item = null;
-                OriginItemData data = FindDataByRefID(errorinfo.RefID, out item);
+                OriginItemData data = FindDataByRefID(errorinfo.RefID,
+                    out ListViewItem item);
                 if (data == null)
                 {
                     strError = "RefID '" + errorinfo.RefID + "' 居然在原始数据列表中找不到对应的事项";
@@ -8326,7 +10764,6 @@ MessageBoxDefaultButton.Button2);
 
         List<OutputProjectData> formats = new List<OutputProjectData>();
 
-
         int PrepareFormats(List<OutputItem> OutputItems,
             out string strError)
         {
@@ -8390,7 +10827,7 @@ MessageBoxDefaultButton.Button2);
                     // 触发Assembly初始化动作
                     format.OutputOrder.PrintOrderForm = this;
                     format.OutputOrder.PubType = this.comboBox_load_type.Text;
-                    format.OutputOrder.DataDir = this.MainForm.DataDir;
+                    format.OutputOrder.DataDir = Program.MainForm.DataDir;
                     format.OutputOrder.XmlFilename = "";    // 尚未进行输出
                     format.OutputOrder.OutputDir = "";  // 尚未进行输出
                     bool bRet = format.OutputOrder.Initial(out strError);
@@ -8419,8 +10856,8 @@ MessageBoxDefaultButton.Button2);
             MainForm.SetControlFont(dlg, this.Font, false);
 
             dlg.ScriptManager = this.ScriptManager;
-            dlg.AppInfo = this.MainForm.AppInfo;
-            dlg.DataDir = this.MainForm.DataDir;
+            dlg.AppInfo = Program.MainForm.AppInfo;
+            dlg.DataDir = Program.MainForm.DataDir;
 
             string strPrefix = "";
             if (this.comboBox_load_type.Text == "图书")
@@ -8431,13 +10868,13 @@ MessageBoxDefaultButton.Button2);
             dlg.GetValueTable -= new GetValueTableEventHandler(dlg_GetValueTable);
             dlg.GetValueTable += new GetValueTableEventHandler(dlg_GetValueTable);
 
-            dlg.CfgFileName = PathUtil.MergePath(this.MainForm.DataDir, strPrefix + "_order_output_def.xml");   // 格式配置信息是要分出版物类型的
+            dlg.CfgFileName = PathUtil.MergePath(Program.MainForm.DataDir, strPrefix + "_order_output_def.xml");   // 格式配置信息是要分出版物类型的
             dlg.Text = this.comboBox_load_type.Text + " 订单输出格式";
             dlg.RunMode = true;
             // dlg.StartPosition = FormStartPosition.CenterScreen;
-            this.MainForm.AppInfo.LinkFormState(dlg, "printorder_outputorder_formstate");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "printorder_outputorder_formstate");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
             if (dlg.DialogResult != DialogResult.OK)
                 return;
@@ -8475,7 +10912,7 @@ MessageBoxDefaultButton.Button2);
             }
 
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -8490,8 +10927,8 @@ MessageBoxDefaultButton.Button2);
             MainForm.SetControlFont(dlg, this.Font, false);
 
             dlg.ScriptManager = this.ScriptManager;
-            dlg.AppInfo = this.MainForm.AppInfo;
-            dlg.DataDir = this.MainForm.DataDir;
+            dlg.AppInfo = Program.MainForm.AppInfo;
+            dlg.DataDir = Program.MainForm.DataDir;
 
             string strPrefix = "";
             if (this.comboBox_load_type.Text == "图书")
@@ -8502,13 +10939,13 @@ MessageBoxDefaultButton.Button2);
             dlg.GetValueTable -= new GetValueTableEventHandler(dlg_GetValueTable);
             dlg.GetValueTable += new GetValueTableEventHandler(dlg_GetValueTable);
 
-            dlg.CfgFileName = PathUtil.MergePath(this.MainForm.DataDir, strPrefix + "_order_output_def.xml");   // 格式配置信息是要分出版物类型的
+            dlg.CfgFileName = PathUtil.MergePath(Program.MainForm.DataDir, strPrefix + "_order_output_def.xml");   // 格式配置信息是要分出版物类型的
             dlg.Text = "配置 " + this.comboBox_load_type.Text + " 订单输出格式";
             dlg.RunMode = false;
             // dlg.StartPosition = FormStartPosition.CenterScreen;
-            this.MainForm.AppInfo.LinkFormState(dlg, "printorder_outputorder_potion_formstate");
+            Program.MainForm.AppInfo.LinkFormState(dlg, "printorder_outputorder_potion_formstate");
             dlg.ShowDialog(this);
-            this.MainForm.AppInfo.UnlinkFormState(dlg);
+            Program.MainForm.AppInfo.UnlinkFormState(dlg);
 
 
             if (dlg.DialogResult != DialogResult.OK)
@@ -8643,11 +11080,11 @@ MessageBoxDefaultButton.Button2);
             }
 
             // 确保目录存在
-            PathUtil.CreateDirIfNeed(strOutputDir);
+            PathUtil.TryCreateDir(strOutputDir);
 
             // 提示是否删除输出目录中的现有文件
             // 如果正好为当前数据记录，则不删除，以免无意删除很多有用的文件
-            if (this.MainForm.DataDir.ToLower() != strOutputDir.ToLower())
+            if (Program.MainForm.DataDir.ToLower() != strOutputDir.ToLower())
                 DeleteAllFiles(strOutputDir);
 
             EnableControls(false);
@@ -8759,7 +11196,7 @@ MessageBoxDefaultButton.Button2);
                 int nTotalSeries = GetMergedTotalSeries(items);
                 int nTotalCopies = GetMergedTotalCopies(items);
                 int nBiblioCount = GetMergedBiblioCount(items);
-                string strTotalPrice = GetMergedTotalPrice(items);
+                string strTotalPrice = GetMergedTotalPrice("price", items);
 
                 // 事项数
                 writer.WriteElementString("itemCount", nItemCount.ToString());
@@ -8824,6 +11261,14 @@ MessageBoxDefaultButton.Button2);
                 writer.WriteElementString("copy",
                     ListViewUtil.GetItemText(item, MERGED_COLUMN_COPY));
 
+                // fixedprice
+                writer.WriteElementString("fixedprice",
+                    ListViewUtil.GetItemText(item, MERGED_COLUMN_FIXEDPRICE));
+
+                // discount
+                writer.WriteElementString("discount",
+                    ListViewUtil.GetItemText(item, MERGED_COLUMN_DISCOUNT));
+
                 // price
                 writer.WriteElementString("price",
                     ListViewUtil.GetItemText(item, MERGED_COLUMN_PRICE));
@@ -8831,6 +11276,10 @@ MessageBoxDefaultButton.Button2);
                 // total price
                 writer.WriteElementString("totalPrice",
                     ListViewUtil.GetItemText(item, MERGED_COLUMN_TOTALPRICE));
+
+                // total price
+                writer.WriteElementString("totalFixedPrice",
+                    ListViewUtil.GetItemText(item, MERGED_COLUMN_TOTALFIXEDPRICE));
 
                 // order time
                 writer.WriteElementString("orderTime",
@@ -8893,11 +11342,11 @@ MessageBoxDefaultButton.Button2);
 
                 format.OutputOrder.XmlFilename = strOutputFilename;
                 format.OutputOrder.Seller = format.Seller;
-                format.OutputOrder.DataDir = this.MainForm.DataDir;
+                format.OutputOrder.DataDir = Program.MainForm.DataDir;
                 format.OutputOrder.OutputDir = strOutputDir;
                 format.OutputOrder.PubType = this.comboBox_load_type.Text;
 
-                // 执行脚本的Output()
+                // 执行脚本的 Output()
                 format.OutputOrder.Output();
             }
             catch (Exception ex)
@@ -9085,7 +11534,7 @@ MessageBoxDefaultButton.Button2);
 
                 format.OutputOrder.XmlFilename = strOutputFilename;
                 format.OutputOrder.Seller = format.Seller;
-                format.OutputOrder.DataDir = this.MainForm.DataDir;
+                format.OutputOrder.DataDir = Program.MainForm.DataDir;
 
                 // 执行脚本的Output()
                 format.OutputOrder.Output();
@@ -9146,7 +11595,7 @@ MessageBoxDefaultButton.Button2);
             }
 
 
-            string strLibPaths = "\"" + this.MainForm.DataDir + "\""
+            string strLibPaths = "\"" + Program.MainForm.DataDir + "\""
                 + ","
                 + "\"" + strProjectLocate + "\"";
 
@@ -9158,11 +11607,11 @@ MessageBoxDefaultButton.Button2);
                                     "system.xml.dll",
                                     "System.Runtime.Serialization.dll",
 
-									Environment.CurrentDirectory + "\\digitalplatform.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
-									Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
-									Environment.CurrentDirectory + "\\dp2circulation.exe",
+                                    Environment.CurrentDirectory + "\\digitalplatform.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Text.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.IO.dll",
+                                    Environment.CurrentDirectory + "\\digitalplatform.Xml.dll",
+                                    Environment.CurrentDirectory + "\\dp2circulation.exe",
             };
 
 
@@ -9216,7 +11665,7 @@ MessageBoxDefaultButton.Button2);
             objOutputOrder.ProjectDir = strProjectLocate;
 
             return 0;
-        ERROR1:
+            ERROR1:
             return -1;
         }
 
@@ -9236,7 +11685,7 @@ MessageBoxDefaultButton.Button2);
         private void PrintOrderForm_Activated(object sender, EventArgs e)
         {
             // 2009/8/13
-            this.MainForm.stopManager.Active(this.stop);
+            Program.MainForm.stopManager.Active(this.stop);
 
         }
 
@@ -9265,12 +11714,13 @@ MessageBoxDefaultButton.Button2);
         // 到货率统计
         private void button_print_arriveRatioStatis_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = PrintArriveRatio("html", out strError);
+            int nRet = PrintArriveRatio("html",
+                true,
+                out string strError);
             if (nRet == -1)
                 goto ERROR1;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
@@ -9280,12 +11730,14 @@ MessageBoxDefaultButton.Button2);
         //      strStyle    excel / html 之一或者逗号联接组合。 excel: 输出 Excel 文件
         int PrintArriveRatio(
             string strStyle,
+            bool bLaunchExcel,
             out string strError)
         {
             strError = "";
             int nErrorCount = 0;
 
-            ExcelDocument doc = null;
+            /*ExcelDocument*/
+            XLWorkbook doc = null;
 
             if (StringUtil.IsInList("excel", strStyle) == true)
             {
@@ -9314,7 +11766,11 @@ MessageBoxDefaultButton.Button2);
 #endif
                 try
                 {
-                    doc = ExcelDocument.Create(this.ExportExcelFilename);
+                    // doc = ExcelDocument.Create(this.ExportExcelFilename);
+
+                    doc = new XLWorkbook(XLEventTracking.Disabled);
+                    File.Delete(this.ExportExcelFilename);
+
                 }
                 catch (Exception ex)
                 {
@@ -9322,13 +11778,14 @@ MessageBoxDefaultButton.Button2);
                     goto ERROR1;
                 }
 
-                doc.Stylesheet = GenerateStyleSheet();
+                // doc.Stylesheet = GenerateStyleSheet();
             }
 
             this.tabControl_items.SelectedTab = this.tabPage_mergedItems;
 
             EnableControls(false);
-            // MainForm.ShowProgress(true);
+
+            LibraryChannel channel = this.GetChannel();
 
             stop.OnStop += new StopEventHandler(this.DoStop);
             stop.Initial("正在归并订购时间 ...");
@@ -9395,7 +11852,7 @@ MessageBoxDefaultButton.Button2);
                 dlg.StartTime = last_ordertime;
                 dlg.EndTime = DateTime.Now;
                 dlg.QuickSet = "订购日至今日";
-                dlg.Slice = this.MainForm.AppInfo.GetString(
+                dlg.Slice = Program.MainForm.AppInfo.GetString(
                     "printorder_form",
                     "slice",
                     "月");
@@ -9404,7 +11861,7 @@ MessageBoxDefaultButton.Button2);
                 if (dlg.DialogResult != System.Windows.Forms.DialogResult.OK)
                     return 0;
 
-                this.MainForm.AppInfo.SetString(
+                Program.MainForm.AppInfo.SetString(
                     "printorder_form",
                     "slice",
                     dlg.Slice);
@@ -9425,11 +11882,13 @@ MessageBoxDefaultButton.Button2);
                             goto ERROR1;
                         }
 
-                        List<string> temp_filenames = null;
-                        int nRet = BuildArriveHtml(lists[i],
+                        int nRet = BuildArriveHtml(
+                            i,
+                            channel,
+                            lists[i],
                             ref doc,
                             time_ranges,
-                            out temp_filenames,
+                            out List<string> temp_filenames,
                             out strError);
                         if (nRet == -1)
                             goto ERROR1;
@@ -9441,11 +11900,11 @@ MessageBoxDefaultButton.Button2);
                         HtmlPrintForm printform = new HtmlPrintForm();
 
                         printform.Text = "到货率统计";
-                        printform.MainForm = this.MainForm;
+                        // printform.MainForm = Program.MainForm;
                         printform.Filenames = filenames;
-                        this.MainForm.AppInfo.LinkFormState(printform, "printorder_htmlprint_formstate");
+                        Program.MainForm.AppInfo.LinkFormState(printform, "printorder_htmlprint_formstate");
                         printform.ShowDialog(this);
-                        this.MainForm.AppInfo.UnlinkFormState(printform);
+                        Program.MainForm.AppInfo.UnlinkFormState(printform);
                     }
                 }
                 finally
@@ -9464,18 +11923,33 @@ MessageBoxDefaultButton.Button2);
                 stop.Initial("");
                 stop.HideProgress();
 
+                this.ReturnChannel(channel);
+
                 EnableControls(true);
-                // MainForm.ShowProgress(false);
             }
 
             if (doc != null)
             {
                 // Close the document.
-                doc.Close();
+                // doc.Close();
+                doc.SaveAs(this.ExportExcelFilename);
+                doc.Dispose();
+
+                if (bLaunchExcel)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(this.ExportExcelFilename);
+                    }
+                    catch
+                    {
+
+                    }
+                }
             }
 
             return 1;
-        ERROR1:
+            ERROR1:
             // MessageBox.Show(this, strError);
             return -1;
         }
@@ -9498,7 +11972,9 @@ MessageBoxDefaultButton.Button2);
 
         // 获得全部册记录的 refid --> 到书时间 对照表。所谓到书时间就是记录创建的时间。如果没有记录创建时间，用最后修改时间代替
         // 册refid --> 到书时间
-        int GetArriveTimes(NamedListViewItems items,
+        int GetArriveTimes(
+            LibraryChannel channel,
+            NamedListViewItems items,
             out List<OneLine> infos,
             out string strError)
         {
@@ -9550,9 +12026,11 @@ MessageBoxDefaultButton.Button2);
 
                 if (temp_refids.Count >= 100)
                 {
-                    nRet = GetRecordTimes(temp_refids,
-            ref table,
-            out strError);
+                    nRet = GetRecordTimes(
+                        channel,
+                        temp_refids,
+                        ref table,
+                        out strError);
                     if (nRet == -1)
                         return -1;
                     temp_refids.Clear();
@@ -9562,9 +12040,11 @@ MessageBoxDefaultButton.Button2);
             // 最后一批
             if (temp_refids.Count > 0)
             {
-                nRet = GetRecordTimes(temp_refids,
-        ref table,
-        out strError);
+                nRet = GetRecordTimes(
+                    channel,
+                    temp_refids,
+                    ref table,
+                    out strError);
                 if (nRet == -1)
                     return -1;
                 temp_refids.Clear();
@@ -9592,7 +12072,9 @@ MessageBoxDefaultButton.Button2);
         }
 
         // 根据 refid 获得一批记录的创建时间，追加到 Hashtable 中
-        int GetRecordTimes(List<string> refids,
+        int GetRecordTimes(
+            LibraryChannel channel,
+            List<string> refids,
             ref Hashtable result_table,
             out string strError)
         {
@@ -9605,6 +12087,7 @@ MessageBoxDefaultButton.Button2);
             Hashtable table = null;
             // 获得册记录信息
             nRet = LoadItemRecord(
+                channel,
                 refids,
                 ref table,
                 out strError);
@@ -9661,6 +12144,7 @@ MessageBoxDefaultButton.Button2);
 
         // 根据册记录refid，转换为册记录的recpath，然后获得册记录XML
         int LoadItemRecord(
+            LibraryChannel channel,
             List<string> refids,
             ref Hashtable table,
             out string strError)
@@ -9669,10 +12153,10 @@ MessageBoxDefaultButton.Button2);
             if (table == null)
                 table = new Hashtable();
 
-        REDO_GETITEMINFO:
+            REDO_GETITEMINFO:
             string strBiblio = "";
             string strResult = "";
-            long lRet = this.Channel.GetItemInfo(stop,
+            long lRet = channel.GetItemInfo(stop,
                 "@refid-list:" + StringUtil.MakePathList(refids),
                 "get-path-list",
                 out strResult,
@@ -9755,21 +12239,18 @@ MessageBoxDefaultButton.Button1);
                 // 集中获取全部册记录信息
                 for (; ; )
                 {
-                    if (stop != null)
+                    if (stop != null && stop.State != 0)
                     {
-                        if (stop.State != 0)
-                        {
-                            strError = "用户中断1";
-                            return -1;
-                        }
+                        strError = "用户中断1";
+                        return -1;
                     }
 
                     DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
 
                     string[] paths = new string[item_recpaths.Count];
                     item_recpaths.CopyTo(paths);
-                REDO_GETRECORDS:
-                    lRet = this.Channel.GetBrowseRecords(
+                    REDO_GETRECORDS:
+                    lRet = channel.GetBrowseRecords(
                         this.stop,
                         paths,
                         "id,xml",
@@ -9862,8 +12343,10 @@ MessageBoxDefaultButton.Button1);
 
         // 到货率统计
         int BuildArriveHtml(
+            int nSheetIndex,
+            LibraryChannel channel,
             NamedListViewItems items,
-            ref ExcelDocument doc,
+            ref /*ExcelDocument*/ XLWorkbook doc,
             List<TimeSlice> time_ranges,
             out List<string> filenames,
             out string strError)
@@ -9875,9 +12358,10 @@ MessageBoxDefaultButton.Button1);
             stop.SetMessage("正在进行到货率统计 ...");
 
             // 准备册记录
-            List<OneLine> infos = null;
-            nRet = GetArriveTimes(items,
-                out infos,
+            nRet = GetArriveTimes(
+                channel,
+                items,
+                out List<OneLine> infos,
                 out strError);
             if (nRet == -1)
                 return -1;
@@ -9885,9 +12369,9 @@ MessageBoxDefaultButton.Button1);
             Hashtable macro_table = new Hashtable();
 
             // 获得打印参数
-            PrintOrderPrintOption option = new PrintOrderPrintOption(this.MainForm.DataDir,
+            PrintOrderPrintOption option = new PrintOrderPrintOption(Program.MainForm.UserDir, // Program.MainForm.DataDir,
                 this.comboBox_load_type.Text);
-            option.LoadData(this.MainForm.AppInfo,
+            option.LoadData(Program.MainForm.AppInfo,
                 "printorder_printoption");
 
             macro_table["%batchno%"] = this.BatchNo; // 批次号
@@ -9902,13 +12386,18 @@ MessageBoxDefaultButton.Button1);
             macro_table["%batchno_or_recpathfilename%"] = String.IsNullOrEmpty(this.BatchNo) == true ? strRecPathFilename : this.BatchNo;
 
             // 需要将属于不同渠道的文件名前缀区别开来
-            string strFileNamePrefix = this.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_";
+            string strFileNamePrefix = Program.MainForm.DataDir + "\\~printorder_" + items.GetHashCode().ToString() + "_";
 
             string strFileName = "";
 
+            /*
             Sheet sheet = null;
             if (doc != null)
                 sheet = doc.NewSheet("到货率统计表");
+                */
+            IXLWorksheet sheet = null;
+            if (doc != null)
+                sheet = doc.Worksheets.Add("到货率统计" + (nSheetIndex + 1).ToString());
 
 
             // 输出信息页
@@ -9958,7 +12447,8 @@ MessageBoxDefaultButton.Button1);
                 {
                     BuildSliceExcelPageTop(option,
         macro_table,
-        ref doc,
+        // ref doc,
+        sheet,
         5);
 
                     {
@@ -9971,12 +12461,16 @@ MessageBoxDefaultButton.Button1);
                         int i = 0;
                         foreach (string strCaption in captions)
                         {
-                            doc.WriteExcelCell(
-                    nLineIndex,
-                    i++,
-                    strCaption,
-                    true);
+                            IXLCell cell = WriteExcelCell(
+                                sheet,
+                    TABLE_TOP_BLANK_LINES + nLineIndex,
+                    TABLE_LEFT_BLANK_COLUMS + (i++),
+                    strCaption/*,
+                    true*/);
+                            cell.Style.Fill.BackgroundColor = XLColor.LightGray;
                         }
+
+                        sheet.Row(TABLE_TOP_BLANK_LINES + nLineIndex + 1).Height = XLWorkbook.DefaultRowHeight * 1.5;
                     }
                 }
 
@@ -10011,26 +12505,35 @@ MessageBoxDefaultButton.Button1);
                 {
                     nLineIndex++;
                     int i = 0;
-                    doc.WriteExcelCell(
-            nLineIndex,
-            i++,
-            "订购数",
-            true);
-                    doc.WriteExcelCell(
-nLineIndex,
-i++,
-nBiblioCount.ToString(),
-false);
-                    doc.WriteExcelCell(
-nLineIndex,
-i++,
-"",
-true);
-                    doc.WriteExcelCell(
-nLineIndex,
-i++,
-nTotalCopies.ToString(),
-false);
+                    WriteExcelCell(
+                        sheet,
+                        TABLE_TOP_BLANK_LINES + nLineIndex,
+                        TABLE_LEFT_BLANK_COLUMS + (i++),
+            "订购数"/*,
+            true*/);
+
+                    WriteExcelCell(
+                        sheet,
+TABLE_TOP_BLANK_LINES + nLineIndex,
+TABLE_LEFT_BLANK_COLUMS + (i++),
+nBiblioCount/*.ToString(),
+false*/);
+
+                    WriteExcelCell(
+                        sheet,
+TABLE_TOP_BLANK_LINES + nLineIndex,
+TABLE_LEFT_BLANK_COLUMS + (i++),
+""/*,
+true*/);
+
+                    WriteExcelCell(
+                        sheet,
+TABLE_TOP_BLANK_LINES + nLineIndex,
+TABLE_LEFT_BLANK_COLUMS + (i++),
+nTotalCopies/*.ToString(),
+false*/);
+
+                    sheet.Row(TABLE_TOP_BLANK_LINES + nLineIndex + 1).Style.Font.Bold = true;
                 }
 
                 Debug.Assert(time_ranges.Count > 0, "");
@@ -10039,14 +12542,12 @@ false);
                 {
                     DateTime end = slice.Start + slice.Length;
 
-                    long lBiblioCount = 0;
-                    long lItemCount = 0;
                     // 计算特定时间范围内到达的种册数
                     nRet = GetValues(start,
                         end,
                         infos,
-            out lBiblioCount,
-            out lItemCount,
+            out long lBiblioCount,
+            out long lItemCount,
             out strError);
                     if (nRet == -1)
                         return -1;
@@ -10073,31 +12574,36 @@ false);
                     {
                         nLineIndex++;
                         int i = 0;
-                        doc.WriteExcelCell(
-                nLineIndex,
-                i++,
-                slice.Caption,
-                true);
-                        doc.WriteExcelCell(
-    nLineIndex,
-    i++,
-    lBiblioCount.ToString(),
-    false);
-                        doc.WriteExcelCell(
-    nLineIndex,
-    i++,
-    strRatioBiblio,
-    true);
-                        doc.WriteExcelCell(
-    nLineIndex,
-    i++,
-    lItemCount.ToString(),
-    false);
-                        doc.WriteExcelCell(
-    nLineIndex,
-    i++,
-    strRatioItem,
-    true);
+                        WriteExcelCell(
+                            sheet,
+                TABLE_TOP_BLANK_LINES + nLineIndex,
+                TABLE_LEFT_BLANK_COLUMS + i++,
+                slice.Caption/*,
+                true*/);
+                        WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + i++,
+    lBiblioCount/*.ToString(),
+    false*/);
+                        WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + i++,
+    strRatioBiblio/*,
+    true*/);
+                        WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + i++,
+    lItemCount/*.ToString(),
+    false*/);
+                        WriteExcelCell(
+                            sheet,
+    TABLE_TOP_BLANK_LINES + nLineIndex,
+    TABLE_LEFT_BLANK_COLUMS + i++,
+    strRatioItem/*,
+    true*/);
 
                     }
                 }
@@ -10118,8 +12624,9 @@ false);
         // 输出 Excel 页面头部信息
         int BuildSliceExcelPageTop(PrintOption option,
             Hashtable macro_table,
-            ref ExcelDocument doc,
-            int nTitleCols)
+                // ref /*ExcelDocument*/ XLWorkbook doc,
+                IXLWorksheet sheet,
+                int nTitleCols)
         {
 
             // 页眉
@@ -10141,10 +12648,13 @@ false);
                 strTableTitleText = StringUtil.MacroString(macro_table,
                     strTableTitleText);
 
-                doc.WriteExcelTitle(0,
+                WriteExcelTitle(
+                    sheet,
+                    TABLE_TOP_BLANK_LINES,
+                    TABLE_LEFT_BLANK_COLUMS,
                     nTitleCols,
                     strTableTitleText,
-                    5);
+                    XLColor.Yellow);    // 到货率
 
             }
 
@@ -10220,26 +12730,364 @@ string strFileName)
         // 打印订单 -- 输出 Excel 文件
         private void toolStripMenuItem_outputExcel_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = PrintOrder("excel", out strError);
+            int nRet = PrintOrder("excel",
+                true,
+                out string strError);
             if (nRet == -1)
                 goto ERROR1;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
 
         // 到货率统计 -- 输出 Excel 文件
         private void toolStripMenuItem_arriveRatio_outputExcel_Click(object sender, EventArgs e)
         {
-            string strError = "";
-            int nRet = PrintArriveRatio("excel", out strError);
+            int nRet = PrintArriveRatio("excel",
+                true,
+                out string strError);
             if (nRet == -1)
                 goto ERROR1;
             return;
-        ERROR1:
+            ERROR1:
             MessageBox.Show(this, strError);
         }
+
+        private void button_report_Click(object sender, EventArgs e)
+        {
+#if NO
+            var results = this.listView_merged.Items.Cast<ListViewItem>()
+                            .Where(x => { return x.Text.StartsWith(""); }).
+                            GroupBy(p => ListViewUtil.GetItemText(p, 2), (key, g) => new { Text = key, Count = g.Count<ListViewItem>() });
+            int i = 0;
+            StringBuilder text = new StringBuilder();
+#if NO
+            foreach (ListViewItem item in results)
+            {
+                text.Append($"i={i} item.Text={ToString(item)}\r\n");
+                i++;
+            }
+#endif
+            foreach (var item in results)
+            {
+                text.Append($"i={i} item.Text={item.Text} count={item.Count}\r\n");
+                i++;
+            }
+            MessageDialog.Show(this, text.ToString());
+#endif
+
+#if NO
+            var results = this.listView_merged.Items.Cast<ListViewItem>()
+                .Sum( o=> Convert.ToDecimal(PriceUtil.GetPurePrice(ListViewUtil.GetItemText(o, MERGED_COLUMN_PRICE))));
+            MessageDialog.Show(this, results.ToString());
+#endif
+
+#if NO
+            List<ResultLine> results = this.listView_merged.Items.Cast<ListViewItem>()
+                .Where(x => { return x.Text.StartsWith(""); }).
+                GroupBy(p => ListViewUtil.GetItemText(p, 2)).
+                Select(cl => new ResultLine
+                {
+                    ProductName = cl.First().Name,
+                    Quantity = cl.Count().ToString(),
+                    Price = cl.Sum(c => Convert.ToDecimal(PriceUtil.GetPurePrice(ListViewUtil.GetItemText(c, MERGED_COLUMN_PRICE)))).ToString(),
+                }).ToList();
+            int i = 0;
+            StringBuilder text = new StringBuilder();
+            foreach (var item in results)
+            {
+                text.Append($"i={i} item.Text={item.ProductName} count={item.Quantity} price={item.Price}\r\n");
+                i++;
+            }
+            MessageDialog.Show(this, text.ToString());
+#endif
+
+#if NO
+            List<ResultLine> results = this.listView_merged.Items.Cast<ListViewItem>()
+    .Where(x => { return x.Text.StartsWith(""); }).
+    GroupBy(p => ListViewUtil.GetItemText(p, 2)).
+    Select(cl => new ResultLine
+    {
+        ProductName = cl.First().Text,
+        Quantity = cl.Count().ToString(),
+        Price = ListViewUtil.GetItemText(cl.Aggregate((current, next) =>
+        {
+            string s1 = ListViewUtil.GetItemText(current, MERGED_COLUMN_PRICE);
+            string s2 = ListViewUtil.GetItemText(next, MERGED_COLUMN_PRICE);
+            var r = new ListViewItem();
+            ListViewUtil.ChangeItemText(r, MERGED_COLUMN_PRICE, s1 + "," + s2);
+            return r;
+        }), MERGED_COLUMN_PRICE),
+    }).ToList();
+            int i = 0;
+            StringBuilder text = new StringBuilder();
+            foreach (var item in results)
+            {
+                text.Append($"i={i} item.Text={item.ProductName} count={item.Quantity} price={item.Price}\r\n");
+                i++;
+            }
+            MessageDialog.Show(this, text.ToString());
+#endif
+            string strError = "";
+
+            bool bLaunchExcel = true;
+            XLWorkbook doc = null;
+
+            // 询问文件名
+            SaveFileDialog dlg = new SaveFileDialog();
+
+            dlg.Title = "请指定要输出的 Excel 文件名";
+            dlg.CreatePrompt = false;
+            dlg.OverwritePrompt = true;
+            dlg.FileName = this.ExportExcelFilename;
+            // dlg.InitialDirectory = Environment.CurrentDirectory;
+            dlg.Filter = "Excel 文件 (*.xlsx)|*.xlsx|All files (*.*)|*.*";
+
+            dlg.RestoreDirectory = true;
+
+            if (dlg.ShowDialog() != DialogResult.OK)
+                return;
+
+            this.ExportExcelFilename = dlg.FileName;
+
+            try
+            {
+                // doc = ExcelDocument.Create(this.ExportExcelFilename);
+
+                using (doc = new XLWorkbook(XLEventTracking.Disabled))
+                {
+                    File.Delete(this.ExportExcelFilename);
+
+                    {
+                        var sheet = doc.Worksheets.Add("渠道统计");
+                        OrderReport.BuildOriginReport(
+                            this.comboBox_load_type.Text == "连续出版物",
+                            this.listView_origin.Items.Cast<ListViewItem>(),
+                            "Seller",
+                            "渠道",
+                            sheet);
+                    }
+
+                    {
+                        var sheet = doc.Worksheets.Add("经费来源统计");
+                        OrderReport.BuildOriginReport(
+                            this.comboBox_load_type.Text == "连续出版物",
+                            this.listView_origin.Items.Cast<ListViewItem>(),
+                            "OrderSource",
+                            "经费来源",
+                            sheet);
+                    }
+
+                    {
+                        var sheet = doc.Worksheets.Add("类目统计");
+                        OrderReport.BuildOriginReport(
+                            this.comboBox_load_type.Text == "连续出版物",
+                            this.listView_origin.Items.Cast<ListViewItem>(),
+                            "Class",
+                            "类目",
+                            sheet);
+                    }
+
+                    doc.SaveAs(this.ExportExcelFilename);
+                }
+
+                if (bLaunchExcel)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(this.ExportExcelFilename);
+                    }
+                    catch
+                    {
+
+                    }
+                }
+
+                return;
+            }
+            catch (Exception ex)
+            {
+                strError = "button_report_Click() exception: " + ExceptionUtil.GetDebugText(ex);
+                goto ERROR1;
+            }
+
+            ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        // 根据订购时间范围装载
+        private void button_load_loadFromOrderTime_Click(object sender, EventArgs e)
+        {
+            string strError = "";
+
+            DateSliceDialog dlg = new DateSliceDialog();
+            MainForm.SetControlFont(dlg, this.Font, false);
+            dlg.Text = "请指定订购时间范围";
+            dlg.TimeRangeMode = true;
+            dlg.uTimeRange = Program.MainForm.AppInfo.GetString("print_order_form", "order_time_dlg", "");
+            dlg.ShowDialog(this);
+            Program.MainForm.AppInfo.SetString("print_order_form", "order_time_dlg", dlg.uTimeRange);
+
+            if (dlg.DialogResult == DialogResult.Cancel)
+                return;
+
+            int nRet = SearchAndFill(dlg.Rfc1123TimeRange,
+                "订购时间",
+                "exact",
+                out strError);
+            if (nRet == -1)
+                goto ERROR1;
+            return;
+            ERROR1:
+            MessageBox.Show(this, strError);
+        }
+
+        int SearchAndFill(string strQueryWord,
+            string strFrom,
+            string strMatchStyle,
+            out string strError)
+        {
+            strError = "";
+            int nRet = 0;
+
+            if (System.Windows.Forms.Control.ModifierKeys == Keys.Control)
+            {
+            }
+            else
+            {
+                if (this.Changed == true)
+                {
+                    // 警告尚未保存
+                    DialogResult result = MessageBox.Show(this,
+                        "当前窗口内有原始信息被修改后尚未保存。若此时为装载新内容而清除原有信息，则未保存信息将丢失。\r\n\r\n确实要装载新内容? ",
+                        "PrintOrderForm",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question,
+                        MessageBoxDefaultButton.Button2);
+                    if (result != DialogResult.Yes)
+                    {
+                        return 0; // 放弃
+                    }
+                }
+
+                this.listView_origin.Items.Clear();
+                this.SortColumns_origin.Clear();
+                SortColumns.ClearColumnSortDisplay(this.listView_origin.Columns);
+            }
+
+            _changed_recpaths = Program.MainForm.GetChangedRecords("order");
+
+            EnableControls(false);
+
+            LibraryChannel channel = this.GetChannel();
+            TimeSpan old_timeout = channel.Timeout;
+            channel.Timeout = TimeSpan.FromMinutes(2);
+
+            stop.OnStop += new StopEventHandler(this.DoStop);
+            stop.Initial("正在检索 ...");
+            stop.BeginLoop();
+
+            try
+            {
+                stop.SetProgressRange(0, 100);
+
+                long lRet = 0;
+
+                // 2013/3/25
+                lRet = channel.SearchOrder(
+    stop,
+    this.comboBox_load_type.Text == "图书" ? "<all book>" : "<all series>",
+    strQueryWord,   // "", // dlg.BatchNo,
+    -1,
+    strFrom,    // "__id",
+    strMatchStyle,  // "left",
+    this.Lang,
+    "batchno",   // strResultSetName
+    "",    // strSearchStyle
+    "", // strOutputStyle
+    out strError);
+                if (lRet == -1)
+                    return -1;
+
+                if (lRet == 0)
+                {
+                    strError = $"检索词 '{strQueryWord}' 没有命中记录";
+                    return -1;
+                }
+
+                ResultSetLoader loader = new ResultSetLoader(channel,
+                    stop,
+                    "batchno",
+                    "id"); // "id,cols"
+
+                int nDupCount = 0;
+
+                long lHitCount = lRet;
+
+                stop.SetProgressRange(0, lHitCount);
+
+                // DigitalPlatform.LibraryClient.localhost.Record[] searchresults = null;
+
+                // 装入浏览格式
+                int i = 0;
+                foreach (DigitalPlatform.LibraryClient.localhost.Record searchresult in loader)
+                {
+                    Application.DoEvents();	// 出让界面控制权
+
+                    if (stop != null && stop.State != 0)
+                    {
+                        strError = "用户中断";
+                        return -1;
+                    }
+
+                    // 处理浏览结果
+                    // for (int i = 0; i < searchresults.Length; i++)
+                    {
+                        string strRecPath = searchresult.Path;
+                        // 根据记录路径，装入订购记录
+                        // return: 
+                        //      -2  路径已经在list中存在了
+                        //      -1  出错
+                        //      1   成功
+                        nRet = LoadOneItem(
+                            channel,
+                            strRecPath,
+                            this.listView_origin,
+                            out strError);
+                        if (nRet == -1)
+                            return -1;
+                        if (nRet == -2)
+                            nDupCount++;
+
+                        stop.SetProgressValue(i + 1);
+                    }
+
+                    stop.SetMessage("共命中 " + lHitCount.ToString() + " 条，已装入 " + (i + 1).ToString() + " 条");
+                    i++;
+                }
+
+                // 填充合并后数据列表
+                stop.SetMessage("正在合并数据...");
+                nRet = FillMergedList(out strError);
+                if (nRet == -1)
+                    return -1;
+            }
+            finally
+            {
+                stop.EndLoop();
+                stop.OnStop -= new StopEventHandler(this.DoStop);
+                stop.Initial("");
+                stop.HideProgress();
+
+                channel.Timeout = old_timeout;
+                this.ReturnChannel(channel);
+
+                EnableControls(true);
+            }
+
+            return 1;
+        }
+
     }
 
     internal class OutputProjectData
@@ -10489,6 +13337,7 @@ string strFileName)
         public string RefID = "";   // 保存记录时候用的refid
     }
 
+    // 统计行。用来累加各种统计指标
     internal class StatisLine
     {
         public string Class = "";   // 分类号
@@ -10498,10 +13347,16 @@ string strFileName)
         public bool AllowSum = true;    // 是否参与汇总
         public string Price = "";       // 价格字符串
 
+        public string FixedPrice { get; set; }  // 码洋字符串
+        public List<string> DiscountList = new List<string>();  // 总共有哪些折扣值
+
         public long AcceptBiblioCount = 0;    // 已到种数
         public long AcceptSeriesCount = 0;      // 已到套数
         public long AcceptItemCount = 0;      // 已到册数
         public string AcceptPrice = "";       // 已到价格字符串
+
+        public string AcceptFixedPrice { get; set; } // 已到码洋字符串。验收时候操作者可以修改原来订购时候的码洋，造成两种码洋
+        public List<string> AcceptDiscountList = new List<string>();  // 总共有哪些(已到)折扣值
 
         public List<StatisLine> InnerLines = null;  // 嵌套的子表
     }

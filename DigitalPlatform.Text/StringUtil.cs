@@ -4,10 +4,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Web;
 using System.Xml;
 
@@ -16,6 +16,298 @@ namespace DigitalPlatform.Text
     public class StringUtil
     {
         public static string SpecialChars = "！·＃￥％……—＊（）——＋－＝［］《》＜＞，。？／＼｜｛｝“”‘’•";
+
+        public delegate void Delegate_clipboardFunc();
+
+        public static void RunClipboard(Delegate_clipboardFunc func)
+        {
+            try
+            {
+                func();
+                return;
+            }
+            catch
+            {
+
+            }
+
+            // https://stackoverflow.com/questions/38421985/why-clipboard-setdataobject-doesnt-copy-object-to-the-clipboard-in-c-sharp
+            Exception threadEx = null;
+            Thread staThread = new Thread(
+                delegate ()
+                {
+                    try
+                    {
+                        func();
+                    }
+                    catch (Exception ex)
+                    {
+                        threadEx = ex;
+                    }
+                });
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Start();
+            staThread.Join();
+            if (threadEx != null)
+                throw threadEx;
+        }
+
+        /// <summary>
+        /// 检测一个列表字符串是否包含一个具体的值
+        /// </summary>
+        /// <param name="strList">列表字符串。用逗号分隔多个子串</param>
+        /// <param name="strOne">要检测的一个具体的值</param>
+        /// <returns>false 没有包含; true 包含</returns>
+        public static bool Contains(string strList, string strOne, char delimeter = ',')
+        {
+            if (string.IsNullOrEmpty(strList) == true)
+                return false;
+            string[] list = strList.Split(new char[] { delimeter }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string s in list)
+            {
+                if (strOne == s)
+                    return true;
+            }
+
+            return false;
+        }
+
+        // 查找符合特定前缀的参数。增强版本，能处理 :username, operation:username, 这样的形态
+        // parameters:
+        //      strPrefix 前缀。例如 "getreaderinfo"
+        //      strDelimiter    前缀和后面参数的分隔符号。例如 ":"
+        // return:
+        //      null    没有找到前缀
+        //      ""      找到了前缀，并且值部分为空
+        //      其他     返回值部分
+        public static string GetParameterByPrefixEnvironment(string strList,
+            string strPrefix,
+            string strDelimiter = ":",
+            char segChar = ',')
+        {
+            if (string.IsNullOrEmpty(strList) == true)
+                return null;
+            string environment = "";    // 当前环境值
+            string[] list = strList.Split(new char[] { segChar }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string s in list)
+            {
+                if (s.StartsWith(strDelimiter) == true)
+                {
+                    environment = s.Substring(strDelimiter.Length);
+                    continue;
+                }
+                if (s.StartsWith(strPrefix + strDelimiter) == true)
+                {
+                    string value = s.Substring(strPrefix.Length + strDelimiter.Length);
+                    if (string.IsNullOrEmpty(value) == false)
+                        return value;
+                    return environment;
+                }
+                if (s == strPrefix)
+                    return environment;
+            }
+
+            return null;
+        }
+
+        // 比较两个一般价格字符串。形态为 "CNY12.00+USD20.00"
+        public static int ComparePrice(string s1, string s2)
+        {
+            string strError = "";
+            // 将形如"-123.4+10.55-20.3"的价格字符串切割为单个的价格字符串，并各自带上正负号
+            // return:
+            //      -1  error
+            //      0   succeed
+            int nRet = PriceUtil.SplitPrices(s1,
+                out List<string> prices1,
+                out strError);
+            if (nRet == -1)
+                goto NORMAL_STRING;
+            nRet = PriceUtil.SplitPrices(s2,
+    out List<string> prices2,
+    out strError);
+            if (nRet == -1)
+                goto NORMAL_STRING;
+
+            int nMinCount = Math.Min(prices1.Count, prices2.Count);
+            for (int i = 0; i < nMinCount; i++)
+            {
+                nRet = StringUtil.CompareSinglePrice(prices1[i], prices2[i]);
+                if (nRet != 0)
+                    return nRet;
+            }
+
+            if (prices1.Count > nMinCount)
+                return 1;
+            if (prices2.Count > nMinCount)
+                return -1;
+
+            return 0;
+            NORMAL_STRING:
+            return string.Compare(s1, s2);
+        }
+
+        // 比较两个单独的价格字符串。形态为 "CNY12.00"
+        public static int CompareSinglePrice(string s1, string s2)
+        {
+#if NO
+            CurrencyItem item1 = null;
+            CurrencyItem item2 = null;
+
+            // TODO: 需要改进为可以处理 CNY12.00 * 5 这样的形态
+            try
+            {
+                item1 = CurrencyItem.Parse(s1);
+                item2 = CurrencyItem.Parse(s2);
+            }
+            catch
+            {
+                return string.Compare(s1, s2);
+            }
+
+            int nRet = string.Compare(item1.Prefix + "|" + item1.Postfix, item2.Prefix + "|" + item2.Postfix);
+            if (nRet != 0)
+                return nRet;
+
+            return decimal.Compare(item1.Value, item2.Value);
+#endif
+            int nRet = PriceUtil.ParseSinglePrice(s1,
+     out CurrencyItem item1,
+     out string strError);
+            if (nRet == -1)
+                goto NORMAL_STRING;
+            nRet = PriceUtil.ParseSinglePrice(s2,
+out CurrencyItem item2,
+out strError);
+            if (nRet == -1)
+                goto NORMAL_STRING;
+
+            nRet = string.Compare(item1.Prefix + "|" + item1.Postfix, item2.Prefix + "|" + item2.Postfix);
+            if (nRet != 0)
+                return nRet;
+
+            return decimal.Compare(item1.Value, item2.Value);
+            NORMAL_STRING:
+            return string.Compare(s1, s2);
+        }
+
+        public static string GetPercentText(long uploaded, long length)
+        {
+            return String.Format("{0,3:N}", ((double)uploaded / (double)length) * (double)100) + "%";
+        }
+
+        public static string[] units = new string[] { "K", "M", "G", "T" };
+        public static string GetLengthText(long length)
+        {
+            decimal v = length;
+            int i = 0;
+            foreach (string strUnit in units)
+            {
+                v = decimal.Round(v / 1024, 2);
+                if (v < 1024 || i >= units.Length - 1)
+                    return v.ToString() + strUnit;
+
+                i++;
+            }
+
+            return length.ToString();
+        }
+
+        // 获得一个字符串的 UTF-8 字节数
+        public static int GetUtf8Bytes(string text)
+        {
+            return Encoding.UTF8.GetByteCount(text);
+        }
+
+        // 规范为半角字符串
+        public static void CanonializeWideChars(List<string> values)
+        {
+            for (int i = 0; i < values.Count; i++)
+            {
+                string value = values[i];
+                string new_value = ToDBC(value);
+                if (value != new_value)
+                {
+                    values[i] = new_value;
+                }
+            }
+        }
+
+        // /
+        // / 转半角的函数(DBC case)
+        // /
+        // /任意字符串
+        // /半角字符串
+        // /
+        // /全角空格为12288，半角空格为32
+        // /其他字符半角(33-126)与全角(65281-65374)的对应关系是：均相差65248
+        // /
+        public static string ToDBC(String input)
+        {
+            char[] c = input.ToCharArray();
+            for (int i = 0; i < c.Length; i++)
+            {
+                if (c[i] == 12288)
+                {
+                    c[i] = (char)32;
+                    continue;
+                }
+                if (c[i] > 65280 && c[i] < 65375)
+                    c[i] = (char)(c[i] - 65248);
+            }
+            return new String(c);
+        }
+
+        public static bool IsHttpUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url))
+                return false;
+            url = url.ToLower();
+            if (url.StartsWith("http:") || url.StartsWith("https"))
+                return true;
+            return false;
+        }
+
+        #region IP 地址匹配
+
+        // 匹配 ip 地址列表
+        // parameters:
+        //      strList IP 地址列表。例如 localhost|192.168.1.1|192.168.*.*
+        //      strIP   要检测的一个 IP 地址
+        public static bool MatchIpAddressList(string strList, string strIP)
+        {
+            if (strList == null)
+                return false;
+
+            string[] list = strList.Split(new char[] { '|' });
+            foreach (string pattern in list)
+            {
+                if (MatchIpAddress(pattern, strIP) == true)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static bool MatchIpAddress(string pattern, string ip)
+        {
+            ip = CanonicalizeIP(ip);
+            pattern = CanonicalizeIP(pattern);
+
+            if (pattern == ip)
+                return true;
+            return false;
+        }
+
+        // 正规化 IP 地址
+        public static string CanonicalizeIP(string ip)
+        {
+            if (ip == "::1" || ip == "127.0.0.1")
+                return "localhost";
+            return ip;
+        }
+
+        #endregion
 
         public static string GetMd5(string strText)
         {
@@ -93,7 +385,12 @@ namespace DigitalPlatform.Text
             string strDelimiter = ":")
         {
             if (string.IsNullOrEmpty(strList) == true)
-                return "";
+            {
+                if (strPrefix == "")
+                    return "";
+                return null;
+            }
+
             string[] list = strList.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (string s in list)
             {
@@ -104,6 +401,34 @@ namespace DigitalPlatform.Text
             }
 
             return null;
+        }
+
+        // 2017/11/22
+        public static string SetParameterByPrefix(string strList,
+            string strPrefix,
+            string strDelimiter = ":",
+            string strValue = null)
+        {
+            if (string.IsNullOrEmpty(strList) == true)
+                strList = "";
+
+            List<string> results = new List<string>();
+            string[] list = strList.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string s in list)
+            {
+                if (s.StartsWith(strPrefix + strDelimiter) == true
+                    || s == strPrefix)
+                {
+                    // 注: strValue 为 ""，会产生 'prefix:'；strValue 为 null，则这个 prefix 在内容中会被完整删除
+                    if (strValue == null)
+                        continue;
+                    results.Add(strPrefix + strDelimiter + strValue);
+                }
+                else
+                    results.Add(s);
+            }
+
+            return StringUtil.MakePathList(results, ",");
         }
 
         public static bool IsValidCMIS(string strText)
@@ -327,7 +652,7 @@ namespace DigitalPlatform.Text
             return results;
         }
 
-        public static Hashtable ParseMedaDataXml(string strXml,
+        public static Hashtable ParseMetaDataXml(string strXml,
     out string strError)
         {
             strError = "";
@@ -366,6 +691,42 @@ namespace DigitalPlatform.Text
 #endif
 
             return result;
+        }
+
+        public static void ChangeMetaData(ref string strMetaData,
+string strID,
+string strLocalPath,
+string strMimeType,
+string strLastModified,
+string strPath,
+string strTimestamp)
+        {
+            XmlDocument dom = new XmlDocument();
+
+            if (strMetaData == "")
+                strMetaData = "<file/>";
+
+            dom.LoadXml(strMetaData);
+
+            if (strID != null)
+                dom.DocumentElement.SetAttribute("id", strID);
+
+            if (strLocalPath != null)
+                dom.DocumentElement.SetAttribute("localpath", strLocalPath);
+
+            if (strMimeType != null)
+                dom.DocumentElement.SetAttribute("mimetype", strMimeType);
+
+            if (strLastModified != null)
+                dom.DocumentElement.SetAttribute("lastmodified", strLastModified);
+
+            if (strPath != null)
+                dom.DocumentElement.SetAttribute("path", strPath);
+
+            if (strTimestamp != null)
+                dom.DocumentElement.SetAttribute("timestamp", strTimestamp);
+
+            strMetaData = dom.OuterXml;
         }
 
         // 解析对象路径
@@ -631,6 +992,41 @@ namespace DigitalPlatform.Text
             return results;
         }
 
+        public static List<string> ParseTwoPart(string strText, string[] seps)
+        {
+            string strLeft = "";
+            string strRight = "";
+
+            if (string.IsNullOrEmpty(strText) == true)
+                goto END1;
+
+            int nRet = 0;
+            string strSep = "";
+            foreach (string sep in seps)
+            {
+                nRet = strText.IndexOf(sep);
+                if (nRet != -1)
+                {
+                    strSep = sep;
+                    goto FOUND;
+                }
+            }
+
+            strLeft = strText;
+            goto END1;
+
+            FOUND:
+            Debug.Assert(nRet != -1, "");
+            strLeft = strText.Substring(0, nRet).Trim();
+            strRight = strText.Substring(nRet + strSep.Length).Trim();
+
+            END1:
+            List<string> results = new List<string>();
+            results.Add(strLeft);
+            results.Add(strRight);
+            return results;
+        }
+
         /// <summary>
         /// 通用的，切割两个部分的函数
         /// </summary>
@@ -736,6 +1132,7 @@ namespace DigitalPlatform.Text
             sb.Append(")");
             return sb.ToString();
         }
+
         // 对短路径进行比较
         // 数据库名/id
         public static int CompareRecPath(string s1, string s2)
@@ -1005,6 +1402,30 @@ namespace DigitalPlatform.Text
 
             return strLocation;
         }
+
+        // 替换 #reservation,xxxx 中的 xxxx 部分
+        public static string SetLocationString(string strLocation, string strPureLocation)
+        {
+            if (string.IsNullOrEmpty(strLocation) == true)
+                return strPureLocation;
+
+            {
+                List<string> results = new List<string>();
+                string[] parts = strLocation.Split(new char[] { ',' });
+                foreach (string s in parts)
+                {
+                    string strText = s.Trim();
+                    if (string.IsNullOrEmpty(strText) == true)
+                        continue;
+                    if (strText[0] == '#')
+                        results.Add(strText);
+                }
+
+                results.Add(strPureLocation);
+                return StringUtil.MakePathList(results);
+            }
+        }
+
 
         public static string GetBooleanString(bool bValue)
         {
@@ -1354,8 +1775,6 @@ namespace DigitalPlatform.Text
             return 0;
         }
 
-
-
         #endregion
 
         // 获得有限的行数
@@ -1435,19 +1854,19 @@ namespace DigitalPlatform.Text
                 return strText;
             return strText.Trim();
         }
-        static int[] iSign =   {65306, 
+        static int[] iSign =   {65306,
                             8220,
                             65307,
-                            8216, 
+                            8216,
                             65292,
                             65281,
-                            12289, 
-  
-65311,   
+                            12289,
+
+65311,
 8212,
 12290,
-12298,   
-12297,   
+12298,
+12297,
 8230,
 65509,
 65288,
@@ -1908,8 +2327,19 @@ namespace DigitalPlatform.Text
             }
         }
 
+        // parameters:
+        //      bSorted 是否在调用前就排过序?
+        public static void RemoveDup(ref List<string> list, bool bSorted)
+        {
+            if (bSorted == false)
+                list.Sort();
+
+            _removeDup(ref list);
+        }
+
         // 把一个字符串数组去重。调用前，应当已经排序
-        public static void RemoveDup(ref List<string> list)
+        // 警告：此函数极易在忘记先排序的情况下调用
+        public static void _removeDup(ref List<string> list)
         {
             for (int i = 0; i < list.Count; i++)
             {
@@ -1928,6 +2358,21 @@ namespace DigitalPlatform.Text
                     }
                 }
             }
+        }
+
+        public static bool HasDup(List<string> list)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                string strItem = list[i];
+                for (int j = i + 1; j < list.Count; j++)
+                {
+                    if (strItem == list[j])
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         /*
@@ -1951,6 +2396,10 @@ namespace DigitalPlatform.Text
         // 构造路径列表字符串，逗号分隔
         public static string MakePathList(List<string> aPath)
         {
+            // 2016/11/9
+            if (aPath == null)
+                return "";
+
             // 2012/9/7
             if (aPath.Count == 0)
                 return "";
@@ -2021,7 +2470,6 @@ namespace DigitalPlatform.Text
                 }
             }
         }
-
 
         public static string IncreaseNumber(string strLedNubmer,
             int nNumber)
@@ -2146,7 +2594,6 @@ namespace DigitalPlatform.Text
             return (int)(nValue1 - nValue2);
         }
 
-
         // 得到两个被字符引导的数字的较大者
         public static int GetBiggerLedNumber(string strLedNumber1,
             string strLedNumber2,
@@ -2224,7 +2671,6 @@ namespace DigitalPlatform.Text
 
             strNumber = Convert.ToString(nValue + nNumber).PadLeft(nWidth, '0');
             strResult = strHead + strNumber;
-
             return 0;
         }
 
@@ -2575,7 +3021,7 @@ namespace DigitalPlatform.Text
                     strResult += ",";
                 strResult += items1[i];
                 continue;
-            FOUND:
+                FOUND:
                 continue;
             }
 
@@ -3559,8 +4005,6 @@ namespace DigitalPlatform.Text
             }
             return strText;
         }
-
-
 
         // 根据操作符比较两个字符串是否符合 strText strOperator strCanKaoText
         // parameter:
